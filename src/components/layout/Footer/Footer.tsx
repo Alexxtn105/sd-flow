@@ -29,6 +29,10 @@ export default function Footer() {
 
             <div className="ftr-phase">{t('footer.phase')}</div>
 
+            <div className="ftr-version" title={t('footer.version')}>
+                v{__APP_VERSION__}
+            </div>
+
             <div className="ftr-storage" key={revision}>
                 {formatBytes(StorageService.usedBytes())} {t('footer.storage')}
             </div>

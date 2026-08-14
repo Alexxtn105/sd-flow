@@ -34,10 +34,15 @@
     white-space: nowrap;
 }
 
+.ftr-version,
 .ftr-storage {
     flex-shrink: 0;
     color: var(--panel-text-5);
     font-family: 'SF Mono', 'Consolas', monospace;
+}
+
+.ftr-version {
+    color: var(--panel-text-4);
 }
 
 @media (max-width: 640px) {

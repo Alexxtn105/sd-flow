@@ -76,7 +76,7 @@ export default function Waterfall({ waterfall, percentile, labelOf, limit, compa
                 {layout.hiddenCount > 0 && (
                     <div className="sd-waterfall-row sd-waterfall-row-folded">
                         <span className="sd-waterfall-name">
-                            {t('waterfall.hidden', { count: layout.hiddenCount })}
+                            {t('waterfall.hidden', { value: layout.hiddenCount })}
                         </span>
                         <span className="sd-waterfall-track" />
                         <span className="sd-waterfall-value">
