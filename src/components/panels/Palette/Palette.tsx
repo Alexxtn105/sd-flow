@@ -20,6 +20,7 @@ export default function Palette() {
     const width = useUiStore((state) => state.panels.palette);
     const togglePalette = useUiStore((state) => state.togglePalette);
     const requestAdd = useUiStore((state) => state.requestAdd);
+    const mode = useUiStore((state) => state.mode);
     const activeChallengeId = useChallengeStore((state) => state.activeId);
 
     const [query, setQuery] = useState('');
@@ -43,7 +44,9 @@ export default function Palette() {
     const blockName = useCallback((id: string) => t(id, { ns: 'blocks', defaultValue: id }), [t]);
 
     const restriction = useMemo(() => {
-        const challenge = activeChallengeId === null ? undefined : challengeById(activeChallengeId);
+        if (mode !== 'challenges' || activeChallengeId === null) return null;
+
+        const challenge = challengeById(activeChallengeId);
         if (!challenge) return null;
 
         const { allowedGroups, forbiddenTypes } = challenge.constraints;
@@ -53,7 +56,7 @@ export default function Palette() {
             groups: allowedGroups ? new Set(allowedGroups) : null,
             types: new Set(forbiddenTypes ?? []),
         };
-    }, [activeChallengeId]);
+    }, [activeChallengeId, mode]);
 
     const isLocked = useCallback(
         (component: ComponentDefinition) => {
