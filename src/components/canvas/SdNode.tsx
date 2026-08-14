@@ -11,6 +11,8 @@ import { useNodeResult, useSimStore } from '../../store/simStore';
 import { useUiStore } from '../../store/uiStore';
 import { formatParamValue, formatPercent, formatRps, utilizationLevel } from '../../utils/format';
 import { heatLevel, heatValueOf } from '../../utils/heatmap';
+import { useHandleCompatibility } from './useHandleCompatibility';
+import type { HandleCompatibility, HandleDirection } from './useHandleCompatibility';
 import './SdNode.css';
 
 const MAX_VISIBLE_PARAMS = 3;
@@ -19,14 +21,21 @@ function handleOffset(index: number, total: number): string {
     return `${((index + 1) * 100) / (total + 1)}%`;
 }
 
-function renderHandles(ports: PortDefinition[], position: Position, type: 'target' | 'source') {
+function renderHandles(
+    ports: PortDefinition[],
+    position: Position,
+    type: 'target' | 'source',
+    compatibility: HandleCompatibility,
+) {
+    const direction: HandleDirection = type === 'target' ? 'in' : 'out';
+
     return ports.map((port, index) => (
         <Handle
             key={port.id}
             id={port.id}
             type={type}
             position={position}
-            className={`sd-handle sd-handle-${port.role}`}
+            className={`sd-handle sd-handle-${port.role} ${compatibility(port.id, direction)}`}
             style={ports.length > 1 ? { top: handleOffset(index, ports.length) } : undefined}
         />
     ));
@@ -42,6 +51,7 @@ function SdNodeView({ id, data, selected }: NodeProps<SdNodeType>) {
     );
     const [editing, setEditing] = useState<string | null>(null);
     const [draft, setDraft] = useState('');
+    const compatibility = useHandleCompatibility(id, data.componentType);
 
     const definition = registry.get(data.componentType);
     if (!definition) return null;
@@ -134,7 +144,7 @@ function SdNodeView({ id, data, selected }: NodeProps<SdNodeType>) {
         <div
             className={`sd-node sd-node-${definition.group} ${selected ? 'selected' : ''} ${tinted ? `sd-node-load-${level}` : ''} ${projected !== null ? 'sd-node-heat' : ''}`}
         >
-            {renderHandles(definition.ports.in, Position.Left, 'target')}
+            {renderHandles(definition.ports.in, Position.Left, 'target', compatibility)}
 
             <div className="sd-node-header">
                 <span className="sd-node-icon">
@@ -186,7 +196,7 @@ function SdNodeView({ id, data, selected }: NodeProps<SdNodeType>) {
                 </div>
             )}
 
-            {renderHandles(definition.ports.out, Position.Right, 'source')}
+            {renderHandles(definition.ports.out, Position.Right, 'source', compatibility)}
         </div>
     );
 }

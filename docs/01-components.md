@@ -187,6 +187,12 @@ p99(L) = median · e^(2.3263 · σ)   при σ = 0.8 → 6.43 × медианы
 
 ## 3. Вычисления и сервисы (`compute`)
 
+Серверные блоки группы (`service`, `monolith`, `bff`, `serverless`, `ml-inference`,
+`edge-function`, `webrtc-sfu`) держат два входных порта: `in` для синхронного вызова и `consume`
+для событий брокера. У `worker`, `batch`, `stream-processor`, `transcoder` и `search-indexer`
+вход только консьюмерский — сами они запросов не обслуживают. Протоколы и матрицу совместимости
+описывает `docs/03-connections.md` §4.
+
 | ID | Название | Волна | Специфичные параметры | Ограничитель |
 |---|---|---|---|---|
 | `service` | Stateless-сервис / микросервис | **M** | `runtime` (JVM/Go/Node/Python/.NET — влияет на дефолты concurrency и cold start), `concurrencyPerInstance`, `serviceTimeMs`, `serviceTimeSigma`, `cpuShare` (доля CPU-времени в service time), `cpuCores`, `networkMbps`, `callMode`, `logLinesPerRequest`, `logBytesPerLine` | CPU / воркеры |

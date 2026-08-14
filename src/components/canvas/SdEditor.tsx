@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Background, Controls, MiniMap, ReactFlow, useReactFlow } from '@xyflow/react';
-import type { Edge, Node, XYPosition } from '@xyflow/react';
+import type { Edge, Node, OnConnectStart, XYPosition } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
 import '@xyflow/react/dist/style.css';
 
@@ -95,6 +95,18 @@ export default function SdEditor() {
     const pendingAdd = useUiStore((state) => state.pendingAdd);
     const clearPendingAdd = useUiStore((state) => state.clearPendingAdd);
     const toggleProbeWindow = useUiStore((state) => state.toggleProbeWindow);
+    const startConnection = useUiStore((state) => state.startConnection);
+    const endConnection = useUiStore((state) => state.endConnection);
+
+    const handleConnectStart = useCallback<OnConnectStart>(
+        (_, { nodeId, handleId, handleType }) => {
+            const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
+            if (!node || !nodeId || !handleId || !handleType) return;
+
+            startConnection({ nodeId, componentType: node.data.componentType, handleId, handleType });
+        },
+        [startConnection],
+    );
 
     const dropComponent = useCallback(
         (type: string, flowPosition: XYPosition) => {
@@ -227,6 +239,8 @@ export default function SdEditor() {
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={connect}
+                onConnectStart={handleConnectStart}
+                onConnectEnd={endConnection}
                 isValidConnection={isValidConnection}
                 onNodeDragStart={beginTransaction}
                 onNodeDragStop={commitTransaction}

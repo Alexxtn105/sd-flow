@@ -35,10 +35,15 @@ const CALLER_OUT: PortSpec['out'] = [
     { id: 'telemetry', protocols: ['telemetry'], role: 'observe' },
 ];
 
-const SERVER_IN: PortSpec['in'] = [{ id: 'in', protocols: ['http', 'grpc', 'ws', 'internal'], role: 'serve' }];
+const EVENT_PROTOCOLS = ['kafka', 'amqp', 'sqs', 'stream'] as const;
+
+const SERVER_IN: PortSpec['in'] = [
+    { id: 'in', protocols: ['http', 'grpc', 'ws', 'internal'], role: 'serve' },
+    { id: 'consume', protocols: [...EVENT_PROTOCOLS], role: 'consume' },
+];
 
 const QUEUE_CONSUMER_IN: PortSpec['in'] = [
-    { id: 'in', protocols: ['kafka', 'amqp', 'sqs', 'stream', 'internal'], role: 'consume' },
+    { id: 'in', protocols: [...EVENT_PROTOCOLS, 'internal'], role: 'consume' },
 ];
 
 const TRIGGER_IN: PortSpec['in'] = [{ id: 'trigger', protocols: ['internal', 'http'], role: 'serve' }];
@@ -443,10 +448,7 @@ const worker = defineComponent({
     shape: 'node',
     wave: 'mvp',
     icon: 'sd-worker',
-    ports: {
-        in: [{ id: 'in', protocols: ['kafka', 'amqp', 'sqs', 'internal'], role: 'consume' }],
-        out: CALLER_OUT,
-    },
+    ports: { in: QUEUE_CONSUMER_IN, out: CALLER_OUT },
     defaultParams: workerDefaults,
     paramSchema: {
         instances: num('scale', { min: 1, max: 5000 }),

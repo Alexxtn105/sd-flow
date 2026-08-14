@@ -8,6 +8,7 @@ import type { SdNode } from '../../store/graphStore';
 import { useProbeReading } from '../../store/simStore';
 import { useUiStore } from '../../store/uiStore';
 import { formatNumber } from '../../utils/format';
+import { useHandleCompatibility } from './useHandleCompatibility';
 import './ProbeNode.css';
 
 function ProbeNodeView({ id, data, selected }: NodeProps<SdNode>) {
@@ -16,6 +17,7 @@ function ProbeNodeView({ id, data, selected }: NodeProps<SdNode>) {
     const reading = useProbeReading(id);
     const opened = useUiStore((state) => state.probeWindowIds.includes(id));
     const toggleProbeWindow = useUiStore((state) => state.toggleProbeWindow);
+    const compatibility = useHandleCompatibility(id, data.componentType);
 
     if (!definition) return null;
 
@@ -39,7 +41,12 @@ function ProbeNodeView({ id, data, selected }: NodeProps<SdNode>) {
             onDoubleClick={() => toggleProbeWindow(id)}
             title={hint}
         >
-            <Handle id="attach" type="target" position={Position.Left} className="sd-handle sd-handle-attach" />
+            <Handle
+                id="attach"
+                type="target"
+                position={Position.Left}
+                className={`sd-handle sd-handle-attach ${compatibility('attach', 'in')}`}
+            />
             <span className="sd-probe-icon">
                 <Icon name={definition.icon} size="medium" />
             </span>

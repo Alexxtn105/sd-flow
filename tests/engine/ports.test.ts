@@ -28,6 +28,27 @@ describe('совместимость портов', () => {
         expect(canConnectTypes('kafka', 'worker')).toBe(true);
     });
 
+    it('разрешает сервису потреблять события брокера отдельным портом', () => {
+        const pair = firstCompatiblePair('kafka', 'service');
+        expect(pair?.targetHandle).toBe('consume');
+        expect(pair?.protocol).toBe('kafka');
+    });
+
+    it('оставляет синхронный вход сервиса на порту serve', () => {
+        const pair = firstCompatiblePair('lb-l7', 'service');
+        expect(pair?.targetHandle).toBe('in');
+    });
+
+    it('разрешает потоковым брокерам кормить консьюмера', () => {
+        expect(canConnectTypes('kinesis', 'worker')).toBe(true);
+        expect(canConnectTypes('redis-streams', 'worker')).toBe(true);
+        expect(canConnectTypes('redis-streams', 'service')).toBe(true);
+    });
+
+    it('не путает поток Redis Streams с вызовом кэша', () => {
+        expect(canConnectTypes('redis-streams', 'redis')).toBe(false);
+    });
+
     it('разрешает репликацию между однотипными хранилищами', () => {
         const pair = firstCompatiblePair('postgres', 'postgres');
         expect(pair?.sourceHandle).toBe('replication');

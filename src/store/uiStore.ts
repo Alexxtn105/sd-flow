@@ -7,6 +7,13 @@ export type AppMode = 'sandbox' | 'challenges';
 
 export type PanelSizes = Record<PanelKey, number>;
 
+export interface ConnectionSource {
+    nodeId: string;
+    componentType: string;
+    handleId: string;
+    handleType: 'source' | 'target';
+}
+
 export interface UiState {
     mode: AppMode;
     paletteCollapsed: boolean;
@@ -20,6 +27,7 @@ export interface UiState {
     probeWindowIds: string[];
     heatmapProbeId: string | null;
     tutorialOpen: boolean;
+    connectionSource: ConnectionSource | null;
     setMode: (mode: AppMode) => void;
     togglePalette: () => void;
     toggleChallengePanel: () => void;
@@ -36,6 +44,8 @@ export interface UiState {
     toggleHeatmapProbe: (probeId: string) => void;
     startTutorial: () => void;
     finishTutorial: () => void;
+    startConnection: (source: ConnectionSource) => void;
+    endConnection: () => void;
 }
 
 interface StoredPreferences {
@@ -98,6 +108,7 @@ export const useUiStore = create<UiState>((set, get) => ({
     probeWindowIds: [],
     heatmapProbeId: null,
     tutorialOpen: !isTutorialDone(),
+    connectionSource: null,
 
     setMode: (mode) => set({ mode }),
     togglePalette: () => set((state) => ({ paletteCollapsed: !state.paletteCollapsed })),
@@ -152,5 +163,11 @@ export const useUiStore = create<UiState>((set, get) => ({
     finishTutorial: () => {
         saveTutorialDone();
         set({ tutorialOpen: false });
+    },
+
+    startConnection: (source) => set({ connectionSource: source }),
+    endConnection: () => {
+        if (get().connectionSource === null) return;
+        set({ connectionSource: null });
     },
 }));

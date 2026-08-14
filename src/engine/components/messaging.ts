@@ -907,7 +907,7 @@ const redisStreams = defineComponent({
     icon: 'sd-log-stream',
     ports: {
         in: [{ id: 'produce', protocols: ['redis'], role: 'serve' }],
-        out: [{ id: 'consume', protocols: ['redis'], role: 'emit' }],
+        out: [{ id: 'consume', protocols: ['stream'], role: 'emit' }],
     },
     defaultParams: redisStreamsDefaults,
     paramSchema: {

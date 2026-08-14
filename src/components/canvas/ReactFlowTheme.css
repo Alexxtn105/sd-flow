@@ -21,13 +21,29 @@
     stroke-dasharray: 4 4;
 }
 
-.react-flow__handle-connecting {
+.react-flow__handle {
+    transition:
+        opacity var(--transition-fast),
+        box-shadow var(--transition-fast);
+}
+
+.react-flow__handle.connectingfrom {
     box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-primary) 25%, transparent);
 }
 
-.react-flow__handle-valid {
+.react-flow__handle.valid {
     background: var(--util-ok) !important;
     border-color: var(--util-ok) !important;
+}
+
+.react-flow__handle.sd-handle-compatible {
+    background: var(--util-ok);
+    border-color: var(--util-ok);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--util-ok) 30%, transparent);
+}
+
+.react-flow__handle.sd-handle-incompatible {
+    opacity: 0.2;
 }
 
 .react-flow__node-group {
