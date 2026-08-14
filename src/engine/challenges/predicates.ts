@@ -1,5 +1,6 @@
 import type { ComponentParams } from '../types/component';
 import type { CompiledNode, CompiledTopology } from '../sim/compile';
+import { redundancyOfNode } from '../sim/availability';
 import type { ScenarioId } from '../sim/scenarios';
 import type { FlowResult, SimResult } from '../sim/types';
 import type {
@@ -369,7 +370,9 @@ function evaluateRedundancy(requirement: RedundancyRequirement, input: Predicate
 
     const single = hops.filter((node) => {
         const runtime = input.result.nodes[node.id];
-        return runtime !== undefined && runtime.instances < requirement.minRedundancy;
+        if (runtime === undefined) return false;
+        if (node.definition.managed) return false;
+        return redundancyOfNode(node, runtime.instances) < requirement.minRedundancy;
     });
 
     if (single.length > 0) {

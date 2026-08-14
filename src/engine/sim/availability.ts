@@ -20,16 +20,23 @@ function baseAvailability(node: CompiledNode): number {
     return typeof declared === 'number' ? declared : DEFAULT_AVAILABILITY;
 }
 
-export function redundancyOf(node: CompiledNode, runtime: NodeRuntime | undefined): number {
+export function redundancyOfNode(node: CompiledNode, instances: number): number {
     const { params } = node;
-    const instances = runtime?.instances ?? Number(params.instances ?? 1);
 
     if (typeof params.replicasPerShard === 'number') return 1 + params.replicasPerShard;
     if (typeof params.replicationFactor === 'number') return Math.max(1, params.replicationFactor);
     if (typeof params.readReplicas === 'number') return 1 + params.readReplicas;
+    if (typeof params.replicaSetSize === 'number') return Math.max(1, params.replicaSetSize);
+    if (typeof params.replicas === 'number') return 1 + params.replicas;
+    if (typeof params.nodes === 'number') return Math.max(1, params.nodes);
+    if (typeof params.brokers === 'number') return Math.max(1, params.brokers);
     if (typeof params.azSpread === 'number') return Math.max(1, Math.min(instances, params.azSpread));
 
     return Math.max(1, instances);
+}
+
+export function redundancyOf(node: CompiledNode, runtime: NodeRuntime | undefined): number {
+    return redundancyOfNode(node, runtime?.instances ?? Number(node.params.instances ?? 1));
 }
 
 export function effectiveAvailability(node: CompiledNode, runtime: NodeRuntime | undefined): number {

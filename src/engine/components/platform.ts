@@ -147,6 +147,7 @@ const externalApi = defineComponent({
     },
     model: externalApiModel,
     helpId: 'external-api',
+    managed: true,
 });
 
 export const platformComponents: ComponentDefinition[] = [auth, externalApi] as unknown as ComponentDefinition[];

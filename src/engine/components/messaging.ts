@@ -464,6 +464,7 @@ const dlq = defineComponent({
     },
     model: dlqModel,
     helpId: 'dlq',
+    managed: true,
 });
 
 export const messagingComponents: ComponentDefinition[] = [
