@@ -12,8 +12,15 @@ export interface IconProps {
     title?: string;
 }
 
+const UNDRAWN_BLOCK = (
+    <>
+        <rect x="3.5" y="5" width="17" height="14" rx="2.5" />
+        <path d="M8 10h8M8 14h5" />
+    </>
+);
+
 export default function Icon({ name, size = 'medium', className = '', title }: IconProps) {
-    const custom = SD_ICONS[name];
+    const custom = SD_ICONS[name] ?? (name.startsWith('sd-') ? UNDRAWN_BLOCK : undefined);
 
     if (custom) {
         return (

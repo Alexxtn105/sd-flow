@@ -63,6 +63,10 @@ function shapeFor(
     const sourceRole = findPort(sourceType, 'out', sourceHandle)?.role;
     const targetGroup = registry.get(targetType)?.group;
 
+    if (targetGroup === 'probes') {
+        return { kind: 'sync', calls: [], pull: false };
+    }
+
     if (sourceRole === 'replicate') {
         return { kind: 'replication', calls: singleProfile('transfer', 4000, 0), pull: false };
     }

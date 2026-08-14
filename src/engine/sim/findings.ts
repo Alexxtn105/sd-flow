@@ -88,6 +88,56 @@ export function buildFindings(input: FindingInput): Finding[] {
         push('spof', 'warning', [nodeId], [], {});
     }
 
+    for (const cluster of topology.nodes) {
+        if (cluster.type !== 'k8s-cluster') continue;
+
+        const requested = topology.nodes.reduce((sum, node) => {
+            if (node.clusterId !== cluster.id) return sum;
+            return sum + (runtimes.get(node.id)?.instances ?? 0);
+        }, 0);
+
+        const nodeCount = Number(cluster.params.nodes ?? 0);
+        const podsPerNode = Number(cluster.params.podsPerNode ?? 0);
+        const ceiling = nodeCount * podsPerNode;
+
+        if (requested > ceiling) {
+            push('k8s-pods-exceeded', 'error', [cluster.id], [], {
+                requested,
+                ceiling,
+                nodes: nodeCount,
+                podsPerNode,
+            });
+        }
+    }
+
+    const natBytesPerSec = new Map<string, number>();
+
+    for (const edge of topology.edges) {
+        if (!edge.viaNat) continue;
+
+        const vpcId = topology.nodeById.get(edge.source)?.vpcId;
+        const flow = edgeFlows.get(edge.id);
+        if (!vpcId || !flow) continue;
+
+        natBytesPerSec.set(vpcId, (natBytesPerSec.get(vpcId) ?? 0) + flow.bytesPerSec);
+    }
+
+    for (const [vpcId, bytesPerSec] of natBytesPerSec) {
+        const vpc = topology.nodeById.get(vpcId);
+        if (!vpc) continue;
+
+        const natGatewayCount = Number(vpc.params.natGatewayCount ?? 0);
+        const capacityBytesPerSec = (natGatewayCount * Number(vpc.params.natThroughputGbps ?? 0) * 1e9) / 8;
+
+        if (bytesPerSec > capacityBytesPerSec) {
+            push('nat-saturated', 'warning', [vpcId], [], {
+                bytesPerSec,
+                capacityBytesPerSec,
+                natGatewayCount,
+            });
+        }
+    }
+
     for (const edge of topology.edges) {
         const source = topology.nodeById.get(edge.source);
         const target = topology.nodeById.get(edge.target);

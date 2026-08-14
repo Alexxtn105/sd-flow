@@ -5,6 +5,8 @@ import {
     defineModel,
     explain,
     explicitRps,
+    iopsBound,
+    littleLaw,
     totalCost,
     weightedUnitBound,
 } from '../sim/resources';
@@ -18,9 +20,56 @@ const STORAGE_PORTS: PortSpec = {
     ],
 };
 
+const FILE_PORTS: PortSpec = {
+    in: [{ id: 'mount', protocols: ['internal'], role: 'serve' }],
+    out: [],
+};
+
+const BLOCK_PORTS: PortSpec = {
+    in: [{ id: 'attach', protocols: ['internal'], role: 'attach' }],
+    out: [],
+};
+
 const VERSIONING_STORAGE_FACTOR = 2;
 
 const CROSS_REGION_COPIES = 2;
+
+const SECONDS_PER_HOUR = 3600;
+
+const RETRIEVAL_TIER_HOURS_FACTOR: Record<string, number> = {
+    expedited: 0.05,
+    standard: 1,
+    bulk: 4,
+};
+
+const RETRIEVAL_TIER_COST_FACTOR: Record<string, number> = {
+    expedited: 10,
+    standard: 1,
+    bulk: 0.4,
+};
+
+const NFS_BURST_THROUGHPUT_MULTIPLIER = 3;
+
+const VOLUME_TYPE_MAX_IOPS: Record<string, number> = {
+    gp3: 16000,
+    io2: 256000,
+    nvme: 1000000,
+};
+
+const VOLUME_TYPE_MAX_THROUGHPUT_MBS: Record<string, number> = {
+    gp3: 1000,
+    io2: 4000,
+    nvme: 8000,
+};
+
+function payloadBytes(
+    readShare: number,
+    writeShare: number,
+    responseBytes: number,
+    requestBytes: number,
+): number {
+    return readShare * responseBytes + writeShare * requestBytes;
+}
 
 const s3Defaults = {
     objectCount: 50000000,
@@ -264,4 +313,303 @@ const minio = defineComponent({
     helpId: 'minio',
 });
 
-export const storageComponents: ComponentDefinition[] = [s3, minio] as unknown as ComponentDefinition[];
+const glacierDefaults = {
+    objectCount: 200000000,
+    avgObjectSizeMb: 16,
+    retrievalTier: 'standard',
+    retrievalHours: 4,
+    concurrency: 200,
+    throughputMbs: 500,
+    minStorageDays: 90,
+    availability: 0.9999,
+    costPerGbMonth: 0.004,
+    costPerGbRetrieval: 0.01,
+};
+
+function glacierObjectBytes(params: typeof glacierDefaults): number {
+    return params.avgObjectSizeMb * 1e6;
+}
+
+function glacierRetrievalSec(params: typeof glacierDefaults): number {
+    const tierFactor = RETRIEVAL_TIER_HOURS_FACTOR[params.retrievalTier] ?? 1;
+    return params.retrievalHours * tierFactor * SECONDS_PER_HOUR;
+}
+
+function glacierRetrievalPricePerGb(params: typeof glacierDefaults): number {
+    return params.costPerGbRetrieval * (RETRIEVAL_TIER_COST_FACTOR[params.retrievalTier] ?? 1);
+}
+
+const glacierModel = defineModel<typeof glacierDefaults>({
+    serviceSec: (ctx) => glacierRetrievalSec(ctx.params),
+    resources: (ctx) => [
+        littleLaw('retrieval', ctx.params.concurrency, glacierRetrievalSec(ctx.params)),
+        bandwidthBound('throughput', ctx.params.throughputMbs * 8, glacierObjectBytes(ctx.params)),
+    ],
+    storage: (ctx) => {
+        const objectBytes = glacierObjectBytes(ctx.params);
+        const baseGb = (ctx.params.objectCount * objectBytes) / 1e9;
+        const growthGbDay = (ctx.writeRps * SECONDS_PER_DAY * objectBytes) / 1e9;
+
+        return {
+            totalGb: baseGb + growthGbDay * ctx.horizonDays,
+            growthGbDay,
+            memoryGb: 0,
+            explain: [
+                explain(
+                    'objectCount × avgObjectSizeMb × 10⁶ / 10⁹',
+                    {
+                        objectCount: ctx.params.objectCount,
+                        avgObjectSizeMb: ctx.params.avgObjectSizeMb,
+                    },
+                    baseGb,
+                    'gb',
+                ),
+                explain(
+                    'writeRps × 86400 × avgObjectSizeMb × 10⁶ / 10⁹',
+                    {
+                        writeRps: ctx.writeRps,
+                        avgObjectSizeMb: ctx.params.avgObjectSizeMb,
+                    },
+                    growthGbDay,
+                    'gb/day',
+                ),
+            ],
+        };
+    },
+    cost: (ctx) => {
+        const objectBytes = glacierObjectBytes(ctx.params);
+        const archivedGbDay = (ctx.lambda * ctx.writeShare * SECONDS_PER_DAY * objectBytes) / 1e9;
+        const minimumDurationGb = archivedGbDay * ctx.params.minStorageDays;
+        const retrievedGbMonth = (ctx.lambda * ctx.readShare * SECONDS_PER_MONTH * objectBytes) / 1e9;
+
+        return totalCost({
+            compute: 0,
+            storage: Math.max(ctx.storageGb, minimumDurationGb) * ctx.params.costPerGbMonth,
+            network: 0,
+            requests: retrievedGbMonth * glacierRetrievalPricePerGb(ctx.params),
+        });
+    },
+    availability: (params) => params.availability,
+});
+
+const glacier = defineComponent({
+    id: 'glacier',
+    group: 'storage',
+    shape: 'node',
+    wave: 'v1',
+    icon: 'sd-archive',
+    ports: STORAGE_PORTS,
+    defaultParams: glacierDefaults,
+    paramSchema: {
+        objectCount: num('data', { min: 0, max: 1000000000000 }),
+        avgObjectSizeMb: num('data', { unitKey: 'mb', min: 0.001, max: 5242880, step: 0.001 }),
+        retrievalTier: choice('behaviour', ['expedited', 'standard', 'bulk']),
+        retrievalHours: num('performance', { min: 0.05, max: 48, step: 0.05, realistic: { min: 1, max: 12 } }),
+        concurrency: num('capacity', { min: 1, max: 100000 }),
+        throughputMbs: num('capacity', { min: 1, max: 100000 }),
+        minStorageDays: num('data', { min: 0, max: 3650, realistic: { min: 90, max: 180 } }),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerGbMonth: num('cost', { unitKey: 'usd', min: 0, max: 10, step: 0.001 }),
+        costPerGbRetrieval: num('cost', { unitKey: 'usd', min: 0, max: 10, step: 0.001 }),
+    },
+    model: glacierModel,
+    helpId: 'glacier',
+    managed: true,
+});
+
+const nfsDefaults = {
+    storageGb: 20000,
+    throughputMbs: 300,
+    burstCredits: 2100000,
+    provisionedIops: 35000,
+    iopsPerRead: 1,
+    iopsPerWrite: 2,
+    latencyMs: 2.5,
+    availability: 0.9999,
+    costPerGbMonth: 0.3,
+};
+
+function nfsSustainedMbs(params: typeof nfsDefaults): number {
+    return Math.min(
+        params.throughputMbs * NFS_BURST_THROUGHPUT_MULTIPLIER,
+        params.throughputMbs + params.burstCredits / SECONDS_PER_DAY,
+    );
+}
+
+const nfsModel = defineModel<typeof nfsDefaults>({
+    serviceSec: (ctx) => ctx.params.latencyMs / 1000,
+    resources: (ctx) => [
+        iopsBound(
+            'iops',
+            ctx.params.provisionedIops,
+            ctx.params.iopsPerRead,
+            ctx.params.iopsPerWrite,
+            ctx.readShare,
+            ctx.writeShare,
+        ),
+        bandwidthBound(
+            'throughput',
+            nfsSustainedMbs(ctx.params) * 8,
+            payloadBytes(ctx.readShare, ctx.writeShare, ctx.responseBytes, ctx.requestBytes),
+        ),
+    ],
+    storage: (ctx) => {
+        const growthGbDay = (ctx.writeRps * SECONDS_PER_DAY * ctx.requestBytes) / 1e9;
+        const totalGb = ctx.params.storageGb + growthGbDay * ctx.horizonDays;
+
+        return {
+            totalGb,
+            growthGbDay,
+            memoryGb: 0,
+            explain: [
+                explain(
+                    'writeRps × 86400 × requestBytes / 10⁹',
+                    { writeRps: ctx.writeRps, requestBytes: ctx.requestBytes },
+                    growthGbDay,
+                    'gb/day',
+                ),
+                explain(
+                    'storageGb + growthGbDay × horizonDays',
+                    {
+                        storageGb: ctx.params.storageGb,
+                        growthGbDay,
+                        horizonDays: ctx.horizonDays,
+                    },
+                    totalGb,
+                    'gb',
+                ),
+            ],
+        };
+    },
+    cost: (ctx) =>
+        totalCost({
+            compute: 0,
+            storage: ctx.storageGb * ctx.params.costPerGbMonth * ctx.regionCostMultiplier,
+            network: 0,
+            requests: 0,
+        }),
+    availability: (params) => params.availability,
+});
+
+const nfs = defineComponent({
+    id: 'nfs',
+    group: 'storage',
+    shape: 'node',
+    wave: 'v1',
+    icon: 'sd-file-share',
+    ports: FILE_PORTS,
+    defaultParams: nfsDefaults,
+    paramSchema: {
+        storageGb: num('capacity', { unitKey: 'gb', min: 1, max: 100000000 }),
+        throughputMbs: num('capacity', { min: 1, max: 100000, realistic: { min: 50, max: 3000 } }),
+        burstCredits: num('capacity', { min: 0, max: 1000000000 }),
+        provisionedIops: num('capacity', { min: 100, max: 1000000 }),
+        iopsPerRead: num('capacity', { min: 0.1, max: 100, step: 0.1 }),
+        iopsPerWrite: num('capacity', { min: 0.1, max: 100, step: 0.1, realistic: { min: 1, max: 4 } }),
+        latencyMs: num('performance', { unitKey: 'ms', min: 0.1, max: 500, step: 0.1, realistic: { min: 1, max: 5 } }),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerGbMonth: num('cost', { unitKey: 'usd', min: 0, max: 10, step: 0.001 }),
+    },
+    model: nfsModel,
+    helpId: 'nfs',
+    managed: true,
+});
+
+const blockDefaults = {
+    diskGb: 2000,
+    volumeType: 'gp3',
+    provisionedIops: 12000,
+    throughputMbs: 500,
+    iopsPerRead: 1,
+    iopsPerWrite: 2,
+    latencyUs: 200,
+    availability: 0.999,
+    costPerGbMonth: 0.08,
+};
+
+function blockIops(params: typeof blockDefaults): number {
+    return Math.min(params.provisionedIops, VOLUME_TYPE_MAX_IOPS[params.volumeType] ?? params.provisionedIops);
+}
+
+function blockThroughputMbs(params: typeof blockDefaults): number {
+    return Math.min(
+        params.throughputMbs,
+        VOLUME_TYPE_MAX_THROUGHPUT_MBS[params.volumeType] ?? params.throughputMbs,
+    );
+}
+
+const blockModel = defineModel<typeof blockDefaults>({
+    serviceSec: (ctx) => ctx.params.latencyUs / 1e6,
+    resources: (ctx) => [
+        iopsBound(
+            'iops',
+            blockIops(ctx.params),
+            ctx.params.iopsPerRead,
+            ctx.params.iopsPerWrite,
+            ctx.readShare,
+            ctx.writeShare,
+        ),
+        bandwidthBound(
+            'throughput',
+            blockThroughputMbs(ctx.params) * 8,
+            payloadBytes(ctx.readShare, ctx.writeShare, ctx.responseBytes, ctx.requestBytes),
+        ),
+    ],
+    storage: (ctx) => {
+        const growthGbDay = (ctx.writeRps * SECONDS_PER_DAY * ctx.requestBytes) / 1e9;
+
+        return {
+            totalGb: ctx.params.diskGb,
+            growthGbDay,
+            memoryGb: 0,
+            explain: [
+                explain('diskGb', { diskGb: ctx.params.diskGb }, ctx.params.diskGb, 'gb'),
+                explain(
+                    'writeRps × 86400 × requestBytes / 10⁹',
+                    { writeRps: ctx.writeRps, requestBytes: ctx.requestBytes },
+                    growthGbDay,
+                    'gb/day',
+                ),
+            ],
+        };
+    },
+    cost: (ctx) =>
+        totalCost({
+            compute: 0,
+            storage: ctx.storageGb * ctx.params.costPerGbMonth * ctx.regionCostMultiplier,
+            network: 0,
+            requests: 0,
+        }),
+    availability: (params) => params.availability,
+});
+
+const block = defineComponent({
+    id: 'block',
+    group: 'storage',
+    shape: 'node',
+    wave: 'v1',
+    icon: 'sd-block-device',
+    ports: BLOCK_PORTS,
+    defaultParams: blockDefaults,
+    paramSchema: {
+        diskGb: num('capacity', { unitKey: 'gb', min: 1, max: 100000 }),
+        volumeType: choice('capacity', ['gp3', 'io2', 'nvme']),
+        provisionedIops: num('capacity', { min: 100, max: 1000000 }),
+        throughputMbs: num('capacity', { min: 1, max: 100000, realistic: { min: 125, max: 4000 } }),
+        iopsPerRead: num('capacity', { min: 0.1, max: 100, step: 0.1 }),
+        iopsPerWrite: num('capacity', { min: 0.1, max: 100, step: 0.1, realistic: { min: 1, max: 4 } }),
+        latencyUs: num('performance', { min: 10, max: 20000, realistic: { min: 100, max: 500 } }),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerGbMonth: num('cost', { unitKey: 'usd', min: 0, max: 10, step: 0.001 }),
+    },
+    model: blockModel,
+    helpId: 'block',
+});
+
+export const storageComponents: ComponentDefinition[] = [
+    s3,
+    minio,
+    glacier,
+    nfs,
+    block,
+] as unknown as ComponentDefinition[];

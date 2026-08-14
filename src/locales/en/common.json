@@ -158,6 +158,7 @@
         },
         "realism": {
             "param-out-of-range": "Parameter “{{param}}” = {{value}} is outside the realistic range {{min}}…{{max}}. Fine in the sandbox, not at grading time.",
+            "param-outside-schema": "Parameter “{{param}}” = {{value}} is outside the allowed values {{min}}…{{max}}. Such a value is unreachable through the UI and means the scheme file was edited by hand.",
             "given-node-removed": "The given block “{{node}}” was removed. It is part of the challenge statement and must stay on the scheme.",
             "given-param-changed": "Parameter “{{param}}” of a given block was changed: {{actual}} instead of {{expected}}. The statement cannot be edited.",
             "too-many-nodes": "{{nodes}} blocks against a limit of {{maxNodes}}. The challenge asks for a simpler solution — drop the extras.",
@@ -328,7 +329,8 @@
             "flows": "Flows",
             "findings": "Findings",
             "consistency": "Consistency",
-            "multiRegion": "Multi-region"
+            "multiRegion": "Multi-region",
+            "waterfall": "Latency waterfall"
         },
         "metric": {
             "rps": "Load",
@@ -383,6 +385,55 @@
             "againstTarget": "{{value}} {{unit}} against a {{target}} {{unit}} target"
         }
     },
+    "probe": {
+        "explain": "How the number is derived",
+        "noData": "no data",
+        "openWaterfall": "Open the latency waterfall",
+        "attachHint": "Connect the probe to the block it watches",
+        "status": {
+            "ok": "within limits",
+            "warn": "close to the threshold",
+            "breach": "threshold exceeded",
+            "no-data": "no data"
+        },
+        "reason": {
+            "unattached": "The probe is attached to nothing — connect it to a block",
+            "unknown-target": "The block the probe is attached to takes no part in the calculation",
+            "unsupported-target": "This block does not produce the value the probe measures",
+            "no-traffic": "No traffic goes through this point",
+            "no-flow": "No flow passes through this point"
+        },
+        "unit": {
+            "rps": "req/s",
+            "ms": "ms",
+            "percent": "%",
+            "sec": "s",
+            "gb": "GB",
+            "usdHour": "$/h",
+            "usdDay": "$/day",
+            "usdMonth": "$/mo",
+            "usdYear": "$/year",
+            "none": ""
+        }
+    },
+    "waterfall": {
+        "title": "Latency waterfall",
+        "empty": "The waterfall shows up once the scheme has a client flow",
+        "flow": "Flow",
+        "percentile": "Percentile",
+        "legend": "Bar width is the hop’s own contribution, its position is the accumulated time",
+        "covered": "{{covered}} of {{total}} ms accounted for",
+        "residual": "residual {{value}} ms",
+        "contribution": "{{value}} ms",
+        "shareOfRequests": "on the path of {{value}}% of requests",
+        "cacheMiss": "cache misses {{value}}%",
+        "split": "traffic splits by weight ({{value}}%), but the walk counts the whole arm",
+        "fanout": "calls per request {{value}}, the walk counts one",
+        "arm": {
+            "sequential": "sequential",
+            "parallel": "parallel"
+        }
+    },
     "scenario": {
         "baseline": "Baseline",
         "peak": "Peak load",
@@ -399,6 +450,8 @@
         "retry-amplification": "Retries inflate the load: {{nodeNames}} receives {{amplificationPct}}% more requests because of repeats. Raise the timeout or enable exponential backoff.",
         "spof": "Single point of failure: {{nodeNames}} has no standby — losing it breaks the whole request path. Add a second replica or a second zone.",
         "hot-key": "Hot key: {{nodeNames}} takes {{hotKeyRps}} req/s on a single shard whose capacity is {{perShardCapacity}} req/s. Spread the key out or put a local cache in front.",
+        "k8s-pods-exceeded": "More pods than the cluster holds: {{requested}} requested against a ceiling of {{ceiling}} ({{nodes}} nodes × {{podsPerNode}} pods per node). The extra pods stay Pending — add nodes or pack the deployments tighter.",
+        "nat-saturated": "NAT gateway saturated: {{bytesPerSec}} B/s leave the VPC against a capacity of {{capacityBytesPerSec}} B/s ({{natGatewayCount}} gateways). Add NAT gateways or move the traffic to VPC endpoints.",
         "client-direct-to-store": "The client talks to the store directly ({{nodeNames}}). Put a service or a gateway in between — otherwise there is no authorization, no limits and no cache.",
         "retry-without-idempotency": "Retries without idempotency: {{retries}} retries are configured, but the operation is not idempotent ({{nodeNames}}). A retry creates a duplicate — add an idempotency key.",
         "backlog-growing": "The backlog grows: the producer emits {{producerRps}} msg/s while the consumer drains {{consumerCapacity}} msg/s — the lag adds {{growthPerSec}} msg/s. Add consumers or partitions.",
@@ -429,22 +482,29 @@
     "bound": {
         "authoritative-qps": "authoritative server limit",
         "broker-network": "broker network",
+        "cardinality": "cardinality",
         "concurrency": "concurrency",
         "connections": "connection count",
+        "counter-store": "counter store",
         "cpu": "CPU",
+        "credits": "warehouse credits",
         "daily-quota": "daily quota",
         "db-pool": "database connection pool",
         "depth": "queue depth",
         "disabled": "being disabled",
         "disk-scan": "disk scan rate",
+        "fanout": "subscriber fan-out",
         "gateway-rps": "gateway limit",
         "global-rps": "global RPS ceiling",
+        "gpu": "GPU",
         "hot-key": "hot key",
         "hot-partition": "hot partition",
         "indexing": "indexing",
         "inflight": "in-flight requests",
         "ingest-bandwidth": "ingest bandwidth",
         "iops": "disk IOPS",
+        "job-window": "job window",
+        "lock-serialization": "lock serialization",
         "memory": "memory",
         "network": "network",
         "new-connections": "new connections",
@@ -452,6 +512,7 @@
         "nodes": "node count",
         "ops": "operation count",
         "partitions": "partition count",
+        "poll-batch": "poll batch",
         "pop-network": "edge location network",
         "pop-rps": "edge location limit",
         "prefix-requests": "prefix requests",
@@ -460,16 +521,24 @@
         "query-slots": "query slots",
         "queues": "queues",
         "quotaRps": "the RPS quota",
+        "raft-quorum": "Raft quorum",
         "rate-limit": "rate limit",
+        "retrieval": "archive retrieval",
         "rps-ceiling": "RPS ceiling",
         "sample-ingest": "metric ingest",
         "search-threads": "search threads",
+        "shard-cpu": "shard CPU",
+        "shard-records": "shard record limit",
         "source": "traffic source",
+        "span-ingest": "span ingest",
+        "state-transitions": "state transitions",
         "throughput": "throughput",
         "unbounded": "nothing",
         "unmodelled": "an unmodelled limit",
         "vendor-units": "billing units",
-        "workers": "worker count"
+        "vtgate": "vtgate limit",
+        "workers": "worker count",
+        "write-quorum": "write quorum"
     },
     "footer": {
         "nodes": "blocks",
@@ -526,5 +595,91 @@
     "demo": {
         "video-platform": "Video platform",
         "two-region-payments": "Two-region payments"
+    },
+    "share": {
+        "action": "Link to the scheme",
+        "copied": "Link copied — the whole scheme is encoded in it",
+        "copiedTooLong": "Link copied, but it is longer than 8000 characters: some browsers will refuse to open it. Sending the scheme file is safer.",
+        "copyFailed": "Could not copy the link to the clipboard",
+        "opened": "Scheme opened from the link",
+        "brokenLink": "The link is damaged: the scheme cannot be restored from it. Ask for a new one."
+    },
+    "export": {
+        "png": "Export scheme to PNG",
+        "markdown": "Export report to Markdown",
+        "imageDone": "Scheme saved as PNG",
+        "imageFailed": {
+            "empty": "Nothing to export: the scheme has no blocks",
+            "no-canvas": "Canvas not found — reload the page",
+            "render-failed": "Could not render the image"
+        },
+        "reportDone": "Report saved as Markdown",
+        "reportUnavailable": "No report yet: wait for the load calculation"
+    },
+    "report": {
+        "title": "Report on scheme \"{{name}}\"",
+        "unnamed": "Untitled",
+        "generatedAt": "Generated {{date}}",
+        "meta": "Model {{modelVersion}} · scenario \"{{scenario}}\" · seed {{seed}}",
+        "section": {
+            "summary": "Summary",
+            "nodes": "Blocks",
+            "flows": "Flows",
+            "edges": "Edges",
+            "findings": "Findings",
+            "assumptions": "Model assumptions"
+        },
+        "summary": {
+            "metric": "Metric",
+            "value": "Value",
+            "rps": "Total load",
+            "readWrite": "read {{read}} · write {{write}}",
+            "p95": "latency p95 (worst flow)",
+            "p99": "latency p99 (worst flow)",
+            "costMonth": "Cost",
+            "availability": "Availability",
+            "errorBudget": "error budget {{value}} {{unit}}",
+            "storage": "Storage",
+            "egress": "Egress"
+        },
+        "node": {
+            "name": "Block",
+            "type": "Type",
+            "instances": "Instances",
+            "lambda": "λ, req/s",
+            "capacity": "Capacity, req/s",
+            "boundBy": "Limiter",
+            "utilization": "Utilization",
+            "latency": "Service + wait, ms",
+            "cost": "Cost, $/month"
+        },
+        "edge": {
+            "link": "Edge",
+            "kind": "Kind",
+            "rps": "RPS",
+            "bandwidth": "Traffic, MB/s",
+            "network": "Network, ms",
+            "scope": "Scope",
+            "lag": "Lag, s"
+        },
+        "scope": {
+            "local": "in-process",
+            "same-az": "same AZ",
+            "cross-az": "cross-AZ",
+            "cross-region": "cross-region",
+            "internet": "internet"
+        },
+        "severity": {
+            "error": "Error",
+            "warning": "Warning",
+            "info": "Note"
+        },
+        "empty": {
+            "nodes": "No block made it into the calculation.",
+            "flows": "No flows: the client is missing or not connected to anything.",
+            "edges": "No edge made it into the calculation.",
+            "findings": "No problems found."
+        },
+        "assumptions": "The calculation is steady-state: load is averaged and transients are not modelled. Capacity of every block is the minimum over its list of limiters, latency is sampled with Monte-Carlo over the call tree, and cost follows the pricing profile from the scheme settings. The numbers are an order-of-magnitude estimate, not a load test. Formulas, constants and limits of applicability — docs/02-simulation.md."
     }
 }

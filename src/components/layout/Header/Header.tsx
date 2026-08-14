@@ -22,9 +22,23 @@ export interface HeaderProps {
     onExport: () => void;
     onImport: () => void;
     onLoadDemo: (demoId: string) => void;
+    onShare: () => void;
+    onExportImage: () => void;
+    onExportReport: () => void;
 }
 
-export default function Header({ onNew, onSave, onSaveAs, onLoad, onExport, onImport, onLoadDemo }: HeaderProps) {
+export default function Header({
+    onNew,
+    onSave,
+    onSaveAs,
+    onLoad,
+    onExport,
+    onImport,
+    onLoadDemo,
+    onShare,
+    onExportImage,
+    onExportReport,
+}: HeaderProps) {
     const { t, i18n } = useTranslation();
     const { isDarkTheme, toggleTheme } = useThemeContext();
     const [langOpen, setLangOpen] = useState(false);
@@ -44,6 +58,8 @@ export default function Header({ onNew, onSave, onSaveAs, onLoad, onExport, onIm
     const setScenario = useSimStore((state) => state.setScenario);
     const dashboardOpen = useSimStore((state) => state.dashboardOpen);
     const toggleDashboard = useSimStore((state) => state.toggleDashboard);
+    const hasResult = useSimStore((state) => state.result !== null);
+    const hasNodes = useGraphStore((state) => state.nodes.length > 0);
 
     useEffect(() => {
         if (!langOpen) return;
@@ -120,6 +136,26 @@ export default function Header({ onNew, onSave, onSaveAs, onLoad, onExport, onIm
                     </button>
                     <button className="hdr-btn" onClick={onImport} title={t('header.import')}>
                         <Icon name="upload" size="small" />
+                    </button>
+                    <span className="hdr-divider" />
+                    <button className="hdr-btn" onClick={onShare} disabled={!hasNodes} title={t('share.action')}>
+                        <Icon name="share" size="small" />
+                    </button>
+                    <button
+                        className="hdr-btn"
+                        onClick={onExportImage}
+                        disabled={!hasNodes}
+                        title={t('export.png')}
+                    >
+                        <Icon name="image" size="small" />
+                    </button>
+                    <button
+                        className="hdr-btn"
+                        onClick={onExportReport}
+                        disabled={!hasResult}
+                        title={t('export.markdown')}
+                    >
+                        <Icon name="description" size="small" />
                     </button>
                 </div>
             </div>

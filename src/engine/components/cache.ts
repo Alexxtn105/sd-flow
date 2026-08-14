@@ -5,6 +5,7 @@ import {
     defineModel,
     explain,
     explicitRps,
+    littleLaw,
     memoryResidencyBound,
     resourceLimit,
     totalCost,
@@ -36,6 +37,8 @@ const REDIS_DATA_MEMORY_SHARE = 0.75;
 const PIPELINING_THROUGHPUT_GAIN = 2;
 
 const LOCAL_CACHE_ENTRY_OVERHEAD_BYTES = 64;
+
+const MEMCACHED_DATA_MEMORY_SHARE = 0.9;
 
 const redisDefaults = {
     mode: 'cluster',
@@ -200,6 +203,162 @@ const redis = defineComponent({
     helpId: 'redis',
 });
 
+const memcachedDefaults = {
+    nodes: 3,
+    memoryGb: 8,
+    slabSizeKb: 1024,
+    threads: 4,
+    maxOpsPerSec: 150000,
+    maxConnections: 1024,
+    evictionPolicy: 'lru',
+    ttlSec: 600,
+    keySizeBytes: 40,
+    valueSizeBytes: 4096,
+    overheadPerKeyBytes: 56,
+    uniqueKeys: 20000000,
+    zipfAlpha: 1,
+    hotKeyShare: 0.05,
+    serviceTimeMs: 0.15,
+    consistencyModel: 'eventual',
+    replicationMode: 'async',
+    replicaLagMs: 0,
+    replicaLagSigma: 0.8,
+    concurrencyControl: 'none',
+    conflictResolution: 'lww',
+    availability: 0.999,
+    costPerInstanceHour: 0.18,
+};
+
+function memcachedSlabPageBytes(params: typeof memcachedDefaults): number {
+    return params.slabSizeKb * 1024;
+}
+
+function memcachedEntryBytes(params: typeof memcachedDefaults): number {
+    const storableValueBytes = Math.min(params.valueSizeBytes, memcachedSlabPageBytes(params));
+
+    return params.keySizeBytes + storableValueBytes + params.overheadPerKeyBytes;
+}
+
+function memcachedSlabEfficiency(params: typeof memcachedDefaults): number {
+    const page = memcachedSlabPageBytes(params);
+    const chunk = Math.min(memcachedEntryBytes(params), page);
+
+    return (Math.floor(page / chunk) * chunk) / page;
+}
+
+function memcachedCapacityBytes(params: typeof memcachedDefaults): number {
+    return (
+        params.nodes * params.memoryGb * 1e9 * MEMCACHED_DATA_MEMORY_SHARE * memcachedSlabEfficiency(params)
+    );
+}
+
+const memcachedModel = defineModel<typeof memcachedDefaults>({
+    serviceSec: (ctx) => ctx.params.serviceTimeMs / 1000,
+    resources: (ctx) => [
+        memoryResidencyBound(
+            'memory',
+            memcachedCapacityBytes(ctx.params) / 1e9,
+            (memcachedEntryBytes(ctx.params) * ctx.params.ttlSec * ctx.writeShare) / 1e9,
+        ),
+        explicitRps('ops', ctx.params.nodes, ctx.params.maxOpsPerSec),
+        littleLaw('cpu', ctx.params.nodes * ctx.params.threads, ctx.params.serviceTimeMs / 1000),
+        connectionBound(
+            'connections',
+            ctx.params.maxConnections * ctx.params.nodes,
+            1,
+            ctx.params.serviceTimeMs / 1000,
+        ),
+        resourceLimit(
+            'hot-key',
+            ctx.params.maxOpsPerSec / Math.max(ctx.params.hotKeyShare, 1e-6),
+            'maxOpsPerSec / hotKeyShare',
+            { maxOpsPerSec: ctx.params.maxOpsPerSec, hotKeyShare: ctx.params.hotKeyShare },
+        ),
+    ],
+    storage: (ctx) => {
+        const entryBytes = memcachedEntryBytes(ctx.params);
+        const residentGb =
+            Math.min(ctx.params.uniqueKeys * entryBytes, memcachedCapacityBytes(ctx.params)) / 1e9;
+
+        return {
+            totalGb: 0,
+            growthGbDay: 0,
+            memoryGb: residentGb,
+            explain: [
+                explain(
+                    'min(uniqueKeys × entryBytes, nodes × memoryGb × dataShare × slabEfficiency) / 10⁹',
+                    {
+                        uniqueKeys: ctx.params.uniqueKeys,
+                        entryBytes,
+                        nodes: ctx.params.nodes,
+                        memoryGb: ctx.params.memoryGb,
+                        dataShare: MEMCACHED_DATA_MEMORY_SHARE,
+                        slabEfficiency: memcachedSlabEfficiency(ctx.params),
+                    },
+                    residentGb,
+                    'gb',
+                ),
+            ],
+        };
+    },
+    cost: (ctx) =>
+        totalCost({
+            compute:
+                ctx.params.nodes *
+                ctx.params.costPerInstanceHour *
+                HOURS_PER_MONTH *
+                ctx.regionCostMultiplier,
+            storage: 0,
+            network: 0,
+            requests: 0,
+        }),
+    availability: (params) => params.availability,
+    cache: (ctx) => ({
+        uniqueKeys: ctx.params.uniqueKeys,
+        zipfAlpha: ctx.params.zipfAlpha,
+        entryBytes: memcachedEntryBytes(ctx.params),
+        capacityBytes: memcachedCapacityBytes(ctx.params),
+        ttlSec: ctx.params.ttlSec,
+    }),
+});
+
+const memcached = defineComponent({
+    id: 'memcached',
+    group: 'cache',
+    shape: 'node',
+    wave: 'v1',
+    icon: 'sd-cache',
+    ports: CACHE_PORTS,
+    defaultParams: memcachedDefaults,
+    paramSchema: {
+        nodes: num('topology', { min: 1, max: 500, realistic: { min: 2, max: 50 } }),
+        memoryGb: num('capacity', { unitKey: 'gb', min: 0.1, max: 4096, step: 0.1 }),
+        slabSizeKb: num('capacity', { unitKey: 'kb', min: 64, max: 131072, realistic: { min: 512, max: 8192 } }),
+        threads: num('capacity', { min: 1, max: 64, realistic: { min: 4, max: 16 } }),
+        maxOpsPerSec: num('capacity', { unitKey: 'rps', min: 1000, max: 10000000, realistic: { min: 100000, max: 500000 } }),
+        maxConnections: num('capacity', { min: 100, max: 1000000 }),
+        evictionPolicy: choice('behaviour', ['lru', 'ttl']),
+        ttlSec: num('behaviour', { unitKey: 'sec', min: 0, max: 2592000 }),
+        keySizeBytes: num('data', { unitKey: 'bytes', min: 1, max: 65536 }),
+        valueSizeBytes: num('data', { unitKey: 'bytes', min: 1, max: 10485760 }),
+        overheadPerKeyBytes: num('data', { unitKey: 'bytes', min: 0, max: 1024, realistic: { min: 48, max: 80 } }),
+        uniqueKeys: num('data', { min: 1, max: 1e12 }),
+        zipfAlpha: num('behaviour', { min: 0.3, max: 2.5, step: 0.1, realistic: { min: 0.6, max: 1.4 } }),
+        hotKeyShare: num('behaviour', { min: 0, max: 1, step: 0.01 }),
+        serviceTimeMs: num('performance', { unitKey: 'ms', min: 0.01, max: 1000, step: 0.01 }),
+        consistencyModel: choice('consistency', CONSISTENCY_MODEL),
+        replicationMode: choice('consistency', REPLICATION_MODE),
+        replicaLagMs: num('consistency', { unitKey: 'ms', min: 0, max: 60000, realistic: { min: 0, max: 100 } }),
+        replicaLagSigma: num('consistency', { min: 0.1, max: 3, step: 0.1 }),
+        concurrencyControl: choice('consistency', CONCURRENCY_CONTROL),
+        conflictResolution: choice('consistency', CONFLICT_RESOLUTION),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.001 }),
+    },
+    model: memcachedModel,
+    helpId: 'memcached',
+});
+
 const localCacheDefaults = {
     sizeMb: 256,
     maxEntries: 100000,
@@ -303,4 +462,8 @@ const localCache = defineComponent({
     helpId: 'local-cache',
 });
 
-export const cacheComponents: ComponentDefinition[] = [redis, localCache] as unknown as ComponentDefinition[];
+export const cacheComponents: ComponentDefinition[] = [
+    redis,
+    memcached,
+    localCache,
+] as unknown as ComponentDefinition[];

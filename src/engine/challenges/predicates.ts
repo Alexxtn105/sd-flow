@@ -2,7 +2,7 @@ import type { ComponentParams } from '../types/component';
 import type { CompiledNode, CompiledTopology } from '../sim/compile';
 import { redundancyOfNode } from '../sim/availability';
 import type { ScenarioId } from '../sim/scenarios';
-import type { FlowResult, SimResult } from '../sim/types';
+import type { AnomalyRate, FlowResult, SimResult } from '../sim/types';
 import type {
     AnomalyRequirement,
     BudgetRequirement,
@@ -497,9 +497,17 @@ function evaluateAnomaly(requirement: AnomalyRequirement, input: PredicateInput)
         return unknown(requirement, input.scenario, 'consistency-model-off');
     }
 
-    const anomaly = input.result.consistency.anomalies.find((item) => item.code === requirement.code);
-    const ratePerSec = anomaly?.ratePerSec ?? 0;
-    const share = anomaly?.shareOfOperations ?? 0;
+    const matching = input.result.consistency.anomalies.filter((item) => item.code === requirement.code);
+    const worstBy = (pick: (item: AnomalyRate) => number): AnomalyRate | undefined =>
+        matching.reduce<AnomalyRate | undefined>(
+            (worst, item) => (worst === undefined || pick(item) > pick(worst) ? item : worst),
+            undefined,
+        );
+
+    const worstShare = worstBy((item) => item.shareOfOperations);
+    const worstRate = worstBy((item) => item.ratePerSec);
+    const share = worstShare?.shareOfOperations ?? 0;
+    const ratePerSec = worstRate?.ratePerSec ?? 0;
 
     if (requirement.maxSharePercent !== undefined) {
         return threshold({
@@ -510,7 +518,7 @@ function evaluateAnomaly(requirement: AnomalyRequirement, input: PredicateInput)
             unit: '%',
             direction: 'max',
             reason: 'anomaly-above-threshold',
-            nodeIds: anomaly?.nodeIds ?? [],
+            nodeIds: worstShare?.nodeIds ?? [],
             values: { anomaly: requirement.code, ratePerSec },
         });
     }
@@ -523,7 +531,7 @@ function evaluateAnomaly(requirement: AnomalyRequirement, input: PredicateInput)
         unit: 'rps',
         direction: 'max',
         reason: 'anomaly-above-threshold',
-        nodeIds: anomaly?.nodeIds ?? [],
+        nodeIds: worstRate?.nodeIds ?? [],
         values: { anomaly: requirement.code, share },
     });
 }

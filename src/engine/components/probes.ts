@@ -1,8 +1,27 @@
-import type { ComponentDefinition, PortSpec } from '../types/component';
+import type { ComponentDefinition, PortSpec, Protocol } from '../types/component';
 import { bool, choice, defineComponent, num } from './_shared/params';
 
+const ATTACHABLE_PROTOCOLS: Protocol[] = [
+    'http',
+    'grpc',
+    'ws',
+    'dns',
+    'sql',
+    'nosql',
+    'redis',
+    'search',
+    'olap',
+    'kafka',
+    'amqp',
+    'sqs',
+    's3',
+    'stream',
+    'telemetry',
+    'internal',
+];
+
 const PROBE_PORTS: PortSpec = {
-    in: [{ id: 'attach', protocols: ['internal'], role: 'attach' }],
+    in: [{ id: 'attach', protocols: ATTACHABLE_PROTOCOLS, role: 'attach' }],
     out: [],
 };
 
@@ -142,6 +161,92 @@ const probeSlo = defineComponent({
     helpId: 'probe-slo',
 });
 
+const probeAvailability = defineComponent({
+    id: 'probe-availability',
+    group: 'probes',
+    shape: 'probe',
+    wave: 'v1',
+    icon: 'sd-probe-availability',
+    ports: PROBE_PORTS,
+    defaultParams: {
+        targetAvailability: 0.999,
+        windowDays: 30,
+        showWeakest: true,
+    },
+    paramSchema: {
+        targetAvailability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        windowDays: num('reliability', { min: 1, max: 365 }),
+        showWeakest: bool('behaviour'),
+    },
+    helpId: 'probe-availability',
+});
+
+const probeTrafficInspector = defineComponent({
+    id: 'probe-traffic-inspector',
+    group: 'probes',
+    shape: 'probe',
+    wave: 'v1',
+    icon: 'sd-probe-traffic',
+    ports: PROBE_PORTS,
+    defaultParams: {
+        groupBy: 'operation',
+        topN: 5,
+        showBytes: true,
+        errorAlarmShare: 0.01,
+    },
+    paramSchema: {
+        groupBy: choice('behaviour', ['operation', 'edge', 'flow']),
+        topN: num('behaviour', { min: 1, max: 20 }),
+        showBytes: bool('behaviour'),
+        errorAlarmShare: num('reliability', { min: 0.0001, max: 1, step: 0.0001 }),
+    },
+    helpId: 'probe-traffic-inspector',
+});
+
+const probeHeatmap = defineComponent({
+    id: 'probe-heatmap',
+    group: 'probes',
+    shape: 'probe',
+    wave: 'v1',
+    icon: 'sd-probe-heatmap',
+    ports: PROBE_PORTS,
+    defaultParams: {
+        metric: 'utilization',
+        scope: 'scheme',
+        warnThreshold: 0.7,
+        alarmThreshold: 0.9,
+    },
+    paramSchema: {
+        metric: choice('behaviour', ['utilization', 'errors']),
+        scope: choice('behaviour', ['scheme', 'subtree']),
+        warnThreshold: num('behaviour', { min: 0.1, max: 1, step: 0.05 }),
+        alarmThreshold: num('behaviour', { min: 0.1, max: 1, step: 0.05 }),
+    },
+    helpId: 'probe-heatmap',
+});
+
+const probeWaterfall = defineComponent({
+    id: 'probe-waterfall',
+    group: 'probes',
+    shape: 'probe',
+    wave: 'v1',
+    icon: 'sd-probe-waterfall',
+    ports: PROBE_PORTS,
+    defaultParams: {
+        percentile: 'p99',
+        topHops: 12,
+        showNetwork: true,
+        showCacheMiss: true,
+    },
+    paramSchema: {
+        percentile: choice('behaviour', ['p50', 'p95', 'p99']),
+        topHops: num('behaviour', { min: 3, max: 40 }),
+        showNetwork: bool('behaviour'),
+        showCacheMiss: bool('behaviour'),
+    },
+    helpId: 'probe-waterfall',
+});
+
 export const probeComponents: ComponentDefinition[] = [
     probeRps,
     probeLatency,
@@ -150,4 +255,8 @@ export const probeComponents: ComponentDefinition[] = [
     probeStorage,
     probeCost,
     probeSlo,
+    probeAvailability,
+    probeTrafficInspector,
+    probeHeatmap,
+    probeWaterfall,
 ] as unknown as ComponentDefinition[];

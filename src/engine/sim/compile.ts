@@ -12,6 +12,8 @@ export interface CompiledNode {
     label: string;
     regionId: string | null;
     azId: string | null;
+    vpcId: string | null;
+    clusterId: string | null;
     incoming: string[];
     outgoing: string[];
 }
@@ -27,6 +29,8 @@ export interface CompiledEdge {
     weight: number;
     scope: NetworkScope;
     networkMs: number;
+    crossVpc: boolean;
+    viaNat: boolean;
     isReplication: boolean;
     isAsync: boolean;
 }
@@ -56,23 +60,31 @@ function issue(
     return { code, severity, nodeIds, edgeIds, values };
 }
 
-function resolvePlacement(
-    node: SchemeNode,
-    byId: Map<string, SchemeNode>,
-): { regionId: string | null; azId: string | null } {
+interface Placement {
+    regionId: string | null;
+    azId: string | null;
+    vpcId: string | null;
+    clusterId: string | null;
+}
+
+function resolvePlacement(node: SchemeNode, byId: Map<string, SchemeNode>): Placement {
     let regionId: string | null = null;
     let azId: string | null = null;
+    let vpcId: string | null = null;
+    let clusterId: string | null = null;
     let current = node.parentId ? byId.get(node.parentId) : undefined;
     let guard = 0;
 
     while (current && guard < 32) {
         if (current.type === 'az') azId = current.id;
         if (current.type === 'region') regionId = current.id;
+        if (current.type === 'vpc') vpcId = current.id;
+        if (current.type === 'k8s-cluster') clusterId = current.id;
         current = current.parentId ? byId.get(current.parentId) : undefined;
         guard += 1;
     }
 
-    return { regionId, azId };
+    return { regionId, azId, vpcId, clusterId };
 }
 
 function clientRttMs(params: ComponentParams): number {
@@ -94,6 +106,41 @@ function networkScopeFor(
     if (source.azId && target.azId && source.azId !== target.azId) return 'cross-az';
     if (source.azId && target.azId && source.azId === target.azId) return 'same-az';
     return 'same-az';
+}
+
+function isCrossVpc(source: CompiledNode, target: CompiledNode): boolean {
+    return Boolean(source.vpcId && target.vpcId && source.vpcId !== target.vpcId);
+}
+
+function isViaNat(
+    source: CompiledNode,
+    target: CompiledNode,
+    nodeById: Map<string, CompiledNode>,
+): boolean {
+    if (source.definition.group === 'clients') return false;
+    if (!source.vpcId || source.vpcId === target.vpcId) return false;
+
+    const vpc = nodeById.get(source.vpcId);
+    return vpc?.params.natRequired === true;
+}
+
+function peeringLatencyMs(vpcId: string | null, nodeById: Map<string, CompiledNode>): number {
+    if (!vpcId) return 0;
+
+    const latency = nodeById.get(vpcId)?.params.peeringLatencyMs;
+    return typeof latency === 'number' ? latency : 0;
+}
+
+function vpcOverheadMs(
+    source: CompiledNode,
+    crossVpc: boolean,
+    viaNat: boolean,
+    nodeById: Map<string, CompiledNode>,
+): number {
+    if (!crossVpc && !viaNat) return 0;
+
+    const peering = peeringLatencyMs(source.vpcId, nodeById);
+    return (crossVpc ? peering : 0) + (viaNat ? peering : 0);
 }
 
 function networkLatencyMs(
@@ -282,6 +329,8 @@ export function compileTopology(scheme: SchemeV1): CompiledTopology {
             label: node.label ?? '',
             regionId: placement.regionId,
             azId: placement.azId,
+            vpcId: placement.vpcId,
+            clusterId: placement.clusterId,
             incoming: [],
             outgoing: [],
         };
@@ -303,6 +352,8 @@ export function compileTopology(scheme: SchemeV1): CompiledTopology {
         }
 
         const scope = networkScopeFor(source, target);
+        const crossVpc = isCrossVpc(source, target);
+        const viaNat = isViaNat(source, target, nodeById);
         const compiled: CompiledEdge = {
             id: edge.id,
             source: edge.source,
@@ -313,7 +364,11 @@ export function compileTopology(scheme: SchemeV1): CompiledTopology {
             pull: edge.pull ?? false,
             weight: edge.weight ?? 1,
             scope,
-            networkMs: networkLatencyMs(scope, source, target, nodeById),
+            networkMs:
+                networkLatencyMs(scope, source, target, nodeById) +
+                vpcOverheadMs(source, crossVpc, viaNat, nodeById),
+            crossVpc,
+            viaNat,
             isReplication: edge.kind === 'replication',
             isAsync: edge.kind === 'async' || edge.kind === 'stream' || edge.kind === 'cdc' || edge.kind === 'batch',
         };

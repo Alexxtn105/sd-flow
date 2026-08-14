@@ -20,7 +20,26 @@ function checkParamRanges(topology: CompiledTopology): RealismViolation[] {
             if (typeof value !== 'number') continue;
 
             const field = schema[key];
-            if (!numericField(field) || !field.realistic) continue;
+            if (!numericField(field)) continue;
+
+            const belowSchema = field.min !== undefined && value < field.min;
+            const aboveSchema = field.max !== undefined && value > field.max;
+
+            if (belowSchema || aboveSchema) {
+                violations.push({
+                    code: 'param-outside-schema',
+                    nodeIds: [node.id],
+                    values: {
+                        param: key,
+                        value,
+                        min: field.min ?? Number.NEGATIVE_INFINITY,
+                        max: field.max ?? Number.POSITIVE_INFINITY,
+                    },
+                });
+                continue;
+            }
+
+            if (!field.realistic) continue;
 
             if (value < field.realistic.min || value > field.realistic.max) {
                 violations.push({

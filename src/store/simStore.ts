@@ -13,10 +13,12 @@ export interface SimState {
     scenario: string;
     preview: boolean;
     dashboardOpen: boolean;
+    waterfallFlowId: string | null;
     run: (scheme: SchemeV1) => void;
     setScenario: (scenario: string) => void;
     setPreview: (preview: boolean) => void;
     toggleDashboard: () => void;
+    focusWaterfall: (flowId: string | null) => void;
     reset: () => void;
 }
 
@@ -29,6 +31,7 @@ export const useSimStore = create<SimState>((set, get) => ({
     scenario: 'baseline',
     preview: false,
     dashboardOpen: true,
+    waterfallFlowId: null,
 
     run: (scheme) => {
         const { scenario, preview } = get();
@@ -61,6 +64,7 @@ export const useSimStore = create<SimState>((set, get) => ({
     setScenario: (scenario) => set({ scenario }),
     setPreview: (preview) => set({ preview }),
     toggleDashboard: () => set((state) => ({ dashboardOpen: !state.dashboardOpen })),
+    focusWaterfall: (flowId) => set({ waterfallFlowId: flowId, dashboardOpen: true }),
     reset: () => {
         latestRequest += 1;
         set({ result: null, status: 'idle', error: null });
@@ -73,4 +77,8 @@ export function useNodeResult(nodeId: string | undefined) {
 
 export function useEdgeResult(edgeId: string | undefined) {
     return useSimStore((state) => (edgeId ? (state.result?.edges[edgeId] ?? null) : null));
+}
+
+export function useProbeReading(probeId: string | undefined) {
+    return useSimStore((state) => (probeId ? (state.result?.probes[probeId] ?? null) : null));
 }

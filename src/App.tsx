@@ -14,6 +14,8 @@ import SaveDialog from './components/dialogs/SaveDialog';
 import LoadDialog from './components/dialogs/LoadDialog';
 import ConfirmDialog from './components/dialogs/ConfirmDialog';
 import Icon from './components/common/Icons/Icon';
+import Toast from './components/common/Toast/Toast';
+import type { ToastTone } from './components/common/Toast/Toast';
 
 import { DEMO_SCHEMES } from './data/demoSchemes';
 import { useAutoSave } from './hooks/useAutoSave';
@@ -24,7 +26,17 @@ import { useIsDirty, useSchemeStore } from './store/schemeStore';
 import type { StoredSchemeInfo } from './store/schemeStore';
 import { useSimStore } from './store/simStore';
 import { useUiStore } from './store/uiStore';
-import { downloadJson, pickJsonFile, slugify } from './services/fileService';
+import {
+    copyText,
+    downloadDataUrl,
+    downloadJson,
+    downloadMarkdown,
+    pickJsonFile,
+    slugify,
+} from './services/fileService';
+import { renderSchemePng } from './services/imageExport';
+import { buildMarkdownReport } from './services/reportExport';
+import { buildShareUrl, clearShareHash, decodeScheme, encodeScheme, isShareUrlTooLong, readSharePayload } from './services/shareLink';
 import './App.css';
 
 interface ConfirmState {
@@ -33,11 +45,19 @@ interface ConfirmState {
     action: () => void;
 }
 
+interface ToastState {
+    id: number;
+    text: string;
+    tone: ToastTone;
+}
+
 export default function App() {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const dialogs = useDialogManager();
     const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
+    const [toast, setToast] = useState<ToastState | null>(null);
     const restored = useRef(false);
+    const toastCounter = useRef(0);
 
     const isDirty = useIsDirty();
     const replaceGraph = useGraphStore((state) => state.replaceGraph);
@@ -61,16 +81,35 @@ export default function App() {
 
     useSimulation();
 
+    const showToast = useCallback((text: string, tone: ToastTone = 'info') => {
+        toastCounter.current += 1;
+        setToast({ id: toastCounter.current, text, tone });
+    }, []);
+
     useEffect(() => {
         if (restored.current) return;
         restored.current = true;
 
         refreshLibrary();
+
+        const payload = readSharePayload();
+        if (payload) {
+            clearShareHash();
+            void decodeScheme(payload).then((shared) => {
+                if (shared && importScheme(shared)) {
+                    showToast(t('share.opened'));
+                    return;
+                }
+                showToast(t('share.brokenLink'), 'error');
+            });
+            return;
+        }
+
         const autoSaved = loadAutoSave();
         if (autoSaved && autoSaved.nodes.length > 0) {
             replaceGraph(autoSaved.nodes, autoSaved.edges);
         }
-    }, [loadAutoSave, refreshLibrary, replaceGraph]);
+    }, [importScheme, loadAutoSave, refreshLibrary, replaceGraph, showToast, t]);
 
     const guard = useCallback(
         (title: string, message: string, action: () => void) => {
@@ -142,6 +181,44 @@ export default function App() {
         }
     }, [importScheme, t]);
 
+    const handleShare = useCallback(async () => {
+        const scheme = exportScheme();
+        const url = buildShareUrl(await encodeScheme(scheme));
+        const copied = await copyText(url);
+
+        if (!copied) {
+            showToast(t('share.copyFailed'), 'error');
+            return;
+        }
+
+        showToast(isShareUrlTooLong(url) ? t('share.copiedTooLong') : t('share.copied'), isShareUrlTooLong(url) ? 'warn' : 'info');
+    }, [exportScheme, showToast, t]);
+
+    const handleExportImage = useCallback(async () => {
+        const scheme = exportScheme();
+        const rendered = await renderSchemePng(useGraphStore.getState().nodes);
+
+        if (!rendered.ok) {
+            showToast(t(`export.imageFailed.${rendered.reason}`), 'error');
+            return;
+        }
+
+        downloadDataUrl(`${slugify(scheme.meta.name || 'sd-flow-scheme')}.png`, rendered.dataUrl);
+        showToast(t('export.imageDone'));
+    }, [exportScheme, showToast, t]);
+
+    const handleExportReport = useCallback(() => {
+        const result = useSimStore.getState().result;
+        if (!result) {
+            showToast(t('export.reportUnavailable'), 'warn');
+            return;
+        }
+
+        const scheme = exportScheme();
+        downloadMarkdown(slugify(scheme.meta.name || 'sd-flow-scheme'), buildMarkdownReport(scheme, result, i18n.language));
+        showToast(t('export.reportDone'));
+    }, [exportScheme, i18n.language, showToast, t]);
+
     const handleLoadDemo = useCallback(
         (demoId: string) => {
             const demo = DEMO_SCHEMES.find((item) => item.id === demoId);
@@ -167,6 +244,9 @@ export default function App() {
                     onExport={handleExport}
                     onImport={handleImport}
                     onLoadDemo={handleLoadDemo}
+                    onShare={() => void handleShare()}
+                    onExportImage={() => void handleExportImage()}
+                    onExportReport={handleExportReport}
                 />
 
                 <div className="app-content">
@@ -221,6 +301,15 @@ export default function App() {
                         onClose={dialogs.close}
                         onPick={handlePick}
                         onRemove={handleRemove}
+                    />
+                )}
+
+                {toast && (
+                    <Toast
+                        key={toast.id}
+                        text={toast.text}
+                        tone={toast.tone}
+                        onDismiss={() => setToast(null)}
                     />
                 )}
 

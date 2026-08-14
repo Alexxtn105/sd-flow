@@ -10,6 +10,12 @@ const GEO_DISTRIBUTION = ['global', 'north-america', 'south-america', 'europe', 
 
 const DIURNAL_PATTERN = ['flat', 'business', 'evening', 'global'];
 
+const LOAD_PATTERN = ['constant', 'ramp', 'spike', 'sawtooth'];
+
+const SLA_TIER = ['critical', 'standard', 'best-effort'];
+
+const AUTH_MODE = ['none', 'jwt-local', 'introspection'];
+
 const clientWeb = defineComponent({
     id: 'client-web',
     group: 'clients',
@@ -106,7 +112,184 @@ const clientMobile = defineComponent({
     helpId: 'client-mobile',
 });
 
+const clientIot = defineComponent({
+    id: 'client-iot',
+    group: 'clients',
+    shape: 'node',
+    wave: 'v1',
+    icon: 'sd-client-iot',
+    ports: CLIENT_PORTS,
+    defaultParams: {
+        deviceCount: 500000,
+        reportIntervalSec: 60,
+        payloadBytes: 200,
+        batchSize: 1,
+        alwaysConnected: true,
+        peakFactor: 1.3,
+        readWriteMix: 0.1,
+        avgResponseKb: 0.2,
+        geoDistribution: 'global',
+        retries: 3,
+        timeoutMs: 30000,
+    },
+    paramSchema: {
+        deviceCount: num('scale', { min: 1, max: 1000000000, realistic: { min: 100, max: 50000000 } }),
+        reportIntervalSec: num('behaviour', { unitKey: 'sec', min: 0.1, max: 86400, step: 0.1 }),
+        payloadBytes: num('data', { unitKey: 'bytes', min: 1, max: 1048576, realistic: { min: 20, max: 4096 } }),
+        batchSize: num('behaviour', { min: 1, max: 10000 }),
+        alwaysConnected: bool('behaviour'),
+        peakFactor: num('behaviour', { min: 1, max: 20, step: 0.1, realistic: { min: 1, max: 3 } }),
+        readWriteMix: num('behaviour', { min: 0, max: 1, step: 0.01 }),
+        avgResponseKb: num('data', { unitKey: 'kb', min: 0.1, max: 102400, step: 0.1 }),
+        geoDistribution: choice('topology', GEO_DISTRIBUTION),
+        retries: num('behaviour', { min: 0, max: 10 }),
+        timeoutMs: num('behaviour', { unitKey: 'ms', min: 100, max: 300000 }),
+    },
+    helpId: 'client-iot',
+});
+
+const clientApi = defineComponent({
+    id: 'client-api',
+    group: 'clients',
+    shape: 'node',
+    wave: 'v1',
+    icon: 'sd-client-api',
+    ports: CLIENT_PORTS,
+    defaultParams: {
+        clients: 200,
+        rpsPerClient: 5,
+        quotaPerDay: 1000000,
+        burstiness: 2,
+        authMode: 'jwt-local',
+        peakFactor: 2,
+        readWriteMix: 0.7,
+        avgRequestKb: 2,
+        avgResponseKb: 12,
+        geoDistribution: 'global',
+        retries: 2,
+        timeoutMs: 10000,
+    },
+    paramSchema: {
+        clients: num('scale', { min: 1, max: 1000000, realistic: { min: 1, max: 50000 } }),
+        rpsPerClient: num('scale', { unitKey: 'rps', min: 0.01, max: 100000, step: 0.01 }),
+        quotaPerDay: num('behaviour', { min: 1, max: 10000000000 }),
+        burstiness: num('behaviour', { min: 1, max: 50, step: 0.1, realistic: { min: 1, max: 8 } }),
+        authMode: choice('behaviour', AUTH_MODE),
+        peakFactor: num('behaviour', { min: 1, max: 20, step: 0.1, realistic: { min: 1.2, max: 6 } }),
+        readWriteMix: num('behaviour', { min: 0, max: 1, step: 0.01 }),
+        avgRequestKb: num('data', { unitKey: 'kb', min: 0.1, max: 10240, step: 0.1 }),
+        avgResponseKb: num('data', { unitKey: 'kb', min: 0.1, max: 102400, step: 0.1 }),
+        geoDistribution: choice('topology', GEO_DISTRIBUTION),
+        retries: num('behaviour', { min: 0, max: 10 }),
+        timeoutMs: num('behaviour', { unitKey: 'ms', min: 100, max: 300000 }),
+    },
+    helpId: 'client-api',
+});
+
+const clientBot = defineComponent({
+    id: 'client-bot',
+    group: 'clients',
+    shape: 'node',
+    wave: 'v1',
+    icon: 'sd-client-bot',
+    ports: CLIENT_PORTS,
+    defaultParams: {
+        rps: 500,
+        respectRobots: true,
+        cacheBusting: 0.2,
+        peakFactor: 1.5,
+        readWriteMix: 1,
+        avgRequestKb: 1,
+        avgResponseKb: 60,
+        geoDistribution: 'global',
+        retries: 1,
+        timeoutMs: 20000,
+    },
+    paramSchema: {
+        rps: num('scale', { unitKey: 'rps', min: 0, max: 10000000, step: 1, realistic: { min: 1, max: 100000 } }),
+        respectRobots: bool('behaviour'),
+        cacheBusting: num('behaviour', { min: 0, max: 1, step: 0.01 }),
+        peakFactor: num('behaviour', { min: 1, max: 20, step: 0.1, realistic: { min: 1, max: 5 } }),
+        readWriteMix: num('behaviour', { min: 0, max: 1, step: 0.01 }),
+        avgRequestKb: num('data', { unitKey: 'kb', min: 0.1, max: 10240, step: 0.1 }),
+        avgResponseKb: num('data', { unitKey: 'kb', min: 0.1, max: 102400, step: 0.1 }),
+        geoDistribution: choice('topology', GEO_DISTRIBUTION),
+        retries: num('behaviour', { min: 0, max: 10 }),
+        timeoutMs: num('behaviour', { unitKey: 'ms', min: 100, max: 300000 }),
+    },
+    helpId: 'client-bot',
+});
+
+const clientLoadtest = defineComponent({
+    id: 'client-loadtest',
+    group: 'clients',
+    shape: 'node',
+    wave: 'v1',
+    icon: 'sd-client-loadtest',
+    ports: CLIENT_PORTS,
+    defaultParams: {
+        pattern: 'constant',
+        targetRps: 5000,
+        durationSec: 600,
+        readWriteMix: 0.8,
+        avgRequestKb: 2,
+        avgResponseKb: 20,
+        geoDistribution: 'europe',
+        retries: 0,
+        timeoutMs: 10000,
+    },
+    paramSchema: {
+        pattern: choice('behaviour', LOAD_PATTERN),
+        targetRps: num('scale', { unitKey: 'rps', min: 0, max: 10000000, step: 1, realistic: { min: 10, max: 1000000 } }),
+        durationSec: num('behaviour', { unitKey: 'sec', min: 1, max: 86400 }),
+        readWriteMix: num('behaviour', { min: 0, max: 1, step: 0.01 }),
+        avgRequestKb: num('data', { unitKey: 'kb', min: 0.1, max: 10240, step: 0.1 }),
+        avgResponseKb: num('data', { unitKey: 'kb', min: 0.1, max: 102400, step: 0.1 }),
+        geoDistribution: choice('topology', GEO_DISTRIBUTION),
+        retries: num('behaviour', { min: 0, max: 10 }),
+        timeoutMs: num('behaviour', { unitKey: 'ms', min: 100, max: 300000 }),
+    },
+    helpId: 'client-loadtest',
+});
+
+const clientInternal = defineComponent({
+    id: 'client-internal',
+    group: 'clients',
+    shape: 'node',
+    wave: 'v1',
+    icon: 'sd-client-internal',
+    ports: CLIENT_PORTS,
+    defaultParams: {
+        rps: 2000,
+        slaTier: 'standard',
+        peakFactor: 2,
+        readWriteMix: 0.75,
+        avgRequestKb: 1.5,
+        avgResponseKb: 8,
+        geoDistribution: 'europe',
+        retries: 2,
+        timeoutMs: 5000,
+    },
+    paramSchema: {
+        rps: num('scale', { unitKey: 'rps', min: 0, max: 10000000, step: 1, realistic: { min: 1, max: 500000 } }),
+        slaTier: choice('reliability', SLA_TIER),
+        peakFactor: num('behaviour', { min: 1, max: 20, step: 0.1, realistic: { min: 1.2, max: 6 } }),
+        readWriteMix: num('behaviour', { min: 0, max: 1, step: 0.01 }),
+        avgRequestKb: num('data', { unitKey: 'kb', min: 0.1, max: 10240, step: 0.1 }),
+        avgResponseKb: num('data', { unitKey: 'kb', min: 0.1, max: 102400, step: 0.1 }),
+        geoDistribution: choice('topology', GEO_DISTRIBUTION),
+        retries: num('behaviour', { min: 0, max: 10 }),
+        timeoutMs: num('behaviour', { unitKey: 'ms', min: 100, max: 300000 }),
+    },
+    helpId: 'client-internal',
+});
+
 export const clientComponents: ComponentDefinition[] = [
     clientWeb,
     clientMobile,
+    clientIot,
+    clientApi,
+    clientBot,
+    clientLoadtest,
+    clientInternal,
 ] as unknown as ComponentDefinition[];

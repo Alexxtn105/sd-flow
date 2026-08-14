@@ -537,8 +537,8 @@ H(n, α)       = Σ_{k=1..n} k^(−α)
 |---|---|---|---|
 | `region` | Регион | **M** | `code` (`us-east-1`, `eu-west-1`, `ap-southeast-1`…), `geo`, `availability`, `dataResidency` (none/GDPR/local-only), `isPrimary`, `mirrorOf` (id региона-шаблона), `trafficShare` (авто из гео-маршрутизации), `costMultiplier` (регионы стоят по-разному) |
 | `az` | Availability Zone | **M** | `id`, `intraAzLatencyMs` (0.25), `failureProbability` |
-| `vpc` | VPC / подсеть | V1 | `cidr`, `natRequired` |
-| `k8s-cluster` | Kubernetes-кластер | V1 | `nodes`, `nodeType`, `podsPerNode`, `schedulingLagSec`, `controlPlaneCost` |
+| `vpc` | VPC / подсеть | V1 | `cidr` (`10.0.0.0/16`), `natRequired`, `natGatewayCount` (1), `natThroughputGbps` (45 — потолок одного NAT-шлюза), `costPerGbProcessed` ($0.045 за ГБ через NAT), `peeringLatencyMs` (0.1), `flowLogsEnabled` |
+| `k8s-cluster` | Kubernetes-кластер | V1 | `nodes` (6), `nodeType` (`general` / `compute` / `memory` / `gpu`), `podsPerNode` (110), `schedulingLagSec` (30), `nodeCostPerHour` ($0.15), `controlPlaneCostMonth` ($73), `autoscaleNodes` |
 | `link-cross-az` | Межзональный линк | **M** | `latencyMs` (0.5–2), `costPerGb` ($0.01–0.02), `bandwidthGbps` |
 | `link-cross-region` | Межрегиональный линк | **M** | `latencyMs` (авто по географии: 10–180), `costPerGb` ($0.02), `bandwidthGbps`, `encryption`, `dedicatedLink` (Direct Connect / Interconnect → ниже цена, выше стабильность) |
 | `internet` | Публичный интернет | **M** | `clientRttMs` (по гео-профилю), `packetLoss`, `tlsHandshakeRtt` (1–2 RTT) |
@@ -586,7 +586,7 @@ H(n, α)       = Σ_{k=1..n} k^(−α)
 
 ## 15. Сводка по объёму
 
-| Группа | Блоков всего | В MVP (**M**) |
+| Группа | Блоков всего | В коде\* |
 |---|---|---|
 | clients | 7 | 2 |
 | edge | 12 | 6 |
@@ -600,9 +600,14 @@ H(n, α)       = Σ_{k=1..n} k^(−α)
 | storage | 7 | 2 |
 | platform | 15 | 2 |
 | observability | 6 | 2 |
-| topology | 8 | 6 |
+| topology | 8 | 8 |
 | probes | 11 | 7 |
-| **Итого** | **129** | **44** |
+| **Итого** | **129** | **сверяется тестом** |
+
+\* До фазы 3 столбец «в коде» совпадал с MVP-волной (44 блока). В фазе 3 в реестр добавляются
+блоки волны **V1** — в `topology` это `vpc` и `k8s-cluster`, — поэтому «в коде» больше не равно
+«в MVP»: сама MVP-волна не изменилась, а число зарегистрированных блоков растёт. Фактические
+значения по группам и итог сверяет `tests/engine/catalog.test.ts` — он и есть источник истины.
 
 Прирост первой волны с 39 до 44 блоков — следствие решения **D1** (мультирегион в MVP):
 в неё добавлены `region`, `link-cross-region`, `multi-region-policy`, `dns` и `glb`.

@@ -5,6 +5,7 @@ import { DEFAULT_SETTINGS, MODEL_VERSION } from '../engine/types/scheme';
 import type { ComponentParams } from '../engine/types/component';
 import type {
     CallProfile,
+    EdgePolicy,
     Position,
     SchemeEdge,
     SchemeNode,
@@ -28,6 +29,7 @@ export interface LinkSpec {
     weight?: number;
     readShare?: number;
     calls?: Partial<{ requestBytes: number; responseBytes: number; fanout: number }>;
+    policy?: Partial<EdgePolicy>;
 }
 
 const READ_OPERATIONS = new Set(['read', 'scan', 'consume']);
@@ -89,6 +91,7 @@ export function buildScheme(spec: SchemeSpec): SchemeV1 {
             ...edge,
             id: `edge-${index}`,
             weight: link.weight ?? edge.weight ?? 1,
+            policy: { ...edge.policy, ...(link.policy ?? {}) },
             calls: link.readShare === undefined ? withPayload : withReadShare(withPayload, link.readShare),
         };
     });

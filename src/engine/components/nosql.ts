@@ -4,9 +4,12 @@ import {
     connectionBound,
     defineModel,
     explain,
+    explicitRps,
     iopsBound,
     littleLaw,
+    memoryResidencyBound,
     partitionBound,
+    resourceLimit,
     totalCost,
     vendorUnitBound,
     weightedUnitBound,
@@ -62,6 +65,91 @@ const WCU_WRITE_KB = 1;
 const EVENTUAL_READ_UNIT_SHARE = 0.5;
 
 const GB_PER_PARTITION = 10;
+
+const HOURS_PER_DAY = 24;
+
+const REDIS_STORE_DATA_MEMORY_SHARE = 0.75;
+
+const REDIS_STORE_PIPELINING_GAIN = 2;
+
+const MEMORY_FILL_HORIZON_SEC = 3600;
+
+const MIN_MEMORY_HEADROOM_SHARE = 0.05;
+
+const AOF_FILE_SIZE_FACTOR = 1.5;
+
+const PERSISTENCE_IOPS_PER_WRITE: Record<string, number> = {
+    none: 0,
+    rdb: 0.05,
+    aof: 0.5,
+    'rdb-aof': 0.55,
+};
+
+const GRAPH_NODE_BYTES = 64;
+
+const GRAPH_EDGE_BYTES = 128;
+
+const GRAPH_TRAVERSAL_MS_PER_RECORD = 0.01;
+
+const GRAPH_PAGE_READS_PER_RECORD = 0.1;
+
+const GRAPH_IOPS_PER_WRITE = 4;
+
+const QUERY_COMPLEXITY_FACTOR: Record<string, number> = {
+    'point-read': 0.05,
+    neighbourhood: 1,
+    'variable-length': 4,
+    'shortest-path': 12,
+};
+
+const CHUNK_SCAN_IOPS = 8;
+
+const IOPS_PER_INSERTED_ROW = 0.01;
+
+const WAL_IOPS_PER_WRITE = 2;
+
+const COMPRESSION_ROWS_PER_CORE_SEC = 200000;
+
+const COMPRESSION_CPU_SHARE = 0.25;
+
+const SERIES_SCAN_MS = 0.05;
+
+const POINT_WRITE_MS = 0.02;
+
+const SAMPLE_WRITE_MS = 0.005;
+
+const IOPS_PER_SCANNED_SERIES = 0.02;
+
+const IOPS_PER_WRITTEN_POINT = 0.002;
+
+const TSM_COMPACTION_IOPS_PER_WRITE = 2;
+
+const INFLUX_CACHE_MEMORY_SHARE = 0.25;
+
+const INFLUX_CACHE_SNAPSHOT_SEC = 60;
+
+const RETENTION_POLICY_DAYS: Record<string, number> = {
+    none: 3650,
+    day: 1,
+    month: 30,
+    year: 365,
+};
+
+const HEAD_BLOCK_SEC = 7200;
+
+const RAFT_BASELINE_FOLLOWERS = 2;
+
+const LEASE_KEEPALIVE_SEC = 10;
+
+const MAX_KEEPALIVE_BUDGET_SHARE = 0.9;
+
+const WATCHER_MEMORY_BYTES = 4096;
+
+const LEASE_MEMORY_BYTES = 512;
+
+const MVCC_COMPACTION_SEC = 300;
+
+const MVCC_REVISION_OVERHEAD = 1.5;
 
 interface ReadWriteServiceParams extends ComponentParams {
     readServiceMs: number;
@@ -564,8 +652,1380 @@ const dynamodb = defineComponent({
     managed: true,
 });
 
+const scyllaDefaults = {
+    nodes: 6,
+    replicationFactor: 3,
+    shardsPerCore: 1,
+    throughputMultiplier: 4,
+    partitionKey: 'userId',
+    partitionSizeMb: 64,
+    rowSizeBytes: 200,
+    rowCount: 5000000000,
+    compactionStrategy: 'stcs',
+    compressionRatio: 3,
+    tombstoneRatio: 0.05,
+    writeAmplification: 4,
+    storageGbPerNode: 4000,
+    cpuCores: 16,
+    maxOpsPerSecPerNode: 20000,
+    provisionedIops: 300000,
+    readServiceMs: 1.5,
+    writeServiceMs: 0.3,
+    hintedHandoff: true,
+    consistencyModel: 'eventual',
+    replicationMode: 'async',
+    replicaLagMs: 30,
+    replicaLagSigma: 0.8,
+    quorumN: 3,
+    quorumR: 2,
+    quorumW: 2,
+    concurrencyControl: 'none',
+    conflictResolution: 'lww',
+    availability: 0.9995,
+    costPerInstanceHour: 0.9,
+    costPerGbMonth: 0.08,
+};
+
+function scyllaShardCount(params: typeof scyllaDefaults): number {
+    return params.nodes * params.cpuCores * params.shardsPerCore;
+}
+
+function scyllaRowBytes(params: typeof scyllaDefaults): number {
+    return params.rowSizeBytes / params.compressionRatio;
+}
+
+const scyllaModel = defineModel<typeof scyllaDefaults>({
+    serviceSec: (ctx) => readWriteServiceSec(ctx.params, ctx.readShare, ctx.writeShare),
+    resources: (ctx) => {
+        const serviceSec = readWriteServiceSec(ctx.params, ctx.readShare, ctx.writeShare);
+        const replicaFanout =
+            ctx.readShare * ctx.params.quorumR + ctx.writeShare * ctx.params.replicationFactor;
+        const shards = scyllaShardCount(ctx.params);
+        const nodeOpsBudget =
+            ctx.params.nodes * ctx.params.maxOpsPerSecPerNode * ctx.params.throughputMultiplier;
+        const sstablesPerRead = SSTABLES_PER_READ[ctx.params.compactionStrategy] ?? 1;
+
+        return [
+            resourceLimit(
+                'shard-cpu',
+                (shards * ctx.params.throughputMultiplier) / (serviceSec * replicaFanout),
+                'nodes × cpuCores × shardsPerCore × throughputMultiplier / (S × replicaFanout)',
+                {
+                    nodes: ctx.params.nodes,
+                    cpuCores: ctx.params.cpuCores,
+                    shardsPerCore: ctx.params.shardsPerCore,
+                    throughputMultiplier: ctx.params.throughputMultiplier,
+                    S: serviceSec,
+                    replicaFanout,
+                },
+            ),
+            weightedUnitBound(
+                'node-ops',
+                'nodes × maxOpsPerSecPerNode × throughputMultiplier / (readShare × quorumR + writeShare × RF)',
+                {
+                    nodes: ctx.params.nodes,
+                    maxOpsPerSecPerNode: ctx.params.maxOpsPerSecPerNode,
+                    throughputMultiplier: ctx.params.throughputMultiplier,
+                    quorumR: ctx.params.quorumR,
+                    RF: ctx.params.replicationFactor,
+                    readShare: ctx.readShare,
+                    writeShare: ctx.writeShare,
+                },
+                ctx.params.quorumR / nodeOpsBudget,
+                ctx.params.replicationFactor / nodeOpsBudget,
+                ctx.readShare,
+                ctx.writeShare,
+            ),
+            iopsBound(
+                'iops',
+                ctx.params.provisionedIops * ctx.params.nodes,
+                ctx.params.quorumR * sstablesPerRead * (1 + ctx.params.tombstoneRatio),
+                ctx.params.replicationFactor * ctx.params.writeAmplification,
+                ctx.readShare,
+                ctx.writeShare,
+            ),
+        ];
+    },
+    storage: (ctx) => {
+        const rowBytes = scyllaRowBytes(ctx.params);
+        const baseGb = (ctx.params.rowCount * rowBytes * ctx.params.replicationFactor) / 1e9;
+        const growthGbDay =
+            (ctx.writeRps * SECONDS_PER_DAY * rowBytes * ctx.params.replicationFactor) / 1e9;
+
+        return {
+            totalGb: baseGb + growthGbDay * ctx.horizonDays,
+            growthGbDay,
+            memoryGb: 0,
+            explain: [
+                explain(
+                    'rowCount × rowSize / compressionRatio × RF / 10⁹',
+                    {
+                        rowCount: ctx.params.rowCount,
+                        rowSize: ctx.params.rowSizeBytes,
+                        compressionRatio: ctx.params.compressionRatio,
+                        RF: ctx.params.replicationFactor,
+                    },
+                    baseGb,
+                    'gb',
+                ),
+                explain(
+                    'writeRps × 86400 × rowSize / compressionRatio × RF / 10⁹',
+                    {
+                        writeRps: ctx.writeRps,
+                        rowSize: ctx.params.rowSizeBytes,
+                        compressionRatio: ctx.params.compressionRatio,
+                        RF: ctx.params.replicationFactor,
+                    },
+                    growthGbDay,
+                    'gb/day',
+                ),
+            ],
+        };
+    },
+    cost: (ctx) =>
+        totalCost({
+            compute:
+                ctx.params.nodes * ctx.params.costPerInstanceHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
+            storage: ctx.storageGb * ctx.params.costPerGbMonth,
+            network: 0,
+            requests: 0,
+        }),
+    availability: (params) => params.availability,
+});
+
+const scylla = defineComponent({
+    id: 'scylla',
+    group: 'nosql',
+    shape: 'node',
+    wave: 'v1',
+    icon: 'sd-wide-column',
+    ports: NOSQL_PORTS,
+    defaultParams: scyllaDefaults,
+    paramSchema: {
+        nodes: num('topology', { min: 1, max: 1000, realistic: { min: 3, max: 100 } }),
+        replicationFactor: num('topology', { min: 1, max: 9, realistic: { min: 2, max: 3 } }),
+        shardsPerCore: num('topology', { min: 1, max: 4 }),
+        throughputMultiplier: num('capacity', { min: 1, max: 10, step: 0.5, realistic: { min: 3, max: 5 } }),
+        partitionKey: text('topology'),
+        partitionSizeMb: num('data', { unitKey: 'mb', min: 0.1, max: 10000, step: 0.1, realistic: { min: 1, max: 100 } }),
+        rowSizeBytes: num('data', { unitKey: 'bytes', min: 10, max: 1000000 }),
+        rowCount: num('data', { min: 0, max: 1000000000000 }),
+        compactionStrategy: choice('data', ['stcs', 'lcs', 'twcs']),
+        compressionRatio: num('data', { min: 1, max: 30, step: 0.1 }),
+        tombstoneRatio: num('data', { min: 0, max: 1, step: 0.01 }),
+        writeAmplification: num('capacity', { min: 1, max: 50, step: 0.5 }),
+        storageGbPerNode: num('capacity', { unitKey: 'gb', min: 10, max: 200000 }),
+        cpuCores: num('capacity', { min: 1, max: 192 }),
+        maxOpsPerSecPerNode: num('capacity', { unitKey: 'rps', min: 100, max: 1000000, realistic: { min: 5000, max: 50000 } }),
+        provisionedIops: num('capacity', { min: 100, max: 2000000 }),
+        readServiceMs: num('performance', { unitKey: 'ms', min: 0.05, max: 60000, step: 0.05 }),
+        writeServiceMs: num('performance', { unitKey: 'ms', min: 0.05, max: 60000, step: 0.05 }),
+        hintedHandoff: bool('reliability'),
+        consistencyModel: choice('consistency', CONSISTENCY_MODEL),
+        replicationMode: choice('consistency', REPLICATION_MODE),
+        replicaLagMs: num('consistency', { unitKey: 'ms', min: 0, max: 600000, realistic: { min: 5, max: 500 } }),
+        replicaLagSigma: num('consistency', { min: 0.1, max: 3, step: 0.1 }),
+        quorumN: num('consistency', { min: 1, max: 50 }),
+        quorumR: num('consistency', { min: 1, max: 50 }),
+        quorumW: num('consistency', { min: 1, max: 50 }),
+        concurrencyControl: choice('consistency', CONCURRENCY_CONTROL),
+        conflictResolution: choice('consistency', CONFLICT_RESOLUTION),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.001 }),
+        costPerGbMonth: num('cost', { unitKey: 'usd', min: 0, max: 10, step: 0.001 }),
+    },
+    model: scyllaModel,
+    helpId: 'scylla',
+});
+
+const redisStoreDefaults = {
+    shards: 6,
+    replicasPerShard: 1,
+    memoryGb: 26,
+    evictionPolicy: 'noeviction',
+    persistence: 'aof',
+    durabilityRisk: 0.02,
+    keySizeBytes: 64,
+    valueSizeBytes: 1024,
+    overheadPerKeyBytes: 64,
+    uniqueKeys: 50000000,
+    maxOpsPerSec: 120000,
+    maxConnections: 10000,
+    pipelining: true,
+    hotKeyShare: 0.05,
+    provisionedIops: 20000,
+    serviceTimeMs: 0.25,
+    consistencyModel: 'eventual',
+    replicationMode: 'async',
+    replicaLagMs: 5,
+    replicaLagSigma: 0.8,
+    concurrencyControl: 'optimistic',
+    conflictResolution: 'lww',
+    availability: 0.999,
+    costPerInstanceHour: 0.35,
+    costPerGbMonth: 0.1,
+};
+
+function redisStoreEntryBytes(params: typeof redisStoreDefaults): number {
+    return params.keySizeBytes + params.valueSizeBytes + params.overheadPerKeyBytes;
+}
+
+function redisStoreCapacityBytes(params: typeof redisStoreDefaults): number {
+    return params.shards * params.memoryGb * 1e9 * REDIS_STORE_DATA_MEMORY_SHARE;
+}
+
+function redisStoreDatasetBytes(params: typeof redisStoreDefaults): number {
+    return params.uniqueKeys * redisStoreEntryBytes(params);
+}
+
+function redisStoreFreeBytes(params: typeof redisStoreDefaults): number {
+    const capacityBytes = redisStoreCapacityBytes(params);
+
+    return Math.max(
+        capacityBytes - redisStoreDatasetBytes(params),
+        capacityBytes * MIN_MEMORY_HEADROOM_SHARE,
+    );
+}
+
+function redisStoreOpsPerShard(params: typeof redisStoreDefaults): number {
+    return params.maxOpsPerSec * (params.pipelining ? REDIS_STORE_PIPELINING_GAIN : 1);
+}
+
+const redisStoreModel = defineModel<typeof redisStoreDefaults>({
+    serviceSec: (ctx) => ctx.params.serviceTimeMs / 1000,
+    resources: (ctx) => {
+        const entryBytes = redisStoreEntryBytes(ctx.params);
+        const freeBytes = redisStoreFreeBytes(ctx.params);
+        const opsPerShard = redisStoreOpsPerShard(ctx.params);
+        const iopsPerWrite = PERSISTENCE_IOPS_PER_WRITE[ctx.params.persistence] ?? 0;
+
+        return [
+            explicitRps('ops', ctx.params.shards, opsPerShard),
+            ctx.params.evictionPolicy === 'noeviction'
+                ? resourceLimit(
+                      'memory',
+                      freeBytes / (entryBytes * MEMORY_FILL_HORIZON_SEC * ctx.writeShare),
+                      'freeBytes / (entryBytes × fillHorizonSec × writeShare)',
+                      {
+                          freeBytes,
+                          entryBytes,
+                          fillHorizonSec: MEMORY_FILL_HORIZON_SEC,
+                          writeShare: ctx.writeShare,
+                      },
+                  )
+                : null,
+            connectionBound(
+                'connections',
+                ctx.params.maxConnections * ctx.params.shards,
+                1,
+                ctx.params.serviceTimeMs / 1000,
+            ),
+            resourceLimit('hot-key', opsPerShard / ctx.params.hotKeyShare, 'opsPerShard / hotKeyShare', {
+                opsPerShard,
+                hotKeyShare: ctx.params.hotKeyShare,
+            }),
+            iopsPerWrite > 0
+                ? iopsBound(
+                      'iops',
+                      ctx.params.provisionedIops * ctx.params.shards,
+                      0,
+                      iopsPerWrite,
+                      ctx.readShare,
+                      ctx.writeShare,
+                  )
+                : null,
+        ];
+    },
+    storage: (ctx) => {
+        const entryBytes = redisStoreEntryBytes(ctx.params);
+        const copies = 1 + ctx.params.replicasPerShard;
+        const residentGb =
+            (Math.min(redisStoreDatasetBytes(ctx.params), redisStoreCapacityBytes(ctx.params)) * copies) /
+            1e9;
+        const appendOnly = ctx.params.persistence === 'aof' || ctx.params.persistence === 'rdb-aof';
+        const fileFactor = appendOnly ? AOF_FILE_SIZE_FACTOR : 1;
+        const growthGbDay = appendOnly ? (ctx.writeRps * SECONDS_PER_DAY * entryBytes) / 1e9 : 0;
+
+        return {
+            totalGb: ctx.params.persistence === 'none' ? 0 : residentGb * fileFactor,
+            growthGbDay,
+            memoryGb: residentGb,
+            explain: [
+                explain(
+                    'min(uniqueKeys × entryBytes, shards × memoryGb × dataShare) × copies × fileFactor / 10⁹',
+                    {
+                        uniqueKeys: ctx.params.uniqueKeys,
+                        entryBytes,
+                        shards: ctx.params.shards,
+                        memoryGb: ctx.params.memoryGb,
+                        dataShare: REDIS_STORE_DATA_MEMORY_SHARE,
+                        copies,
+                        fileFactor,
+                        persistence: ctx.params.persistence,
+                    },
+                    residentGb * fileFactor,
+                    'gb',
+                ),
+                explain(
+                    'writeRps × 86400 × entryBytes / 10⁹',
+                    { writeRps: ctx.writeRps, entryBytes, persistence: ctx.params.persistence },
+                    growthGbDay,
+                    'gb/day',
+                ),
+            ],
+        };
+    },
+    cost: (ctx) =>
+        totalCost({
+            compute:
+                ctx.params.shards *
+                (1 + ctx.params.replicasPerShard) *
+                ctx.params.costPerInstanceHour *
+                HOURS_PER_MONTH *
+                ctx.regionCostMultiplier,
+            storage: ctx.storageGb * ctx.params.costPerGbMonth,
+            network: 0,
+            requests: 0,
+        }),
+    availability: (params) => params.availability,
+});
+
+const redisStore = defineComponent({
+    id: 'redis-store',
+    group: 'nosql',
+    shape: 'node',
+    wave: 'v1',
+    icon: 'sd-keyvalue',
+    ports: NOSQL_PORTS,
+    defaultParams: redisStoreDefaults,
+    paramSchema: {
+        shards: num('topology', { min: 1, max: 500 }),
+        replicasPerShard: num('topology', { min: 0, max: 5 }),
+        memoryGb: num('capacity', { unitKey: 'gb', min: 0.1, max: 4096, step: 0.1 }),
+        evictionPolicy: choice('behaviour', ['noeviction', 'lru', 'lfu', 'ttl', 'random']),
+        persistence: choice('reliability', ['none', 'rdb', 'aof', 'rdb-aof']),
+        durabilityRisk: num('reliability', { min: 0, max: 1, step: 0.01, realistic: { min: 0, max: 0.1 } }),
+        keySizeBytes: num('data', { unitKey: 'bytes', min: 1, max: 65536 }),
+        valueSizeBytes: num('data', { unitKey: 'bytes', min: 1, max: 10485760 }),
+        overheadPerKeyBytes: num('data', { unitKey: 'bytes', min: 0, max: 1024, realistic: { min: 50, max: 100 } }),
+        uniqueKeys: num('data', { min: 1, max: 1e12 }),
+        maxOpsPerSec: num('capacity', { unitKey: 'rps', min: 1000, max: 10000000, realistic: { min: 80000, max: 150000 } }),
+        maxConnections: num('capacity', { min: 100, max: 1000000 }),
+        pipelining: bool('behaviour'),
+        hotKeyShare: num('behaviour', { min: 0, max: 1, step: 0.01 }),
+        provisionedIops: num('capacity', { min: 100, max: 1000000 }),
+        serviceTimeMs: num('performance', { unitKey: 'ms', min: 0.01, max: 1000, step: 0.01 }),
+        consistencyModel: choice('consistency', CONSISTENCY_MODEL),
+        replicationMode: choice('consistency', REPLICATION_MODE),
+        replicaLagMs: num('consistency', { unitKey: 'ms', min: 0, max: 60000, realistic: { min: 1, max: 100 } }),
+        replicaLagSigma: num('consistency', { min: 0.1, max: 3, step: 0.1 }),
+        concurrencyControl: choice('consistency', CONCURRENCY_CONTROL),
+        conflictResolution: choice('consistency', CONFLICT_RESOLUTION),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.001 }),
+        costPerGbMonth: num('cost', { unitKey: 'usd', min: 0, max: 10, step: 0.001 }),
+    },
+    model: redisStoreModel,
+    helpId: 'redis-store',
+});
+
+const neo4jDefaults = {
+    nodes: 3,
+    readReplicas: 2,
+    nodeCount: 100000000,
+    edgeCount: 500000000,
+    traversalDepth: 3,
+    queryComplexity: 'neighbourhood',
+    cacheGb: 32,
+    heapGb: 16,
+    cpuCores: 16,
+    provisionedIops: 30000,
+    readServiceMs: 0.5,
+    writeServiceMs: 2,
+    readFromReplica: 0.5,
+    consistencyModel: 'read-your-writes',
+    replicationMode: 'semi-sync',
+    replicaLagMs: 100,
+    replicaLagSigma: 0.8,
+    concurrencyControl: 'pessimistic',
+    conflictResolution: 'single-writer-per-key',
+    availability: 0.999,
+    costPerInstanceHour: 0.9,
+    costPerGbMonth: 0.12,
+};
+
+function neo4jDegree(params: typeof neo4jDefaults): number {
+    return params.edgeCount / Math.max(1, params.nodeCount);
+}
+
+function neo4jRecordsPerQuery(params: typeof neo4jDefaults): number {
+    const complexity = QUERY_COMPLEXITY_FACTOR[params.queryComplexity] ?? 1;
+    const traversed = complexity * Math.pow(neo4jDegree(params), params.traversalDepth);
+
+    return Math.max(1, Math.min(params.nodeCount + params.edgeCount, traversed));
+}
+
+function neo4jGraphBytes(params: typeof neo4jDefaults): number {
+    return params.nodeCount * GRAPH_NODE_BYTES + params.edgeCount * GRAPH_EDGE_BYTES;
+}
+
+function neo4jCacheMissShare(params: typeof neo4jDefaults): number {
+    return Math.max(0, 1 - (params.cacheGb * 1e9) / Math.max(1, neo4jGraphBytes(params)));
+}
+
+function neo4jReadSec(params: typeof neo4jDefaults): number {
+    return (
+        (params.readServiceMs + neo4jRecordsPerQuery(params) * GRAPH_TRAVERSAL_MS_PER_RECORD) / 1000
+    );
+}
+
+function neo4jServiceSec(
+    params: typeof neo4jDefaults,
+    readShare: number,
+    writeShare: number,
+): number {
+    return readShare * neo4jReadSec(params) + (writeShare * params.writeServiceMs) / 1000;
+}
+
+const neo4jModel = defineModel<typeof neo4jDefaults>({
+    serviceSec: (ctx) => neo4jServiceSec(ctx.params, ctx.readShare, ctx.writeShare),
+    resources: (ctx) => {
+        const members = ctx.params.nodes + ctx.params.readReplicas;
+        const readSec = neo4jReadSec(ctx.params);
+        const writeSec = ctx.params.writeServiceMs / 1000;
+        const serviceSec = neo4jServiceSec(ctx.params, ctx.readShare, ctx.writeShare);
+        const recordsPerQuery = neo4jRecordsPerQuery(ctx.params);
+        const bytesPerQuery = recordsPerQuery * (GRAPH_NODE_BYTES + GRAPH_EDGE_BYTES);
+
+        return [
+            weightedUnitBound(
+                'cpu',
+                '1 / (readShare × readSec / ((nodes + readReplicas) × cpuCores) + writeShare × writeSec / cpuCores)',
+                {
+                    nodes: ctx.params.nodes,
+                    readReplicas: ctx.params.readReplicas,
+                    cpuCores: ctx.params.cpuCores,
+                    readSec,
+                    writeSec,
+                    recordsPerQuery,
+                    readShare: ctx.readShare,
+                    writeShare: ctx.writeShare,
+                },
+                readSec / (members * ctx.params.cpuCores),
+                writeSec / ctx.params.cpuCores,
+                ctx.readShare,
+                ctx.writeShare,
+            ),
+            iopsBound(
+                'iops',
+                ctx.params.provisionedIops * members,
+                recordsPerQuery * neo4jCacheMissShare(ctx.params) * GRAPH_PAGE_READS_PER_RECORD,
+                GRAPH_IOPS_PER_WRITE * members,
+                ctx.readShare,
+                ctx.writeShare,
+            ),
+            resourceLimit(
+                'memory',
+                (ctx.params.heapGb * 1e9) / (serviceSec * bytesPerQuery),
+                'heapGb × 10⁹ / (S × bytesPerQuery)',
+                {
+                    heapGb: ctx.params.heapGb,
+                    S: serviceSec,
+                    bytesPerQuery,
+                    recordsPerQuery,
+                    traversalDepth: ctx.params.traversalDepth,
+                },
+            ),
+        ];
+    },
+    storage: (ctx) => {
+        const copies = ctx.params.nodes + ctx.params.readReplicas;
+        const graphGb = (neo4jGraphBytes(ctx.params) * copies) / 1e9;
+        const writeBytes = GRAPH_NODE_BYTES + neo4jDegree(ctx.params) * GRAPH_EDGE_BYTES;
+        const growthGbDay = (ctx.writeRps * SECONDS_PER_DAY * writeBytes * copies) / 1e9;
+
+        return {
+            totalGb: graphGb + growthGbDay * ctx.horizonDays,
+            growthGbDay,
+            memoryGb: ctx.params.cacheGb + ctx.params.heapGb,
+            explain: [
+                explain(
+                    '(nodeCount × nodeBytes + edgeCount × edgeBytes) × copies / 10⁹',
+                    {
+                        nodeCount: ctx.params.nodeCount,
+                        nodeBytes: GRAPH_NODE_BYTES,
+                        edgeCount: ctx.params.edgeCount,
+                        edgeBytes: GRAPH_EDGE_BYTES,
+                        copies,
+                    },
+                    graphGb,
+                    'gb',
+                ),
+                explain(
+                    'writeRps × 86400 × (nodeBytes + degree × edgeBytes) × copies / 10⁹',
+                    {
+                        writeRps: ctx.writeRps,
+                        nodeBytes: GRAPH_NODE_BYTES,
+                        degree: neo4jDegree(ctx.params),
+                        edgeBytes: GRAPH_EDGE_BYTES,
+                        copies,
+                    },
+                    growthGbDay,
+                    'gb/day',
+                ),
+            ],
+        };
+    },
+    cost: (ctx) =>
+        totalCost({
+            compute:
+                (ctx.params.nodes + ctx.params.readReplicas) *
+                ctx.params.costPerInstanceHour *
+                HOURS_PER_MONTH *
+                ctx.regionCostMultiplier,
+            storage: ctx.storageGb * ctx.params.costPerGbMonth,
+            network: 0,
+            requests: 0,
+        }),
+    availability: (params) => params.availability,
+});
+
+const neo4j = defineComponent({
+    id: 'neo4j',
+    group: 'nosql',
+    shape: 'node',
+    wave: 'v1',
+    icon: 'sd-graph',
+    ports: NOSQL_PORTS,
+    defaultParams: neo4jDefaults,
+    paramSchema: {
+        nodes: num('topology', { min: 1, max: 50, realistic: { min: 3, max: 7 } }),
+        readReplicas: num('topology', { min: 0, max: 30 }),
+        nodeCount: num('data', { min: 1, max: 1000000000000 }),
+        edgeCount: num('data', { min: 1, max: 1000000000000 }),
+        traversalDepth: num('behaviour', { min: 1, max: 12, realistic: { min: 1, max: 4 } }),
+        queryComplexity: choice('behaviour', ['point-read', 'neighbourhood', 'variable-length', 'shortest-path']),
+        cacheGb: num('capacity', { unitKey: 'gb', min: 0.5, max: 4096, step: 0.5 }),
+        heapGb: num('capacity', { unitKey: 'gb', min: 0.5, max: 1024, step: 0.5 }),
+        cpuCores: num('capacity', { min: 1, max: 192 }),
+        provisionedIops: num('capacity', { min: 100, max: 1000000 }),
+        readServiceMs: num('performance', { unitKey: 'ms', min: 0.05, max: 60000, step: 0.05 }),
+        writeServiceMs: num('performance', { unitKey: 'ms', min: 0.05, max: 60000, step: 0.05 }),
+        readFromReplica: num('consistency', { min: 0, max: 1, step: 0.05 }),
+        consistencyModel: choice('consistency', CONSISTENCY_MODEL),
+        replicationMode: choice('consistency', REPLICATION_MODE),
+        replicaLagMs: num('consistency', { unitKey: 'ms', min: 0, max: 600000, realistic: { min: 20, max: 2000 } }),
+        replicaLagSigma: num('consistency', { min: 0.1, max: 3, step: 0.1 }),
+        concurrencyControl: choice('consistency', CONCURRENCY_CONTROL),
+        conflictResolution: choice('consistency', CONFLICT_RESOLUTION),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.001 }),
+        costPerGbMonth: num('cost', { unitKey: 'usd', min: 0, max: 10, step: 0.001 }),
+    },
+    model: neo4jModel,
+    helpId: 'neo4j',
+});
+
+const timescaleDefaults = {
+    readReplicas: 1,
+    metricsPerSec: 100000,
+    insertBatchRows: 1000,
+    chunkIntervalHours: 24,
+    compressionAfterDays: 2,
+    compressionRatio: 10,
+    retentionDays: 90,
+    queryRangeHours: 168,
+    rowSizeBytes: 100,
+    cpuCores: 16,
+    maxConnections: 300,
+    provisionedIops: 30000,
+    readServiceMs: 5,
+    writeServiceMs: 3,
+    readFromReplica: 0.3,
+    consistencyModel: 'linearizable',
+    replicationMode: 'async',
+    replicaLagMs: 200,
+    replicaLagSigma: 0.8,
+    concurrencyControl: 'pessimistic',
+    conflictResolution: 'single-writer-per-key',
+    availability: 0.9995,
+    costPerInstanceHour: 0.7,
+    costPerGbMonth: 0.115,
+};
+
+function timescaleChunksScanned(params: typeof timescaleDefaults): number {
+    return Math.max(1, Math.ceil(params.queryRangeHours / Math.max(1, params.chunkIntervalHours)));
+}
+
+function timescaleCompressedQueryShare(params: typeof timescaleDefaults): number {
+    const uncompressedHours = params.compressionAfterDays * HOURS_PER_DAY;
+
+    return Math.min(1, Math.max(0, 1 - uncompressedHours / Math.max(1, params.queryRangeHours)));
+}
+
+function timescaleScanFactor(params: typeof timescaleDefaults): number {
+    const compressed = timescaleCompressedQueryShare(params);
+
+    return 1 - compressed + compressed / params.compressionRatio;
+}
+
+function timescaleStorageFactor(params: typeof timescaleDefaults): number {
+    const compressed =
+        params.retentionDays > 0
+            ? Math.max(0, (params.retentionDays - params.compressionAfterDays) / params.retentionDays)
+            : 0;
+
+    return 1 - compressed + compressed / params.compressionRatio;
+}
+
+function timescaleReadSec(params: typeof timescaleDefaults): number {
+    return (params.readServiceMs * timescaleChunksScanned(params) * timescaleScanFactor(params)) / 1000;
+}
+
+function timescaleServiceSec(
+    params: typeof timescaleDefaults,
+    readShare: number,
+    writeShare: number,
+): number {
+    return readShare * timescaleReadSec(params) + (writeShare * params.writeServiceMs) / 1000;
+}
+
+const timescaleModel = defineModel<typeof timescaleDefaults>({
+    serviceSec: (ctx) => timescaleServiceSec(ctx.params, ctx.readShare, ctx.writeShare),
+    resources: (ctx) => {
+        const members = 1 + ctx.params.readReplicas;
+        const readSec = timescaleReadSec(ctx.params);
+        const writeSec = ctx.params.writeServiceMs / 1000;
+        const serviceSec = timescaleServiceSec(ctx.params, ctx.readShare, ctx.writeShare);
+        const chunksScanned = timescaleChunksScanned(ctx.params);
+        const compressionRowsPerSec =
+            ctx.params.cpuCores * COMPRESSION_ROWS_PER_CORE_SEC * COMPRESSION_CPU_SHARE;
+
+        return [
+            weightedUnitBound(
+                'cpu',
+                '1 / (readShare × readSec / (cpuCores × (1 + readReplicas)) + writeShare × writeSec / cpuCores)',
+                {
+                    cpuCores: ctx.params.cpuCores,
+                    readReplicas: ctx.params.readReplicas,
+                    readSec,
+                    writeSec,
+                    chunksScanned,
+                    readShare: ctx.readShare,
+                    writeShare: ctx.writeShare,
+                },
+                readSec / (ctx.params.cpuCores * members),
+                writeSec / ctx.params.cpuCores,
+                ctx.readShare,
+                ctx.writeShare,
+            ),
+            iopsBound(
+                'iops',
+                ctx.params.provisionedIops,
+                chunksScanned * CHUNK_SCAN_IOPS * timescaleScanFactor(ctx.params),
+                ctx.params.insertBatchRows * IOPS_PER_INSERTED_ROW + WAL_IOPS_PER_WRITE,
+                ctx.readShare,
+                ctx.writeShare,
+            ),
+            connectionBound('connections', ctx.params.maxConnections * members, 1, serviceSec),
+            ctx.params.compressionAfterDays < ctx.params.retentionDays
+                ? weightedUnitBound(
+                      'throughput',
+                      'cpuCores × compressionRowsPerCoreSec × compressionCpuShare / (writeShare × insertBatchRows)',
+                      {
+                          cpuCores: ctx.params.cpuCores,
+                          compressionRowsPerCoreSec: COMPRESSION_ROWS_PER_CORE_SEC,
+                          compressionCpuShare: COMPRESSION_CPU_SHARE,
+                          insertBatchRows: ctx.params.insertBatchRows,
+                          writeShare: ctx.writeShare,
+                      },
+                      0,
+                      ctx.params.insertBatchRows / compressionRowsPerSec,
+                      ctx.readShare,
+                      ctx.writeShare,
+                  )
+                : null,
+        ];
+    },
+    storage: (ctx) => {
+        const storageFactor = timescaleStorageFactor(ctx.params);
+        const rowBytes = ctx.params.rowSizeBytes * storageFactor;
+        const baseGb =
+            (ctx.params.metricsPerSec * SECONDS_PER_DAY * ctx.params.retentionDays * rowBytes) / 1e9;
+        const growthGbDay =
+            (ctx.writeRps * ctx.params.insertBatchRows * SECONDS_PER_DAY * rowBytes) / 1e9;
+        const retainedDays = Math.min(ctx.horizonDays, ctx.params.retentionDays);
+
+        return {
+            totalGb: baseGb + growthGbDay * retainedDays,
+            growthGbDay,
+            memoryGb: 0,
+            explain: [
+                explain(
+                    'metricsPerSec × 86400 × retentionDays × rowSize × storageFactor / 10⁹',
+                    {
+                        metricsPerSec: ctx.params.metricsPerSec,
+                        retentionDays: ctx.params.retentionDays,
+                        rowSize: ctx.params.rowSizeBytes,
+                        storageFactor,
+                        compressionRatio: ctx.params.compressionRatio,
+                    },
+                    baseGb,
+                    'gb',
+                ),
+                explain(
+                    'writeRps × insertBatchRows × 86400 × rowSize × storageFactor / 10⁹',
+                    {
+                        writeRps: ctx.writeRps,
+                        insertBatchRows: ctx.params.insertBatchRows,
+                        rowSize: ctx.params.rowSizeBytes,
+                        storageFactor,
+                    },
+                    growthGbDay,
+                    'gb/day',
+                ),
+            ],
+        };
+    },
+    cost: (ctx) =>
+        totalCost({
+            compute:
+                (1 + ctx.params.readReplicas) *
+                ctx.params.costPerInstanceHour *
+                HOURS_PER_MONTH *
+                ctx.regionCostMultiplier,
+            storage: ctx.storageGb * ctx.params.costPerGbMonth,
+            network: 0,
+            requests: 0,
+        }),
+    availability: (params) => params.availability,
+});
+
+const timescale = defineComponent({
+    id: 'timescale',
+    group: 'nosql',
+    shape: 'node',
+    wave: 'v1',
+    icon: 'sd-timeseries',
+    ports: NOSQL_PORTS,
+    defaultParams: timescaleDefaults,
+    paramSchema: {
+        readReplicas: num('topology', { min: 0, max: 30 }),
+        metricsPerSec: num('scale', { min: 0, max: 100000000 }),
+        insertBatchRows: num('behaviour', { min: 1, max: 100000, realistic: { min: 100, max: 10000 } }),
+        chunkIntervalHours: num('data', { min: 1, max: 8760, realistic: { min: 6, max: 168 } }),
+        compressionAfterDays: num('data', { min: 0, max: 3650 }),
+        compressionRatio: num('data', { min: 1, max: 50, step: 0.5, realistic: { min: 5, max: 20 } }),
+        retentionDays: num('data', { min: 1, max: 3650 }),
+        queryRangeHours: num('behaviour', { min: 1, max: 87600, realistic: { min: 1, max: 720 } }),
+        rowSizeBytes: num('data', { unitKey: 'bytes', min: 10, max: 100000 }),
+        cpuCores: num('capacity', { min: 1, max: 192 }),
+        maxConnections: num('capacity', { min: 10, max: 20000, realistic: { min: 100, max: 1000 } }),
+        provisionedIops: num('capacity', { min: 100, max: 1000000 }),
+        readServiceMs: num('performance', { unitKey: 'ms', min: 0.05, max: 60000, step: 0.05 }),
+        writeServiceMs: num('performance', { unitKey: 'ms', min: 0.05, max: 60000, step: 0.05 }),
+        readFromReplica: num('consistency', { min: 0, max: 1, step: 0.05 }),
+        consistencyModel: choice('consistency', CONSISTENCY_MODEL),
+        replicationMode: choice('consistency', REPLICATION_MODE),
+        replicaLagMs: num('consistency', { unitKey: 'ms', min: 0, max: 600000, realistic: { min: 50, max: 2000 } }),
+        replicaLagSigma: num('consistency', { min: 0.1, max: 3, step: 0.1 }),
+        concurrencyControl: choice('consistency', CONCURRENCY_CONTROL),
+        conflictResolution: choice('consistency', CONFLICT_RESOLUTION),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.001 }),
+        costPerGbMonth: num('cost', { unitKey: 'usd', min: 0, max: 10, step: 0.001 }),
+    },
+    model: timescaleModel,
+    helpId: 'timescale',
+});
+
+const influxDefaults = {
+    seriesCardinality: 5000000,
+    pointsPerSec: 200000,
+    batchSize: 500,
+    seriesPerQuery: 1000,
+    retentionPolicy: 'month',
+    bytesPerSample: 3,
+    memoryGb: 64,
+    memoryPerMillionSeriesGb: 4,
+    cpuCores: 16,
+    provisionedIops: 20000,
+    queryServiceMs: 5,
+    consistencyModel: 'eventual',
+    replicationMode: 'async',
+    replicaLagMs: 500,
+    replicaLagSigma: 0.8,
+    concurrencyControl: 'none',
+    conflictResolution: 'lww',
+    availability: 0.99,
+    costPerInstanceHour: 0.8,
+    costPerGbMonth: 0.1,
+};
+
+function influxMaxSeries(params: typeof influxDefaults): number {
+    return (params.memoryGb / Math.max(0.1, params.memoryPerMillionSeriesGb)) * 1e6;
+}
+
+function influxIndexPressure(params: typeof influxDefaults): number {
+    return Math.max(1, params.seriesCardinality / Math.max(1, influxMaxSeries(params)));
+}
+
+function influxReadSec(params: typeof influxDefaults): number {
+    return (
+        (params.queryServiceMs + params.seriesPerQuery * SERIES_SCAN_MS * influxIndexPressure(params)) /
+        1000
+    );
+}
+
+function influxWriteSec(params: typeof influxDefaults): number {
+    return (params.batchSize * POINT_WRITE_MS * influxIndexPressure(params)) / 1000;
+}
+
+function influxRetentionDays(params: typeof influxDefaults): number {
+    return RETENTION_POLICY_DAYS[params.retentionPolicy] ?? 30;
+}
+
+const influxModel = defineModel<typeof influxDefaults>({
+    serviceSec: (ctx) =>
+        ctx.readShare * influxReadSec(ctx.params) + ctx.writeShare * influxWriteSec(ctx.params),
+    resources: (ctx) => {
+        const readSec = influxReadSec(ctx.params);
+        const writeSec = influxWriteSec(ctx.params);
+
+        return [
+            weightedUnitBound(
+                'cardinality',
+                'cpuCores / (readShare × readSec + writeShare × writeSec)',
+                {
+                    cpuCores: ctx.params.cpuCores,
+                    readSec,
+                    writeSec,
+                    indexPressure: influxIndexPressure(ctx.params),
+                    seriesCardinality: ctx.params.seriesCardinality,
+                    maxSeries: influxMaxSeries(ctx.params),
+                    readShare: ctx.readShare,
+                    writeShare: ctx.writeShare,
+                },
+                readSec / ctx.params.cpuCores,
+                writeSec / ctx.params.cpuCores,
+                ctx.readShare,
+                ctx.writeShare,
+            ),
+            memoryResidencyBound(
+                'memory',
+                ctx.params.memoryGb * INFLUX_CACHE_MEMORY_SHARE,
+                (ctx.params.batchSize *
+                    ctx.params.bytesPerSample *
+                    INFLUX_CACHE_SNAPSHOT_SEC *
+                    ctx.writeShare) /
+                    1e9,
+            ),
+            iopsBound(
+                'iops',
+                ctx.params.provisionedIops,
+                ctx.params.seriesPerQuery * IOPS_PER_SCANNED_SERIES,
+                ctx.params.batchSize * IOPS_PER_WRITTEN_POINT + TSM_COMPACTION_IOPS_PER_WRITE,
+                ctx.readShare,
+                ctx.writeShare,
+            ),
+        ];
+    },
+    storage: (ctx) => {
+        const retentionDays = influxRetentionDays(ctx.params);
+        const pointsPerSec = Math.max(ctx.params.pointsPerSec, ctx.writeRps * ctx.params.batchSize);
+        const growthGbDay = (pointsPerSec * SECONDS_PER_DAY * ctx.params.bytesPerSample) / 1e9;
+        const retainedDays = Math.min(ctx.horizonDays, retentionDays);
+
+        return {
+            totalGb: growthGbDay * retainedDays,
+            growthGbDay,
+            memoryGb: (ctx.params.seriesCardinality / 1e6) * ctx.params.memoryPerMillionSeriesGb,
+            explain: [
+                explain(
+                    'max(pointsPerSec, writeRps × batchSize) × 86400 × bytesPerSample / 10⁹',
+                    {
+                        pointsPerSec: ctx.params.pointsPerSec,
+                        writeRps: ctx.writeRps,
+                        batchSize: ctx.params.batchSize,
+                        bytesPerSample: ctx.params.bytesPerSample,
+                    },
+                    growthGbDay,
+                    'gb/day',
+                ),
+                explain(
+                    'growthGbDay × min(horizonDays, retentionDays)',
+                    {
+                        growthGbDay,
+                        horizonDays: ctx.horizonDays,
+                        retentionPolicy: ctx.params.retentionPolicy,
+                        retentionDays,
+                    },
+                    growthGbDay * retainedDays,
+                    'gb',
+                ),
+            ],
+        };
+    },
+    cost: (ctx) =>
+        totalCost({
+            compute: ctx.params.costPerInstanceHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
+            storage: ctx.storageGb * ctx.params.costPerGbMonth,
+            network: 0,
+            requests: 0,
+        }),
+    availability: (params) => params.availability,
+});
+
+const influx = defineComponent({
+    id: 'influx',
+    group: 'nosql',
+    shape: 'node',
+    wave: 'v1',
+    icon: 'sd-timeseries',
+    ports: NOSQL_PORTS,
+    defaultParams: influxDefaults,
+    paramSchema: {
+        seriesCardinality: num('scale', { min: 1000, max: 1000000000, realistic: { min: 100000, max: 10000000 } }),
+        pointsPerSec: num('scale', { min: 0, max: 100000000 }),
+        batchSize: num('behaviour', { min: 1, max: 100000, realistic: { min: 100, max: 5000 } }),
+        seriesPerQuery: num('behaviour', { min: 1, max: 10000000, realistic: { min: 10, max: 10000 } }),
+        retentionPolicy: choice('data', ['none', 'day', 'month', 'year']),
+        bytesPerSample: num('data', { unitKey: 'bytes', min: 0.5, max: 20, step: 0.1, realistic: { min: 2, max: 5 } }),
+        memoryGb: num('capacity', { unitKey: 'gb', min: 1, max: 4096 }),
+        memoryPerMillionSeriesGb: num('capacity', { unitKey: 'gb', min: 0.5, max: 64, step: 0.5 }),
+        cpuCores: num('capacity', { min: 1, max: 192 }),
+        provisionedIops: num('capacity', { min: 100, max: 1000000 }),
+        queryServiceMs: num('performance', { unitKey: 'ms', min: 0.05, max: 60000, step: 0.05 }),
+        consistencyModel: choice('consistency', CONSISTENCY_MODEL),
+        replicationMode: choice('consistency', REPLICATION_MODE),
+        replicaLagMs: num('consistency', { unitKey: 'ms', min: 0, max: 600000, realistic: { min: 100, max: 10000 } }),
+        replicaLagSigma: num('consistency', { min: 0.1, max: 3, step: 0.1 }),
+        concurrencyControl: choice('consistency', CONCURRENCY_CONTROL),
+        conflictResolution: choice('consistency', CONFLICT_RESOLUTION),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.001 }),
+        costPerGbMonth: num('cost', { unitKey: 'usd', min: 0, max: 10, step: 0.001 }),
+    },
+    model: influxModel,
+    helpId: 'influx',
+});
+
+const prometheusDefaults = {
+    activeSeries: 10000000,
+    scrapeIntervalSec: 15,
+    samplesPerSec: 700000,
+    bytesPerSample: 1.7,
+    seriesPerQuery: 1000,
+    batchSize: 500,
+    retentionDays: 15,
+    memoryGb: 64,
+    memoryPerMillionSeriesGb: 4,
+    queryConcurrency: 20,
+    cpuCores: 16,
+    queryServiceMs: 5,
+    replicationFactor: 2,
+    consistencyModel: 'eventual',
+    replicationMode: 'async',
+    replicaLagMs: 1000,
+    replicaLagSigma: 0.8,
+    concurrencyControl: 'none',
+    conflictResolution: 'lww',
+    availability: 0.99,
+    costPerInstanceHour: 0.7,
+    costPerGbMonth: 0.08,
+};
+
+function prometheusMaxSeries(params: typeof prometheusDefaults): number {
+    return (params.memoryGb / Math.max(0.1, params.memoryPerMillionSeriesGb)) * 1e6;
+}
+
+function prometheusIndexPressure(params: typeof prometheusDefaults): number {
+    return Math.max(1, params.activeSeries / Math.max(1, prometheusMaxSeries(params)));
+}
+
+function prometheusSeriesMemoryGb(params: typeof prometheusDefaults): number {
+    return (params.activeSeries / 1e6) * params.memoryPerMillionSeriesGb;
+}
+
+function prometheusHeadroomGb(params: typeof prometheusDefaults): number {
+    return Math.max(
+        params.memoryGb - prometheusSeriesMemoryGb(params),
+        params.memoryGb * MIN_MEMORY_HEADROOM_SHARE,
+    );
+}
+
+function prometheusReadSec(params: typeof prometheusDefaults): number {
+    return (
+        (params.queryServiceMs +
+            params.seriesPerQuery * SERIES_SCAN_MS * prometheusIndexPressure(params)) /
+        1000
+    );
+}
+
+function prometheusWriteSec(params: typeof prometheusDefaults): number {
+    return (params.batchSize * SAMPLE_WRITE_MS * prometheusIndexPressure(params)) / 1000;
+}
+
+function prometheusServiceSec(
+    params: typeof prometheusDefaults,
+    readShare: number,
+    writeShare: number,
+): number {
+    return readShare * prometheusReadSec(params) + writeShare * prometheusWriteSec(params);
+}
+
+function prometheusSamplesPerSec(params: typeof prometheusDefaults): number {
+    return Math.max(params.samplesPerSec, params.activeSeries / Math.max(1, params.scrapeIntervalSec));
+}
+
+const prometheusModel = defineModel<typeof prometheusDefaults>({
+    serviceSec: (ctx) => prometheusServiceSec(ctx.params, ctx.readShare, ctx.writeShare),
+    resources: (ctx) => {
+        const readSec = prometheusReadSec(ctx.params);
+        const writeSec = prometheusWriteSec(ctx.params);
+
+        return [
+            weightedUnitBound(
+                'cardinality',
+                'cpuCores / (readShare × readSec + writeShare × writeSec)',
+                {
+                    cpuCores: ctx.params.cpuCores,
+                    readSec,
+                    writeSec,
+                    indexPressure: prometheusIndexPressure(ctx.params),
+                    activeSeries: ctx.params.activeSeries,
+                    maxSeries: prometheusMaxSeries(ctx.params),
+                    readShare: ctx.readShare,
+                    writeShare: ctx.writeShare,
+                },
+                readSec / ctx.params.cpuCores,
+                writeSec / ctx.params.cpuCores,
+                ctx.readShare,
+                ctx.writeShare,
+            ),
+            memoryResidencyBound(
+                'memory',
+                prometheusHeadroomGb(ctx.params),
+                (ctx.params.batchSize * ctx.params.bytesPerSample * HEAD_BLOCK_SEC * ctx.writeShare) / 1e9,
+            ),
+            littleLaw(
+                'query-slots',
+                ctx.params.queryConcurrency,
+                prometheusServiceSec(ctx.params, ctx.readShare, ctx.writeShare),
+            ),
+        ];
+    },
+    storage: (ctx) => {
+        const samplesPerSec = prometheusSamplesPerSec(ctx.params);
+        const growthGbDay =
+            (samplesPerSec * SECONDS_PER_DAY * ctx.params.bytesPerSample * ctx.params.replicationFactor) /
+            1e9;
+        const retainedDays = Math.min(ctx.horizonDays, ctx.params.retentionDays);
+
+        return {
+            totalGb: growthGbDay * retainedDays,
+            growthGbDay,
+            memoryGb: prometheusSeriesMemoryGb(ctx.params),
+            explain: [
+                explain(
+                    'max(samplesPerSec, activeSeries / scrapeIntervalSec) × 86400 × bytesPerSample × RF / 10⁹',
+                    {
+                        samplesPerSec: ctx.params.samplesPerSec,
+                        activeSeries: ctx.params.activeSeries,
+                        scrapeIntervalSec: ctx.params.scrapeIntervalSec,
+                        bytesPerSample: ctx.params.bytesPerSample,
+                        RF: ctx.params.replicationFactor,
+                    },
+                    growthGbDay,
+                    'gb/day',
+                ),
+                explain(
+                    'activeSeries / 10⁶ × memoryPerMillionSeriesGb',
+                    {
+                        activeSeries: ctx.params.activeSeries,
+                        memoryPerMillionSeriesGb: ctx.params.memoryPerMillionSeriesGb,
+                    },
+                    prometheusSeriesMemoryGb(ctx.params),
+                    'gb',
+                ),
+            ],
+        };
+    },
+    cost: (ctx) =>
+        totalCost({
+            compute:
+                ctx.params.replicationFactor *
+                ctx.params.costPerInstanceHour *
+                HOURS_PER_MONTH *
+                ctx.regionCostMultiplier,
+            storage: ctx.storageGb * ctx.params.costPerGbMonth,
+            network: 0,
+            requests: 0,
+        }),
+    availability: (params) => params.availability,
+});
+
+const prometheus = defineComponent({
+    id: 'prometheus',
+    group: 'nosql',
+    shape: 'node',
+    wave: 'v1',
+    icon: 'sd-metrics',
+    ports: NOSQL_PORTS,
+    defaultParams: prometheusDefaults,
+    paramSchema: {
+        activeSeries: num('scale', { min: 1000, max: 1000000000, realistic: { min: 100000, max: 20000000 } }),
+        scrapeIntervalSec: num('behaviour', { unitKey: 'sec', min: 1, max: 3600, realistic: { min: 10, max: 60 } }),
+        samplesPerSec: num('scale', { min: 0, max: 100000000 }),
+        bytesPerSample: num('data', { unitKey: 'bytes', min: 0.5, max: 20, step: 0.1, realistic: { min: 1.7, max: 2 } }),
+        seriesPerQuery: num('behaviour', { min: 1, max: 10000000, realistic: { min: 10, max: 10000 } }),
+        batchSize: num('behaviour', { min: 1, max: 100000, realistic: { min: 100, max: 5000 } }),
+        retentionDays: num('data', { min: 1, max: 3650, realistic: { min: 7, max: 90 } }),
+        memoryGb: num('capacity', { unitKey: 'gb', min: 1, max: 4096 }),
+        memoryPerMillionSeriesGb: num('capacity', { unitKey: 'gb', min: 0.5, max: 64, step: 0.5 }),
+        queryConcurrency: num('capacity', { min: 1, max: 1000 }),
+        cpuCores: num('capacity', { min: 1, max: 192 }),
+        queryServiceMs: num('performance', { unitKey: 'ms', min: 0.05, max: 60000, step: 0.05 }),
+        replicationFactor: num('reliability', { min: 1, max: 5 }),
+        consistencyModel: choice('consistency', CONSISTENCY_MODEL),
+        replicationMode: choice('consistency', REPLICATION_MODE),
+        replicaLagMs: num('consistency', { unitKey: 'ms', min: 0, max: 600000, realistic: { min: 100, max: 30000 } }),
+        replicaLagSigma: num('consistency', { min: 0.1, max: 3, step: 0.1 }),
+        concurrencyControl: choice('consistency', CONCURRENCY_CONTROL),
+        conflictResolution: choice('consistency', CONFLICT_RESOLUTION),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.001 }),
+        costPerGbMonth: num('cost', { unitKey: 'usd', min: 0, max: 10, step: 0.001 }),
+    },
+    model: prometheusModel,
+    helpId: 'prometheus',
+});
+
+const etcdDefaults = {
+    nodes: 3,
+    writeQuorumMs: 10,
+    batchSize: 64,
+    maxDbSizeMb: 2048,
+    watchers: 5000,
+    leaseCount: 10000,
+    uniqueKeys: 200000,
+    keySizeBytes: 128,
+    valueSizeBytes: 1024,
+    cpuCores: 8,
+    cpuShare: 0.3,
+    readServiceMs: 0.5,
+    writeServiceMs: 2,
+    consistencyModel: 'linearizable',
+    replicationMode: 'sync',
+    replicaLagMs: 5,
+    replicaLagSigma: 0.8,
+    concurrencyControl: 'optimistic',
+    conflictResolution: 'single-writer-per-key',
+    availability: 0.9995,
+    costPerInstanceHour: 0.3,
+    costPerGbMonth: 0.1,
+};
+
+function etcdFollowerFanout(params: typeof etcdDefaults): number {
+    return Math.max(1, params.nodes - 1) / RAFT_BASELINE_FOLLOWERS;
+}
+
+function etcdCommitSec(params: typeof etcdDefaults): number {
+    return (
+        ((params.writeQuorumMs / 1000) * etcdFollowerFanout(params)) / Math.max(1, params.batchSize)
+    );
+}
+
+function etcdKeepaliveShare(params: typeof etcdDefaults): number {
+    return Math.min(
+        MAX_KEEPALIVE_BUDGET_SHARE,
+        (params.leaseCount / LEASE_KEEPALIVE_SEC) * etcdCommitSec(params),
+    );
+}
+
+function etcdWriteSec(params: typeof etcdDefaults): number {
+    return etcdCommitSec(params) / (1 - etcdKeepaliveShare(params));
+}
+
+function etcdKeyValueBytes(params: typeof etcdDefaults): number {
+    return params.keySizeBytes + params.valueSizeBytes;
+}
+
+function etcdHeadroomBytes(params: typeof etcdDefaults): number {
+    const quotaBytes = params.maxDbSizeMb * 1e6;
+    const overheadBytes =
+        params.watchers * WATCHER_MEMORY_BYTES + params.leaseCount * LEASE_MEMORY_BYTES;
+
+    return Math.max(quotaBytes - overheadBytes, quotaBytes * MIN_MEMORY_HEADROOM_SHARE);
+}
+
+function etcdReadServingNodes(params: typeof etcdDefaults): number {
+    return params.consistencyModel === 'linearizable' ? 1 : params.nodes;
+}
+
+const etcdModel = defineModel<typeof etcdDefaults>({
+    serviceSec: (ctx) =>
+        (ctx.readShare * ctx.params.readServiceMs + ctx.writeShare * ctx.params.writeServiceMs) / 1000,
+    resources: (ctx) => {
+        const writeSec = etcdWriteSec(ctx.params);
+        const readServingNodes = etcdReadServingNodes(ctx.params);
+        const readCpuSec = (ctx.params.readServiceMs / 1000) * ctx.params.cpuShare;
+        const writeCpuSec = (ctx.params.writeServiceMs / 1000) * ctx.params.cpuShare;
+        const keyValueBytes = etcdKeyValueBytes(ctx.params);
+        const headroomBytes = etcdHeadroomBytes(ctx.params);
+
+        return [
+            weightedUnitBound(
+                'write-quorum',
+                'batchSize × (1 − keepaliveShare) / (writeQuorumSec × followerFanout × writeShare)',
+                {
+                    nodes: ctx.params.nodes,
+                    batchSize: ctx.params.batchSize,
+                    writeQuorumSec: ctx.params.writeQuorumMs / 1000,
+                    followerFanout: etcdFollowerFanout(ctx.params),
+                    keepaliveShare: etcdKeepaliveShare(ctx.params),
+                    leaseCount: ctx.params.leaseCount,
+                    writeShare: ctx.writeShare,
+                },
+                0,
+                writeSec,
+                ctx.readShare,
+                ctx.writeShare,
+            ),
+            weightedUnitBound(
+                'cpu',
+                '1 / (readShare × readCpuSec / (readServingNodes × cpuCores) + writeShare × writeCpuSec / cpuCores)',
+                {
+                    readServingNodes,
+                    cpuCores: ctx.params.cpuCores,
+                    cpuShare: ctx.params.cpuShare,
+                    readCpuSec,
+                    writeCpuSec,
+                    readShare: ctx.readShare,
+                    writeShare: ctx.writeShare,
+                },
+                readCpuSec / (readServingNodes * ctx.params.cpuCores),
+                writeCpuSec / ctx.params.cpuCores,
+                ctx.readShare,
+                ctx.writeShare,
+            ),
+            resourceLimit(
+                'memory',
+                headroomBytes / (keyValueBytes * MVCC_COMPACTION_SEC * ctx.writeShare),
+                'headroomBytes / (keyValueBytes × compactionSec × writeShare)',
+                {
+                    headroomBytes,
+                    keyValueBytes,
+                    compactionSec: MVCC_COMPACTION_SEC,
+                    watchers: ctx.params.watchers,
+                    leaseCount: ctx.params.leaseCount,
+                    writeShare: ctx.writeShare,
+                },
+            ),
+        ];
+    },
+    storage: (ctx) => {
+        const keyValueBytes = etcdKeyValueBytes(ctx.params);
+        const quotaBytes = ctx.params.maxDbSizeMb * 1e6;
+        const liveBytes = Math.min(
+            ctx.params.uniqueKeys * keyValueBytes * MVCC_REVISION_OVERHEAD,
+            quotaBytes,
+        );
+        const growthGbDay = (ctx.writeRps * SECONDS_PER_DAY * keyValueBytes * ctx.params.nodes) / 1e9;
+        const projectedBytes = Math.min(
+            liveBytes + ctx.writeRps * SECONDS_PER_DAY * ctx.horizonDays * keyValueBytes,
+            quotaBytes,
+        );
+        const totalGb = (projectedBytes * ctx.params.nodes) / 1e9;
+
+        return {
+            totalGb,
+            growthGbDay,
+            memoryGb: liveBytes / 1e9,
+            explain: [
+                explain(
+                    'min(uniqueKeys × (keySize + valueSize) × revisionOverhead, maxDbSizeMb × 10⁶) × nodes / 10⁹',
+                    {
+                        uniqueKeys: ctx.params.uniqueKeys,
+                        keySize: ctx.params.keySizeBytes,
+                        valueSize: ctx.params.valueSizeBytes,
+                        revisionOverhead: MVCC_REVISION_OVERHEAD,
+                        maxDbSizeMb: ctx.params.maxDbSizeMb,
+                        nodes: ctx.params.nodes,
+                    },
+                    totalGb,
+                    'gb',
+                ),
+                explain(
+                    'writeRps × 86400 × (keySize + valueSize) × nodes / 10⁹',
+                    {
+                        writeRps: ctx.writeRps,
+                        keySize: ctx.params.keySizeBytes,
+                        valueSize: ctx.params.valueSizeBytes,
+                        nodes: ctx.params.nodes,
+                    },
+                    growthGbDay,
+                    'gb/day',
+                ),
+            ],
+        };
+    },
+    cost: (ctx) =>
+        totalCost({
+            compute:
+                ctx.params.nodes * ctx.params.costPerInstanceHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
+            storage: ctx.storageGb * ctx.params.costPerGbMonth,
+            network: 0,
+            requests: 0,
+        }),
+    availability: (params) => params.availability,
+});
+
+const etcd = defineComponent({
+    id: 'etcd',
+    group: 'nosql',
+    shape: 'node',
+    wave: 'v1',
+    icon: 'sd-coordination',
+    ports: NOSQL_PORTS,
+    defaultParams: etcdDefaults,
+    paramSchema: {
+        nodes: num('topology', { min: 1, max: 9, realistic: { min: 3, max: 5 } }),
+        writeQuorumMs: num('performance', { unitKey: 'ms', min: 0.5, max: 5000, step: 0.5, realistic: { min: 5, max: 50 } }),
+        batchSize: num('behaviour', { min: 1, max: 10000, realistic: { min: 16, max: 256 } }),
+        maxDbSizeMb: num('capacity', { unitKey: 'mb', min: 64, max: 65536, realistic: { min: 2048, max: 8192 } }),
+        watchers: num('scale', { min: 0, max: 10000000 }),
+        leaseCount: num('scale', { min: 0, max: 10000000 }),
+        uniqueKeys: num('data', { min: 1, max: 1e9 }),
+        keySizeBytes: num('data', { unitKey: 'bytes', min: 1, max: 65536 }),
+        valueSizeBytes: num('data', { unitKey: 'bytes', min: 1, max: 1572864 }),
+        cpuCores: num('capacity', { min: 1, max: 192 }),
+        cpuShare: num('capacity', { min: 0.01, max: 1, step: 0.01 }),
+        readServiceMs: num('performance', { unitKey: 'ms', min: 0.05, max: 60000, step: 0.05 }),
+        writeServiceMs: num('performance', { unitKey: 'ms', min: 0.05, max: 60000, step: 0.05 }),
+        consistencyModel: choice('consistency', CONSISTENCY_MODEL),
+        replicationMode: choice('consistency', REPLICATION_MODE),
+        replicaLagMs: num('consistency', { unitKey: 'ms', min: 0, max: 600000, realistic: { min: 1, max: 100 } }),
+        replicaLagSigma: num('consistency', { min: 0.1, max: 3, step: 0.1 }),
+        concurrencyControl: choice('consistency', CONCURRENCY_CONTROL),
+        conflictResolution: choice('consistency', CONFLICT_RESOLUTION),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.001 }),
+        costPerGbMonth: num('cost', { unitKey: 'usd', min: 0, max: 10, step: 0.001 }),
+    },
+    model: etcdModel,
+    helpId: 'etcd',
+});
+
 export const nosqlComponents: ComponentDefinition[] = [
     mongodb,
     cassandra,
+    scylla,
     dynamodb,
+    redisStore,
+    neo4j,
+    timescale,
+    influx,
+    prometheus,
+    etcd,
 ] as unknown as ComponentDefinition[];

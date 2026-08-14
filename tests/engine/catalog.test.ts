@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import registry from '../../src/engine/ComponentRegistry';
 import initComponents from '../../src/engine/initComponents';
+import type { Wave } from '../../src/engine/types/component';
 import ruBlocks from '../../src/locales/ru/blocks.json';
 import enBlocks from '../../src/locales/en/blocks.json';
 import ruGroups from '../../src/locales/ru/groups.json';
@@ -8,33 +9,35 @@ import enGroups from '../../src/locales/en/groups.json';
 import ruParams from '../../src/locales/ru/params.json';
 import enParams from '../../src/locales/en/params.json';
 
-const EXPECTED_MVP_COUNT = 44;
+const EXPECTED_SHIPPED_COUNT = 109;
+
+const SHIPPED_WAVES = new Set<Wave>(['mvp', 'v1']);
 
 const EXPECTED_PER_GROUP: Record<string, number> = {
-    clients: 2,
-    edge: 6,
-    compute: 4,
-    sql: 2,
-    nosql: 3,
-    search: 1,
-    olap: 1,
-    cache: 2,
-    messaging: 4,
-    storage: 2,
-    platform: 2,
-    observability: 2,
-    topology: 6,
-    probes: 7,
+    clients: 7,
+    edge: 11,
+    compute: 11,
+    sql: 5,
+    nosql: 10,
+    search: 4,
+    olap: 5,
+    cache: 3,
+    messaging: 11,
+    storage: 5,
+    platform: 13,
+    observability: 5,
+    topology: 8,
+    probes: 11,
 };
 
 beforeAll(() => {
     initComponents();
 });
 
-describe('каталог блоков MVP', () => {
-    it('содержит ровно 44 блока первой волны', () => {
-        expect(registry.size()).toBe(EXPECTED_MVP_COUNT);
-        expect(registry.list().every((component) => component.wave === 'mvp')).toBe(true);
+describe('каталог блоков', () => {
+    it('содержит ровно 109 блоков волн MVP и V1', () => {
+        expect(registry.size()).toBe(EXPECTED_SHIPPED_COUNT);
+        expect(registry.list().every((component) => SHIPPED_WAVES.has(component.wave))).toBe(true);
     });
 
     it('раскладка по группам совпадает с docs/01-components.md §15', () => {

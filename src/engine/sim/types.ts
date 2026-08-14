@@ -47,6 +47,57 @@ export interface FlowResult {
     depth: number;
 }
 
+export type HopArm = 'sequential' | 'parallel';
+
+export interface WaterfallHop {
+    edgeId: string;
+    nodeId: string;
+    parentNodeId: string;
+    depth: number;
+    arm: HopArm;
+    shareOfRequests: number;
+    trafficShare: number;
+    callsPerRequest: number;
+    cacheMissShare: number | null;
+    meanMs: number;
+    serviceMs: number;
+    waitMs: number;
+    networkMs: number;
+    retryMs: number;
+    p50Ms: number;
+    p95Ms: number;
+    p99Ms: number;
+}
+
+export interface FlowWaterfall {
+    flowId: string;
+    entryNodeId: string;
+    total: LatencyQuantiles;
+    covered: { p50: number; p95: number; p99: number };
+    hops: WaterfallHop[];
+}
+
+export type ProbeStatus = 'ok' | 'warn' | 'breach' | 'no-data';
+
+export type ProbeNoDataReason =
+    | 'unattached'
+    | 'unknown-target'
+    | 'unsupported-target'
+    | 'no-traffic'
+    | 'no-flow';
+
+export interface ProbeReading {
+    probeId: string;
+    componentType: string;
+    targetNodeId: string | null;
+    flowId: string | null;
+    status: ProbeStatus;
+    reason: ProbeNoDataReason | null;
+    value: number;
+    unit: string;
+    explain: Explain;
+}
+
 export interface NodeResult {
     nodeId: string;
     componentType: string;
@@ -151,6 +202,8 @@ export interface SimResult {
     nodes: Record<string, NodeResult>;
     edges: Record<string, EdgeResult>;
     flows: FlowResult[];
+    waterfalls: FlowWaterfall[];
+    probes: Record<string, ProbeReading>;
     totals: Totals;
     consistency: ConsistencyResult;
     multiRegion: MultiRegionResult | null;

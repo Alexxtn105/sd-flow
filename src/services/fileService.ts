@@ -1,11 +1,59 @@
+function withExtension(filename: string, extension: string): string {
+    return filename.endsWith(extension) ? filename : `${filename}${extension}`;
+}
+
+function triggerDownload(filename: string, href: string): void {
+    const link = document.createElement('a');
+    link.href = href;
+    link.download = filename;
+    link.click();
+}
+
+function downloadBlob(filename: string, blob: Blob): void {
+    const url = URL.createObjectURL(blob);
+    triggerDownload(filename, url);
+    URL.revokeObjectURL(url);
+}
+
 export function downloadJson(filename: string, data: unknown): void {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename.endsWith('.json') ? filename : `${filename}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(withExtension(filename, '.json'), blob);
+}
+
+export function downloadMarkdown(filename: string, text: string): void {
+    const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+    downloadBlob(withExtension(filename, '.md'), blob);
+}
+
+export function downloadDataUrl(filename: string, dataUrl: string): void {
+    triggerDownload(filename, dataUrl);
+}
+
+export async function copyText(text: string): Promise<boolean> {
+    try {
+        await navigator.clipboard.writeText(text);
+        return true;
+    } catch {
+        return copyViaSelection(text);
+    }
+}
+
+function copyViaSelection(text: string): boolean {
+    const field = document.createElement('textarea');
+    field.value = text;
+    field.setAttribute('readonly', '');
+    field.style.position = 'fixed';
+    field.style.opacity = '0';
+    document.body.appendChild(field);
+    field.select();
+
+    try {
+        return document.execCommand('copy');
+    } catch {
+        return false;
+    } finally {
+        document.body.removeChild(field);
+    }
 }
 
 export function pickJsonFile(): Promise<unknown | null> {

@@ -11,6 +11,7 @@ import { buildFindings } from './findings';
 import { deriveFlows } from './flows';
 import { rollUpLatency } from './latency';
 import { analyseMultiRegion } from './multiRegion';
+import { collectProbes, readProbes, withoutProbes } from './probes';
 import { createRng, hashString } from './rng';
 import { solveFlows } from './solver';
 import { emptyCost } from './resources';
@@ -37,7 +38,10 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
     const scenarioId = options.scenario ?? scheme.settings.scenario;
     const sampleCount = options.sampleCount ?? DEFAULT_SAMPLE_COUNT;
 
-    const topology = compileTopology(scheme);
+    const probeSpecs = collectProbes(scheme);
+    const measured = withoutProbes(scheme);
+
+    const topology = compileTopology(measured);
     const setup = buildScenario(topology, scenarioId);
 
     if (setup.replicationLagMultiplier !== 1) {
@@ -62,9 +66,10 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
     const consistency = analyseConsistency(topology, solved.nodes, solved.edges, scheme.settings.consistencyModel);
     const multiRegion = analyseMultiRegion(topology, solved.nodes, solved.edges, pricing, cost.byNode);
 
-    const seed = seedFor(scheme, scenarioId);
+    const seed = seedFor(measured, scenarioId);
     const rng = createRng(seed);
-    const flowResults = rollUpLatency(topology, flows, solved.nodes, rng, sampleCount);
+    const rollup = rollUpLatency(topology, flows, solved.nodes, rng, sampleCount);
+    const flowResults = rollup.flows;
 
     const findings = buildFindings({
         topology,
@@ -169,6 +174,15 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
         errorBudgetMinutes: (1 - availability.overall) * 43200,
     };
 
+    const probes = readProbes(probeSpecs, {
+        topology,
+        nodes,
+        edges,
+        flows: flowResults,
+        waterfalls: rollup.waterfalls,
+        totals,
+    });
+
     return {
         modelVersion: MODEL_VERSION,
         scenario: setup.id,
@@ -179,6 +193,8 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
         nodes,
         edges,
         flows: flowResults,
+        waterfalls: rollup.waterfalls,
+        probes,
         totals,
         consistency,
         multiRegion,

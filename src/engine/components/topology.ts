@@ -51,6 +51,62 @@ const az = defineComponent({
     helpId: 'az',
 });
 
+const vpc = defineComponent({
+    id: 'vpc',
+    group: 'topology',
+    shape: 'container',
+    wave: 'v1',
+    icon: 'sd-vpc',
+    ports: NO_PORTS,
+    defaultParams: {
+        cidr: '10.0.0.0/16',
+        natRequired: true,
+        natGatewayCount: 1,
+        natThroughputGbps: 45,
+        costPerGbProcessed: 0.045,
+        peeringLatencyMs: 0.1,
+        flowLogsEnabled: false,
+    },
+    paramSchema: {
+        cidr: text('topology'),
+        natRequired: bool('topology'),
+        natGatewayCount: num('capacity', { min: 1, max: 10, step: 1 }),
+        natThroughputGbps: num('capacity', { min: 1, max: 100, step: 1 }),
+        costPerGbProcessed: num('cost', { unitKey: 'usd', min: 0, max: 1, step: 0.001 }),
+        peeringLatencyMs: num('performance', { unitKey: 'ms', min: 0, max: 10, step: 0.05 }),
+        flowLogsEnabled: bool('behaviour'),
+    },
+    helpId: 'vpc',
+});
+
+const k8sCluster = defineComponent({
+    id: 'k8s-cluster',
+    group: 'topology',
+    shape: 'container',
+    wave: 'v1',
+    icon: 'sd-k8s',
+    ports: NO_PORTS,
+    defaultParams: {
+        nodes: 6,
+        nodeType: 'general',
+        podsPerNode: 110,
+        schedulingLagSec: 30,
+        nodeCostPerHour: 0.15,
+        controlPlaneCostMonth: 73,
+        autoscaleNodes: true,
+    },
+    paramSchema: {
+        nodes: num('scale', { min: 1, max: 5000, step: 1 }),
+        nodeType: choice('capacity', ['general', 'compute', 'memory', 'gpu']),
+        podsPerNode: num('capacity', { min: 8, max: 250, step: 1 }),
+        schedulingLagSec: num('performance', { unitKey: 'sec', min: 0, max: 600, step: 1 }),
+        nodeCostPerHour: num('cost', { unitKey: 'usd', min: 0, max: 50, step: 0.01 }),
+        controlPlaneCostMonth: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 1 }),
+        autoscaleNodes: bool('behaviour'),
+    },
+    helpId: 'k8s-cluster',
+});
+
 const linkCrossAz = defineComponent({
     id: 'link-cross-az',
     group: 'topology',
@@ -162,6 +218,8 @@ const multiRegionPolicy = defineComponent({
 export const topologyComponents: ComponentDefinition[] = [
     region,
     az,
+    vpc,
+    k8sCluster,
     linkCrossAz,
     linkCrossRegion,
     internet,

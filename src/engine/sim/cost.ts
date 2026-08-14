@@ -1,6 +1,6 @@
 import type { ComponentParams, CostBreakdown, CostContext, PricingProfile } from '../types/component';
-import { DAYS_PER_MONTH } from './constants';
-import type { CompiledTopology } from './compile';
+import { DAYS_PER_MONTH, HOURS_PER_MONTH, SECONDS_PER_DAY } from './constants';
+import type { CompiledNode, CompiledTopology } from './compile';
 import type { DerivedNode } from './derived';
 import { emptyCost, totalCost } from './resources';
 import type { NodeRuntime, OperationFlow } from './solver';
@@ -18,6 +18,60 @@ function regionMultiplierOf(nodeRegionId: string | null, topology: CompiledTopol
     const multiplier = region?.params.costMultiplier;
 
     return typeof multiplier === 'number' ? multiplier : 1;
+}
+
+function gbPerMonth(bytesPerSec: number): number {
+    return (bytesPerSec * SECONDS_PER_DAY * DAYS_PER_MONTH) / 1e9;
+}
+
+function natGbMonthByVpc(
+    topology: CompiledTopology,
+    edgeFlows: Map<string, OperationFlow>,
+): Map<string, number> {
+    const byVpc = new Map<string, number>();
+
+    for (const edge of topology.edges) {
+        if (!edge.viaNat) continue;
+
+        const vpcId = topology.nodeById.get(edge.source)?.vpcId;
+        const flow = edgeFlows.get(edge.id);
+        if (!vpcId || !flow) continue;
+
+        byVpc.set(vpcId, (byVpc.get(vpcId) ?? 0) + gbPerMonth(flow.bytesPerSec));
+    }
+
+    return byVpc;
+}
+
+function containerCost(
+    node: CompiledNode,
+    topology: CompiledTopology,
+    natGbMonth: number,
+): CostBreakdown | null {
+    if (node.type === 'k8s-cluster') {
+        const nodeCount = Number(node.params.nodes ?? 0);
+        const perHour = Number(node.params.nodeCostPerHour ?? 0);
+        const controlPlane = Number(node.params.controlPlaneCostMonth ?? 0);
+        const multiplier = regionMultiplierOf(node.regionId, topology);
+
+        return totalCost({
+            compute: nodeCount * perHour * HOURS_PER_MONTH * multiplier + controlPlane,
+            storage: 0,
+            network: 0,
+            requests: 0,
+        });
+    }
+
+    if (node.type === 'vpc') {
+        return totalCost({
+            compute: 0,
+            storage: 0,
+            network: natGbMonth * Number(node.params.costPerGbProcessed ?? 0),
+            requests: 0,
+        });
+    }
+
+    return null;
 }
 
 function add(target: CostBreakdown, source: CostBreakdown): CostBreakdown {
@@ -71,6 +125,18 @@ export function computeCost(
         total = add(total, cost);
     }
 
+    const natGbMonth = natGbMonthByVpc(topology, edgeFlows);
+
+    for (const node of topology.nodes) {
+        if (node.definition.shape !== 'container') continue;
+
+        const cost = containerCost(node, topology, natGbMonth.get(node.id) ?? 0);
+        if (!cost) continue;
+
+        byNode.set(node.id, cost);
+        total = add(total, cost);
+    }
+
     let crossAzGbMonth = 0;
     let crossRegionGbMonth = 0;
 
@@ -78,7 +144,7 @@ export function computeCost(
         const flow = edgeFlows.get(edge.id);
         if (!flow) continue;
 
-        const gbMonth = (flow.bytesPerSec * 86400 * DAYS_PER_MONTH) / 1e9;
+        const gbMonth = gbPerMonth(flow.bytesPerSec);
 
         if (edge.scope === 'cross-az') crossAzGbMonth += gbMonth;
         if (edge.scope === 'cross-region') crossRegionGbMonth += gbMonth;
