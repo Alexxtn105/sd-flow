@@ -531,10 +531,87 @@ const auditLog = defineComponent({
     helpId: 'audit-log',
 });
 
+const alertingDefaults = {
+    rules: 400,
+    evaluationIntervalSec: 30,
+    lookbackWindowSec: 300,
+    noiseRatio: 0.6,
+    firingsPerRuleMonth: 2,
+    maxEvaluationsPerSec: 20000000,
+    maxIngestMbs: 50,
+    serviceTimeMs: 2,
+    onCallSeats: 8,
+    availability: 0.999,
+    costPerSeatMonth: 21,
+    costPerNotification: 0.01,
+};
+
+function alertingEvaluationsPerSample(params: typeof alertingDefaults): number {
+    return (params.rules * params.lookbackWindowSec) / params.evaluationIntervalSec;
+}
+
+function alertingPagesPerMonth(params: typeof alertingDefaults): number {
+    return params.rules * params.firingsPerRuleMonth * (1 + params.noiseRatio);
+}
+
+const alertingModel = defineModel<typeof alertingDefaults>({
+    serviceSec: (ctx) => ctx.params.serviceTimeMs / 1000,
+    resources: (ctx) => [
+        resourceLimit(
+            'rule-evaluation',
+            ctx.params.maxEvaluationsPerSec / alertingEvaluationsPerSample(ctx.params),
+            'maxEvaluationsPerSec / (rules × lookbackWindowSec / evaluationIntervalSec)',
+            {
+                maxEvaluationsPerSec: ctx.params.maxEvaluationsPerSec,
+                rules: ctx.params.rules,
+                lookbackWindowSec: ctx.params.lookbackWindowSec,
+                evaluationIntervalSec: ctx.params.evaluationIntervalSec,
+            },
+        ),
+        bandwidthBound('ingest-bandwidth', ctx.params.maxIngestMbs * 8, ctx.requestBytes),
+    ],
+    cost: (ctx) =>
+        totalCost({
+            compute: ctx.params.onCallSeats * ctx.params.costPerSeatMonth * ctx.regionCostMultiplier,
+            storage: 0,
+            network: 0,
+            requests: alertingPagesPerMonth(ctx.params) * ctx.params.costPerNotification,
+        }),
+    availability: (params) => params.availability,
+});
+
+const alerting = defineComponent({
+    id: 'alerting',
+    group: 'observability',
+    shape: 'node',
+    wave: 'v2',
+    icon: 'sd-metrics',
+    ports: OBSERVABILITY_PORTS,
+    defaultParams: alertingDefaults,
+    paramSchema: {
+        rules: num('scale', { min: 1, max: 1000000, realistic: { min: 20, max: 5000 } }),
+        evaluationIntervalSec: num('behaviour', { unitKey: 'sec', min: 1, max: 3600, realistic: { min: 10, max: 300 } }),
+        lookbackWindowSec: num('behaviour', { unitKey: 'sec', min: 1, max: 86400, realistic: { min: 60, max: 3600 } }),
+        noiseRatio: num('reliability', { min: 0, max: 1, step: 0.01, realistic: { min: 0, max: 0.5 } }),
+        firingsPerRuleMonth: num('behaviour', { min: 0, max: 1000, step: 0.1, realistic: { min: 0.1, max: 10 } }),
+        maxEvaluationsPerSec: num('capacity', { min: 1000, max: 10000000000 }),
+        maxIngestMbs: num('capacity', { min: 1, max: 100000 }),
+        serviceTimeMs: num('performance', { unitKey: 'ms', min: 0.1, max: 60000, step: 0.1 }),
+        onCallSeats: num('scale', { min: 1, max: 10000, realistic: { min: 3, max: 50 } }),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerSeatMonth: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.01 }),
+        costPerNotification: num('cost', { unitKey: 'usd', min: 0, max: 10, step: 0.001 }),
+    },
+    model: alertingModel,
+    helpId: 'alerting',
+    managed: true,
+});
+
 export const observabilityComponents: ComponentDefinition[] = [
     logs,
     metrics,
     traces,
     apm,
+    alerting,
     auditLog,
 ] as unknown as ComponentDefinition[];

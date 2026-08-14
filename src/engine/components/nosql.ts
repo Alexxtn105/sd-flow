@@ -1,6 +1,7 @@
 import type { ComponentDefinition, ComponentParams, PortSpec } from '../types/component';
 import { HOURS_PER_MONTH, SECONDS_PER_DAY, SECONDS_PER_MONTH } from '../sim/constants';
 import {
+    bandwidthBound,
     connectionBound,
     defineModel,
     explain,
@@ -2021,6 +2022,641 @@ const etcd = defineComponent({
     helpId: 'etcd',
 });
 
+const HFILES_PER_READ = 3;
+
+const hbaseDefaults = {
+    regionServers: 12,
+    regionsPerServer: 100,
+    hdfsReplication: 3,
+    maxOpsPerSecPerRegion: 25,
+    maxOpsPerSecPerNode: 8000,
+    partitionKey: 'rowKey',
+    rowSizeBytes: 200,
+    rowCount: 20000000000,
+    compressionRatio: 3,
+    writeAmplification: 2,
+    blockCacheGb: 16,
+    workingSetGb: 400,
+    cpuCores: 16,
+    storageGbPerNode: 8000,
+    readServiceMs: 2,
+    writeServiceMs: 0.4,
+    consistencyModel: 'linearizable',
+    replicationMode: 'sync',
+    replicaLagMs: 10,
+    replicaLagSigma: 0.8,
+    concurrencyControl: 'pessimistic',
+    conflictResolution: 'single-writer-per-key',
+    availability: 0.999,
+    costPerInstanceHour: 0.5,
+    costPerGbMonth: 0.06,
+};
+
+function hbaseRegions(params: typeof hbaseDefaults): number {
+    return params.regionServers * params.regionsPerServer;
+}
+
+function hbaseBlockCacheMissShare(params: typeof hbaseDefaults): number {
+    const cacheGb = params.blockCacheGb * params.regionServers;
+
+    return Math.max(0, 1 - cacheGb / Math.max(1, params.workingSetGb));
+}
+
+function hbaseRowBytes(params: typeof hbaseDefaults): number {
+    return params.rowSizeBytes / params.compressionRatio;
+}
+
+const hbaseModel = defineModel<typeof hbaseDefaults>({
+    serviceSec: (ctx) => readWriteServiceSec(ctx.params, ctx.readShare, ctx.writeShare),
+    resources: (ctx) => {
+        const serviceSec = readWriteServiceSec(ctx.params, ctx.readShare, ctx.writeShare);
+        const nodeOpsBudget = ctx.params.regionServers * ctx.params.maxOpsPerSecPerNode;
+
+        return [
+            partitionBound('regions', hbaseRegions(ctx.params), ctx.params.maxOpsPerSecPerRegion),
+            weightedUnitBound(
+                'node-ops',
+                'regionServers × maxOpsPerSecPerNode / (readShare + writeShare × hdfsReplication)',
+                {
+                    regionServers: ctx.params.regionServers,
+                    maxOpsPerSecPerNode: ctx.params.maxOpsPerSecPerNode,
+                    hdfsReplication: ctx.params.hdfsReplication,
+                    readShare: ctx.readShare,
+                    writeShare: ctx.writeShare,
+                },
+                1 / nodeOpsBudget,
+                ctx.params.hdfsReplication / nodeOpsBudget,
+                ctx.readShare,
+                ctx.writeShare,
+            ),
+            littleLaw('cpu', ctx.params.regionServers * ctx.params.cpuCores, serviceSec),
+            iopsBound(
+                'iops',
+                NVME_IOPS_PER_NODE * ctx.params.regionServers,
+                hbaseBlockCacheMissShare(ctx.params) * HFILES_PER_READ,
+                ctx.params.hdfsReplication * ctx.params.writeAmplification,
+                ctx.readShare,
+                ctx.writeShare,
+            ),
+        ];
+    },
+    storage: (ctx) => {
+        const rowBytes = hbaseRowBytes(ctx.params);
+        const copies = ctx.params.hdfsReplication;
+        const baseGb = (ctx.params.rowCount * rowBytes * copies) / 1e9;
+        const growthGbDay = (ctx.writeRps * SECONDS_PER_DAY * rowBytes * copies) / 1e9;
+
+        return {
+            totalGb: baseGb + growthGbDay * ctx.horizonDays,
+            growthGbDay,
+            memoryGb: ctx.params.blockCacheGb * ctx.params.regionServers,
+            explain: [
+                explain(
+                    'rowCount × rowSize / compressionRatio × hdfsReplication / 10⁹',
+                    {
+                        rowCount: ctx.params.rowCount,
+                        rowSize: ctx.params.rowSizeBytes,
+                        compressionRatio: ctx.params.compressionRatio,
+                        hdfsReplication: copies,
+                    },
+                    baseGb,
+                    'gb',
+                ),
+                explain(
+                    'writeRps × 86400 × rowSize / compressionRatio × hdfsReplication / 10⁹',
+                    {
+                        writeRps: ctx.writeRps,
+                        rowSize: ctx.params.rowSizeBytes,
+                        compressionRatio: ctx.params.compressionRatio,
+                        hdfsReplication: copies,
+                    },
+                    growthGbDay,
+                    'gb/day',
+                ),
+            ],
+        };
+    },
+    cost: (ctx) =>
+        totalCost({
+            compute:
+                ctx.params.regionServers *
+                ctx.params.costPerInstanceHour *
+                HOURS_PER_MONTH *
+                ctx.regionCostMultiplier,
+            storage: ctx.storageGb * ctx.params.costPerGbMonth,
+            network: 0,
+            requests: 0,
+        }),
+    availability: (params) => params.availability,
+});
+
+const hbase = defineComponent({
+    id: 'hbase',
+    group: 'nosql',
+    shape: 'node',
+    wave: 'v2',
+    icon: 'sd-wide-column',
+    ports: NOSQL_PORTS,
+    defaultParams: hbaseDefaults,
+    paramSchema: {
+        regionServers: num('topology', { min: 1, max: 2000, realistic: { min: 3, max: 200 } }),
+        regionsPerServer: num('topology', { min: 1, max: 2000, realistic: { min: 20, max: 300 } }),
+        hdfsReplication: num('topology', { min: 1, max: 9, realistic: { min: 2, max: 3 } }),
+        maxOpsPerSecPerRegion: num('capacity', { unitKey: 'rps', min: 1, max: 100000, realistic: { min: 10, max: 200 } }),
+        maxOpsPerSecPerNode: num('capacity', { unitKey: 'rps', min: 100, max: 1000000, realistic: { min: 2000, max: 30000 } }),
+        partitionKey: text('topology'),
+        rowSizeBytes: num('data', { unitKey: 'bytes', min: 10, max: 1000000 }),
+        rowCount: num('data', { min: 0, max: 1000000000000 }),
+        compressionRatio: num('data', { min: 1, max: 30, step: 0.1 }),
+        writeAmplification: num('capacity', { min: 1, max: 50, step: 0.5 }),
+        blockCacheGb: num('capacity', { unitKey: 'gb', min: 0.25, max: 4096, step: 0.25 }),
+        workingSetGb: num('data', { unitKey: 'gb', min: 0.1, max: 1000000, step: 0.1 }),
+        cpuCores: num('capacity', { min: 1, max: 192 }),
+        storageGbPerNode: num('capacity', { unitKey: 'gb', min: 10, max: 200000 }),
+        readServiceMs: num('performance', { unitKey: 'ms', min: 0.05, max: 60000, step: 0.05 }),
+        writeServiceMs: num('performance', { unitKey: 'ms', min: 0.05, max: 60000, step: 0.05 }),
+        consistencyModel: choice('consistency', CONSISTENCY_MODEL),
+        replicationMode: choice('consistency', REPLICATION_MODE),
+        replicaLagMs: num('consistency', { unitKey: 'ms', min: 0, max: 600000, realistic: { min: 1, max: 500 } }),
+        replicaLagSigma: num('consistency', { min: 0.1, max: 3, step: 0.1 }),
+        concurrencyControl: choice('consistency', CONCURRENCY_CONTROL),
+        conflictResolution: choice('consistency', CONFLICT_RESOLUTION),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.001 }),
+        costPerGbMonth: num('cost', { unitKey: 'usd', min: 0, max: 10, step: 0.001 }),
+    },
+    model: hbaseModel,
+    helpId: 'hbase',
+});
+
+const COUCHBASE_METADATA_BYTES_PER_DOC = 56;
+
+const COUCHBASE_FULL_EJECTION_METADATA_SHARE = 0.1;
+
+const COUCHBASE_RESIDENCY_WINDOW_SEC = 600;
+
+const couchbaseDefaults = {
+    nodes: 6,
+    bucketCount: 3,
+    replicas: 1,
+    memoryQuotaGb: 64,
+    ejectionPolicy: 'value-only',
+    documentSizeKb: 4,
+    documentCount: 500000000,
+    workingSetGb: 200,
+    maxOpsPerSecPerNode: 25000,
+    maxConnections: 10000,
+    provisionedIops: 30000,
+    writeAmplification: 2,
+    readServiceMs: 0.4,
+    writeServiceMs: 0.8,
+    diskFetchMs: 3,
+    consistencyModel: 'read-your-writes',
+    replicationMode: 'semi-sync',
+    replicaLagMs: 20,
+    replicaLagSigma: 0.8,
+    concurrencyControl: 'optimistic',
+    conflictResolution: 'lww',
+    availability: 0.9995,
+    costPerInstanceHour: 0.6,
+    costPerGbMonth: 0.1,
+};
+
+function couchbaseDocumentBytes(params: typeof couchbaseDefaults): number {
+    return params.documentSizeKb * 1024;
+}
+
+function couchbaseMetadataBytes(params: typeof couchbaseDefaults): number {
+    const share =
+        params.ejectionPolicy === 'value-only' ? 1 : COUCHBASE_FULL_EJECTION_METADATA_SHARE;
+
+    return params.documentCount * COUCHBASE_METADATA_BYTES_PER_DOC * share;
+}
+
+function couchbaseQuotaBytes(params: typeof couchbaseDefaults): number {
+    return (params.bucketCount * params.memoryQuotaGb * 1e9) / (1 + params.replicas);
+}
+
+function couchbaseResidentBytes(params: typeof couchbaseDefaults): number {
+    const quotaBytes = couchbaseQuotaBytes(params);
+
+    return Math.max(
+        quotaBytes - couchbaseMetadataBytes(params),
+        quotaBytes * MIN_MEMORY_HEADROOM_SHARE,
+    );
+}
+
+function couchbaseMissShare(params: typeof couchbaseDefaults): number {
+    return Math.max(0, 1 - couchbaseResidentBytes(params) / (params.workingSetGb * 1e9));
+}
+
+function couchbaseReadSec(params: typeof couchbaseDefaults): number {
+    return (params.readServiceMs + couchbaseMissShare(params) * params.diskFetchMs) / 1000;
+}
+
+function couchbaseServiceSec(
+    params: typeof couchbaseDefaults,
+    readShare: number,
+    writeShare: number,
+): number {
+    return readShare * couchbaseReadSec(params) + (writeShare * params.writeServiceMs) / 1000;
+}
+
+const couchbaseModel = defineModel<typeof couchbaseDefaults>({
+    serviceSec: (ctx) => couchbaseServiceSec(ctx.params, ctx.readShare, ctx.writeShare),
+    resources: (ctx) => {
+        const serviceSec = couchbaseServiceSec(ctx.params, ctx.readShare, ctx.writeShare);
+        const documentBytes = couchbaseDocumentBytes(ctx.params);
+
+        return [
+            memoryResidencyBound(
+                'memory',
+                couchbaseResidentBytes(ctx.params) / 1e9,
+                (documentBytes * COUCHBASE_RESIDENCY_WINDOW_SEC) / 1e9,
+            ),
+            explicitRps('ops', ctx.params.nodes, ctx.params.maxOpsPerSecPerNode),
+            connectionBound(
+                'connections',
+                ctx.params.maxConnections * ctx.params.nodes,
+                1,
+                serviceSec,
+            ),
+            iopsBound(
+                'iops',
+                ctx.params.provisionedIops * ctx.params.nodes,
+                couchbaseMissShare(ctx.params),
+                (1 + ctx.params.replicas) * ctx.params.writeAmplification,
+                ctx.readShare,
+                ctx.writeShare,
+            ),
+        ];
+    },
+    storage: (ctx) => {
+        const documentBytes = couchbaseDocumentBytes(ctx.params);
+        const copies = 1 + ctx.params.replicas;
+        const baseGb = (ctx.params.documentCount * documentBytes * copies) / 1e9;
+        const growthGbDay = (ctx.writeRps * SECONDS_PER_DAY * documentBytes * copies) / 1e9;
+
+        return {
+            totalGb: baseGb + growthGbDay * ctx.horizonDays,
+            growthGbDay,
+            memoryGb: couchbaseResidentBytes(ctx.params) / 1e9,
+            explain: [
+                explain(
+                    'documentCount × documentBytes × (1 + replicas) / 10⁹',
+                    {
+                        documentCount: ctx.params.documentCount,
+                        documentBytes,
+                        replicas: ctx.params.replicas,
+                    },
+                    baseGb,
+                    'gb',
+                ),
+                explain(
+                    'bucketCount × memoryQuotaGb / (1 + replicas) − documentCount × metadataBytes',
+                    {
+                        bucketCount: ctx.params.bucketCount,
+                        memoryQuotaGb: ctx.params.memoryQuotaGb,
+                        replicas: ctx.params.replicas,
+                        metadataBytes: COUCHBASE_METADATA_BYTES_PER_DOC,
+                        ejectionPolicy: ctx.params.ejectionPolicy,
+                    },
+                    couchbaseResidentBytes(ctx.params) / 1e9,
+                    'gb',
+                ),
+            ],
+        };
+    },
+    cost: (ctx) =>
+        totalCost({
+            compute:
+                ctx.params.nodes *
+                ctx.params.costPerInstanceHour *
+                HOURS_PER_MONTH *
+                ctx.regionCostMultiplier,
+            storage: ctx.storageGb * ctx.params.costPerGbMonth,
+            network: 0,
+            requests: 0,
+        }),
+    availability: (params) => params.availability,
+});
+
+const couchbase = defineComponent({
+    id: 'couchbase',
+    group: 'nosql',
+    shape: 'node',
+    wave: 'v2',
+    icon: 'sd-document',
+    ports: NOSQL_PORTS,
+    defaultParams: couchbaseDefaults,
+    paramSchema: {
+        nodes: num('topology', { min: 1, max: 1000, realistic: { min: 3, max: 100 } }),
+        bucketCount: num('topology', { min: 1, max: 100, realistic: { min: 1, max: 10 } }),
+        replicas: num('topology', { min: 0, max: 3 }),
+        memoryQuotaGb: num('capacity', { unitKey: 'gb', min: 0.1, max: 100000, step: 0.1 }),
+        ejectionPolicy: choice('behaviour', ['value-only', 'full']),
+        documentSizeKb: num('data', { unitKey: 'kb', min: 0.05, max: 20480, step: 0.05 }),
+        documentCount: num('data', { min: 0, max: 1000000000000 }),
+        workingSetGb: num('data', { unitKey: 'gb', min: 0.1, max: 1000000, step: 0.1 }),
+        maxOpsPerSecPerNode: num('capacity', { unitKey: 'rps', min: 100, max: 1000000, realistic: { min: 10000, max: 100000 } }),
+        maxConnections: num('capacity', { min: 10, max: 1000000 }),
+        provisionedIops: num('capacity', { min: 100, max: 1000000 }),
+        writeAmplification: num('capacity', { min: 1, max: 50, step: 0.5 }),
+        readServiceMs: num('performance', { unitKey: 'ms', min: 0.05, max: 60000, step: 0.05 }),
+        writeServiceMs: num('performance', { unitKey: 'ms', min: 0.05, max: 60000, step: 0.05 }),
+        diskFetchMs: num('performance', { unitKey: 'ms', min: 0.05, max: 60000, step: 0.05, realistic: { min: 1, max: 10 } }),
+        consistencyModel: choice('consistency', CONSISTENCY_MODEL),
+        replicationMode: choice('consistency', REPLICATION_MODE),
+        replicaLagMs: num('consistency', { unitKey: 'ms', min: 0, max: 600000, realistic: { min: 1, max: 500 } }),
+        replicaLagSigma: num('consistency', { min: 0.1, max: 3, step: 0.1 }),
+        concurrencyControl: choice('consistency', CONCURRENCY_CONTROL),
+        conflictResolution: choice('consistency', CONFLICT_RESOLUTION),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.001 }),
+        costPerGbMonth: num('cost', { unitKey: 'usd', min: 0, max: 10, step: 0.001 }),
+    },
+    model: couchbaseModel,
+    helpId: 'couchbase',
+});
+
+const TABLE_FORMAT_SHARE: Record<string, number> = {
+    parquet: 0.35,
+    orc: 0.32,
+};
+
+const TABLE_COMPRESSION_RATIO: Record<string, number> = {
+    none: 1,
+    gzip: 3.5,
+    snappy: 2.2,
+    zstd: 4,
+};
+
+const PARTITION_SPAN_DAYS: Record<string, number> = {
+    hour: 1 / 24,
+    day: 1,
+    month: 30,
+};
+
+const COMPACTION_FILE_FACTOR: Record<string, number> = {
+    none: 4,
+    scheduled: 1.5,
+    continuous: 1,
+};
+
+const COMPACTION_REWRITE_PASSES: Record<string, number> = {
+    none: 0,
+    scheduled: 1,
+    continuous: 2,
+};
+
+const MANIFEST_ENTRIES_PER_FILE = 8000;
+
+const OBJECT_GET_MS = 25;
+
+const COMPACTION_MB_PER_SLOT_SEC = 50;
+
+const s3TableDefaults = {
+    rawGbPerDay: 2000,
+    format: 'parquet',
+    compression: 'zstd',
+    partitioning: 'day',
+    lifecycleDays: 365,
+    fileSizeMb: 128,
+    compaction: 'scheduled',
+    compactionSlots: 8,
+    manifestOverhead: 0.02,
+    bytesScanned: 200000000,
+    batchSize: 200,
+    commitServiceMs: 200,
+    writeServiceMs: 50,
+    bandwidthGbps: 100,
+    maxIngestMbs: 2000,
+    availability: 0.9999,
+    costPerGbMonth: 0.023,
+    costPerMillionRequests: 0.4,
+};
+
+function s3TableStoredBytesPerRawByte(params: typeof s3TableDefaults): number {
+    const formatShare = TABLE_FORMAT_SHARE[params.format] ?? 1;
+    const compressionRatio = TABLE_COMPRESSION_RATIO[params.compression] ?? 1;
+
+    return formatShare / compressionRatio;
+}
+
+function s3TableStoredGbPerDay(params: typeof s3TableDefaults): number {
+    return params.rawGbPerDay * s3TableStoredBytesPerRawByte(params);
+}
+
+function s3TablePartitionSpanDays(params: typeof s3TableDefaults): number {
+    return PARTITION_SPAN_DAYS[params.partitioning] ?? Math.max(1, params.lifecycleDays);
+}
+
+function s3TableFileFactor(params: typeof s3TableDefaults): number {
+    return COMPACTION_FILE_FACTOR[params.compaction] ?? 1;
+}
+
+function s3TableFiles(params: typeof s3TableDefaults): number {
+    const spanDays = s3TablePartitionSpanDays(params);
+    const partitionBytes = s3TableStoredGbPerDay(params) * 1e9 * spanDays;
+    const fileBytes = params.fileSizeMb * 1e6;
+    const partitions = Math.max(1, Math.ceil(Math.max(1, params.lifecycleDays) / spanDays));
+    const filesPerPartition = Math.max(1, Math.ceil(partitionBytes / fileBytes)) * s3TableFileFactor(params);
+
+    return partitions * filesPerPartition;
+}
+
+function s3TableFilesScanned(params: typeof s3TableDefaults): number {
+    const fileBytes = params.fileSizeMb * 1e6;
+    const scanned = Math.max(1, Math.ceil(params.bytesScanned / fileBytes)) * s3TableFileFactor(params);
+
+    return Math.min(s3TableFiles(params), scanned);
+}
+
+function s3TableManifestReads(params: typeof s3TableDefaults): number {
+    const entries =
+        s3TableFilesScanned(params) + s3TableFiles(params) * params.manifestOverhead;
+
+    return 1 + Math.ceil(entries / MANIFEST_ENTRIES_PER_FILE);
+}
+
+function s3TablePlanningSec(params: typeof s3TableDefaults): number {
+    return (s3TableManifestReads(params) * OBJECT_GET_MS) / 1000;
+}
+
+function s3TableScanSec(params: typeof s3TableDefaults): number {
+    return params.bytesScanned / ((params.bandwidthGbps * 1e9) / 8);
+}
+
+function s3TableCommitSec(params: typeof s3TableDefaults): number {
+    return params.commitServiceMs / 1000 / Math.max(1, params.batchSize);
+}
+
+function s3TableWriteSec(params: typeof s3TableDefaults): number {
+    return params.writeServiceMs / 1000 + s3TableCommitSec(params);
+}
+
+function s3TableServiceSec(
+    params: typeof s3TableDefaults,
+    readShare: number,
+    writeShare: number,
+): number {
+    return (
+        readShare * (s3TablePlanningSec(params) + s3TableScanSec(params)) +
+        writeShare * s3TableWriteSec(params)
+    );
+}
+
+const s3TableModel = defineModel<typeof s3TableDefaults>({
+    serviceSec: (ctx) => s3TableServiceSec(ctx.params, ctx.readShare, ctx.writeShare),
+    resources: (ctx) => {
+        const rewritePasses = COMPACTION_REWRITE_PASSES[ctx.params.compaction] ?? 0;
+        const compactionBytesPerSec =
+            ctx.params.compactionSlots * COMPACTION_MB_PER_SLOT_SEC * 1e6;
+        const storedBytesPerWrite = ctx.requestBytes * s3TableStoredBytesPerRawByte(ctx.params);
+
+        return [
+            weightedUnitBound(
+                'manifest',
+                '1 / (readShare × manifestReads × objectGetMs / 1000 + writeShare × commitServiceMs / 1000 / batchSize)',
+                {
+                    manifestReads: s3TableManifestReads(ctx.params),
+                    objectGetMs: OBJECT_GET_MS,
+                    tableFiles: s3TableFiles(ctx.params),
+                    filesScanned: s3TableFilesScanned(ctx.params),
+                    manifestOverhead: ctx.params.manifestOverhead,
+                    commitServiceMs: ctx.params.commitServiceMs,
+                    batchSize: ctx.params.batchSize,
+                    readShare: ctx.readShare,
+                    writeShare: ctx.writeShare,
+                },
+                s3TablePlanningSec(ctx.params),
+                s3TableCommitSec(ctx.params),
+                ctx.readShare,
+                ctx.writeShare,
+            ),
+            rewritePasses > 0
+                ? weightedUnitBound(
+                      'compaction',
+                      'compactionSlots × mbPerSlotSec × 10⁶ / (writeShare × storedBytesPerWrite × rewritePasses)',
+                      {
+                          compactionSlots: ctx.params.compactionSlots,
+                          mbPerSlotSec: COMPACTION_MB_PER_SLOT_SEC,
+                          storedBytesPerWrite,
+                          rewritePasses,
+                          compaction: ctx.params.compaction,
+                          writeShare: ctx.writeShare,
+                      },
+                      0,
+                      (storedBytesPerWrite * rewritePasses) / compactionBytesPerSec,
+                      ctx.readShare,
+                      ctx.writeShare,
+                  )
+                : null,
+            bandwidthBound(
+                'throughput',
+                ctx.params.bandwidthGbps * 1000,
+                ctx.readShare * ctx.params.bytesScanned,
+            ),
+            bandwidthBound(
+                'ingest-bandwidth',
+                ctx.params.maxIngestMbs * 8,
+                ctx.writeShare * ctx.requestBytes,
+            ),
+        ];
+    },
+    storage: (ctx) => {
+        const storedShare = s3TableStoredBytesPerRawByte(ctx.params);
+        const writtenGbDay = (ctx.writeRps * SECONDS_PER_DAY * ctx.recordBytes * storedShare) / 1e9;
+        const growthGbDay = Math.max(s3TableStoredGbPerDay(ctx.params), writtenGbDay);
+        const retainedDays =
+            ctx.params.lifecycleDays > 0
+                ? Math.min(ctx.params.lifecycleDays, ctx.horizonDays)
+                : ctx.horizonDays;
+        const totalGb = growthGbDay * retainedDays * (1 + ctx.params.manifestOverhead);
+
+        return {
+            totalGb,
+            growthGbDay,
+            memoryGb: 0,
+            explain: [
+                explain(
+                    'max(rawGbPerDay, writeRps × 86400 × recordBytes / 10⁹) × formatShare / compressionRatio',
+                    {
+                        rawGbPerDay: ctx.params.rawGbPerDay,
+                        writeRps: ctx.writeRps,
+                        recordBytes: ctx.recordBytes,
+                        format: ctx.params.format,
+                        compression: ctx.params.compression,
+                        storedShare,
+                    },
+                    growthGbDay,
+                    'gb/day',
+                ),
+                explain(
+                    'growthGbDay × min(lifecycleDays, horizonDays) × (1 + manifestOverhead)',
+                    {
+                        growthGbDay,
+                        lifecycleDays: ctx.params.lifecycleDays,
+                        horizonDays: ctx.horizonDays,
+                        manifestOverhead: ctx.params.manifestOverhead,
+                        tableFiles: s3TableFiles(ctx.params),
+                    },
+                    totalGb,
+                    'gb',
+                ),
+            ],
+        };
+    },
+    cost: (ctx) => {
+        const objectOpsPerRequest =
+            ctx.readShare * (s3TableFilesScanned(ctx.params) + s3TableManifestReads(ctx.params)) +
+            (ctx.writeShare * 2) / Math.max(1, ctx.params.batchSize);
+
+        return totalCost({
+            compute: 0,
+            storage: ctx.storageGb * ctx.params.costPerGbMonth * ctx.regionCostMultiplier,
+            network: 0,
+            requests:
+                ((ctx.lambda * objectOpsPerRequest * SECONDS_PER_MONTH) / 1e6) *
+                ctx.params.costPerMillionRequests,
+        });
+    },
+    availability: (params) => params.availability,
+});
+
+const s3Table = defineComponent({
+    id: 's3-table',
+    group: 'nosql',
+    shape: 'node',
+    wave: 'v2',
+    icon: 'sd-lakehouse',
+    ports: NOSQL_PORTS,
+    managed: true,
+    defaultParams: s3TableDefaults,
+    paramSchema: {
+        rawGbPerDay: num('data', { unitKey: 'gb', min: 0, max: 10000000 }),
+        format: choice('data', ['parquet', 'orc']),
+        compression: choice('data', ['none', 'gzip', 'snappy', 'zstd']),
+        partitioning: choice('data', ['none', 'hour', 'day', 'month']),
+        lifecycleDays: num('data', { min: 0, max: 36500, realistic: { min: 30, max: 3650 } }),
+        fileSizeMb: num('data', { unitKey: 'mb', min: 1, max: 8192, realistic: { min: 64, max: 512 } }),
+        compaction: choice('behaviour', ['none', 'scheduled', 'continuous']),
+        compactionSlots: num('capacity', { min: 0, max: 10000, realistic: { min: 2, max: 64 } }),
+        manifestOverhead: num('data', { min: 0, max: 1, step: 0.01, realistic: { min: 0.01, max: 0.2 } }),
+        bytesScanned: num('data', { unitKey: 'bytes', min: 1000, max: 1000000000000000 }),
+        batchSize: num('behaviour', { min: 1, max: 1000000, realistic: { min: 100, max: 10000 } }),
+        commitServiceMs: num('performance', { unitKey: 'ms', min: 1, max: 60000, realistic: { min: 50, max: 1000 } }),
+        writeServiceMs: num('performance', { unitKey: 'ms', min: 0.5, max: 60000, step: 0.5 }),
+        bandwidthGbps: num('capacity', { min: 1, max: 4000 }),
+        maxIngestMbs: num('capacity', { min: 1, max: 1000000 }),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerGbMonth: num('cost', { unitKey: 'usd', min: 0, max: 10, step: 0.001 }),
+        costPerMillionRequests: num('cost', { unitKey: 'usd', min: 0, max: 100, step: 0.01 }),
+    },
+    model: s3TableModel,
+    helpId: 's3-table',
+});
+
 export const nosqlComponents: ComponentDefinition[] = [
     mongodb,
     cassandra,
@@ -2032,4 +2668,7 @@ export const nosqlComponents: ComponentDefinition[] = [
     influx,
     prometheus,
     etcd,
+    hbase,
+    couchbase,
+    s3Table,
 ] as unknown as ComponentDefinition[];

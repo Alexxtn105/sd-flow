@@ -624,6 +624,14 @@ const SD_ICONS: Record<string, ReactNode> = {
             <path d="M8 10.5h8M8 14h8" />
         </>
     ),
+    'sd-nat-egress': (
+        <>
+            <path d="M2.5 6.5h3.5l3 5.5M2.5 12h3.5M2.5 17.5h3.5l3-5.5" />
+            <path d="M9 12h11.5" />
+            <path d="M17 8.5 20.5 12 17 15.5" />
+            <path d="M13.5 3v3M13.5 9.5v1M13.5 13.5v1M13.5 18v3" />
+        </>
+    ),
     'sd-vpc': (
         <>
             <path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3" />

@@ -1,6 +1,7 @@
 import type { ComponentDefinition, PortSpec } from '../types/component';
 import { HOURS_PER_MONTH, SECONDS_PER_DAY } from '../sim/constants';
 import {
+    bandwidthBound,
     connectionBound,
     defineModel,
     explain,
@@ -9,6 +10,7 @@ import {
     memoryResidencyBound,
     resourceLimit,
     totalCost,
+    weightedUnitBound,
 } from '../sim/resources';
 import { bool, choice, defineComponent, num } from './_shared/params';
 
@@ -462,8 +464,227 @@ const localCache = defineComponent({
     helpId: 'local-cache',
 });
 
+const HAZELCAST_DATA_MEMORY_SHARE = 0.7;
+
+const HAZELCAST_NEAR_CACHE_HIT_MS = 0.01;
+
+const HAZELCAST_INVALIDATION_OVERHEAD_BYTES = 60;
+
+const hazelcastDefaults = {
+    nodes: 6,
+    backupCount: 1,
+    nearCache: true,
+    nearCacheSizeMb: 256,
+    memoryGb: 16,
+    evictionPolicy: 'lru',
+    ttlSec: 300,
+    keySizeBytes: 40,
+    valueSizeBytes: 4096,
+    overheadPerKeyBytes: 64,
+    uniqueKeys: 10000000,
+    zipfAlpha: 1,
+    maxOpsPerSecPerNode: 80000,
+    networkMbps: 1000,
+    serviceTimeMs: 0.4,
+    consistencyModel: 'eventual',
+    replicationMode: 'sync',
+    replicaLagMs: 0,
+    replicaLagSigma: 0.8,
+    concurrencyControl: 'optimistic',
+    conflictResolution: 'lww',
+    availability: 0.999,
+    costPerInstanceHour: 0.3,
+};
+
+function hazelcastEntryBytes(params: typeof hazelcastDefaults): number {
+    return params.keySizeBytes + params.valueSizeBytes + params.overheadPerKeyBytes;
+}
+
+function hazelcastCopies(params: typeof hazelcastDefaults): number {
+    return 1 + params.backupCount;
+}
+
+function hazelcastGridCapacityBytes(params: typeof hazelcastDefaults): number {
+    return (params.nodes * params.memoryGb * 1e9 * HAZELCAST_DATA_MEMORY_SHARE) / hazelcastCopies(params);
+}
+
+function hazelcastNearCacheBytes(params: typeof hazelcastDefaults): number {
+    return params.nearCache ? params.nearCacheSizeMb * 1e6 : 0;
+}
+
+function hazelcastNearCacheHitShare(params: typeof hazelcastDefaults): number {
+    const keySpaceBytes = params.uniqueKeys * hazelcastEntryBytes(params);
+
+    return Math.min(1, hazelcastNearCacheBytes(params) / Math.max(keySpaceBytes, 1));
+}
+
+function hazelcastInvalidationBytes(params: typeof hazelcastDefaults): number {
+    return params.nearCache
+        ? params.nodes * (params.keySizeBytes + HAZELCAST_INVALIDATION_OVERHEAD_BYTES)
+        : 0;
+}
+
+function hazelcastNetworkBytesPerRequest(
+    params: typeof hazelcastDefaults,
+    readShare: number,
+    writeShare: number,
+): number {
+    const entryBytes = hazelcastEntryBytes(params);
+    const remoteReadBytes = (1 - hazelcastNearCacheHitShare(params)) * entryBytes;
+    const writeBytes = entryBytes * hazelcastCopies(params) + hazelcastInvalidationBytes(params);
+
+    return readShare * remoteReadBytes + writeShare * writeBytes;
+}
+
+function hazelcastServiceSec(
+    params: typeof hazelcastDefaults,
+    readShare: number,
+    writeShare: number,
+): number {
+    const nearHitShare = hazelcastNearCacheHitShare(params);
+    const readMs =
+        nearHitShare * HAZELCAST_NEAR_CACHE_HIT_MS + (1 - nearHitShare) * params.serviceTimeMs;
+    const writeMs = params.serviceTimeMs * (1 + Math.min(params.backupCount, 1));
+
+    return (readShare * readMs + writeShare * writeMs) / 1000;
+}
+
+const hazelcastModel = defineModel<typeof hazelcastDefaults>({
+    serviceSec: (ctx) => hazelcastServiceSec(ctx.params, ctx.readShare, ctx.writeShare),
+    resources: (ctx) => {
+        const gridOpsPerSec = ctx.params.nodes * ctx.params.maxOpsPerSecPerNode;
+        const nearHitShare = hazelcastNearCacheHitShare(ctx.params);
+
+        return [
+            weightedUnitBound(
+                'ops',
+                'nodes × maxOpsPerSecPerNode / (readShare × (1 − nearCacheHitShare) + writeShare × (1 + backupCount))',
+                {
+                    nodes: ctx.params.nodes,
+                    maxOpsPerSecPerNode: ctx.params.maxOpsPerSecPerNode,
+                    nearCacheHitShare: nearHitShare,
+                    backupCount: ctx.params.backupCount,
+                    readShare: ctx.readShare,
+                    writeShare: ctx.writeShare,
+                },
+                (1 - nearHitShare) / gridOpsPerSec,
+                hazelcastCopies(ctx.params) / gridOpsPerSec,
+                ctx.readShare,
+                ctx.writeShare,
+            ),
+            memoryResidencyBound(
+                'memory',
+                hazelcastGridCapacityBytes(ctx.params) / 1e9,
+                (hazelcastEntryBytes(ctx.params) * ctx.params.ttlSec * ctx.writeShare) / 1e9,
+            ),
+            bandwidthBound(
+                'network',
+                ctx.params.nodes * ctx.params.networkMbps,
+                hazelcastNetworkBytesPerRequest(ctx.params, ctx.readShare, ctx.writeShare),
+            ),
+        ];
+    },
+    storage: (ctx) => {
+        const entryBytes = hazelcastEntryBytes(ctx.params);
+        const copies = hazelcastCopies(ctx.params);
+        const gridGb =
+            (Math.min(ctx.params.uniqueKeys * entryBytes, hazelcastGridCapacityBytes(ctx.params)) * copies) /
+            1e9;
+        const nearCacheGb = (ctx.params.nodes * hazelcastNearCacheBytes(ctx.params)) / 1e9;
+
+        return {
+            totalGb: 0,
+            growthGbDay: 0,
+            memoryGb: gridGb + nearCacheGb,
+            explain: [
+                explain(
+                    'min(uniqueKeys × entryBytes, nodes × memoryGb × dataShare / copies) × copies / 10⁹',
+                    {
+                        uniqueKeys: ctx.params.uniqueKeys,
+                        entryBytes,
+                        nodes: ctx.params.nodes,
+                        memoryGb: ctx.params.memoryGb,
+                        dataShare: HAZELCAST_DATA_MEMORY_SHARE,
+                        copies,
+                    },
+                    gridGb,
+                    'gb',
+                ),
+                explain(
+                    'nodes × nearCacheSizeMb × 10⁶ / 10⁹',
+                    {
+                        nodes: ctx.params.nodes,
+                        nearCacheSizeMb: ctx.params.nearCacheSizeMb,
+                        nearCache: String(ctx.params.nearCache),
+                        nearCacheHitShare: hazelcastNearCacheHitShare(ctx.params),
+                    },
+                    nearCacheGb,
+                    'gb',
+                ),
+            ],
+        };
+    },
+    cost: (ctx) =>
+        totalCost({
+            compute:
+                ctx.params.nodes *
+                ctx.params.costPerInstanceHour *
+                HOURS_PER_MONTH *
+                ctx.regionCostMultiplier,
+            storage: 0,
+            network: 0,
+            requests: 0,
+        }),
+    availability: (params) => params.availability,
+    cache: (ctx) => ({
+        uniqueKeys: ctx.params.uniqueKeys,
+        zipfAlpha: ctx.params.zipfAlpha,
+        entryBytes: hazelcastEntryBytes(ctx.params),
+        capacityBytes: hazelcastGridCapacityBytes(ctx.params),
+        ttlSec: ctx.params.ttlSec,
+    }),
+});
+
+const hazelcast = defineComponent({
+    id: 'hazelcast',
+    group: 'cache',
+    shape: 'node',
+    wave: 'v2',
+    icon: 'sd-cache',
+    ports: CACHE_PORTS,
+    defaultParams: hazelcastDefaults,
+    paramSchema: {
+        nodes: num('topology', { min: 1, max: 500, realistic: { min: 3, max: 50 } }),
+        backupCount: num('topology', { min: 0, max: 6, realistic: { min: 1, max: 2 } }),
+        nearCache: bool('behaviour'),
+        nearCacheSizeMb: num('capacity', { unitKey: 'mb', min: 0, max: 65536 }),
+        memoryGb: num('capacity', { unitKey: 'gb', min: 0.1, max: 4096, step: 0.1 }),
+        evictionPolicy: choice('behaviour', ['lru', 'lfu', 'random', 'noeviction']),
+        ttlSec: num('behaviour', { unitKey: 'sec', min: 0, max: 2592000 }),
+        keySizeBytes: num('data', { unitKey: 'bytes', min: 1, max: 65536 }),
+        valueSizeBytes: num('data', { unitKey: 'bytes', min: 1, max: 10485760 }),
+        overheadPerKeyBytes: num('data', { unitKey: 'bytes', min: 0, max: 1024, realistic: { min: 50, max: 200 } }),
+        uniqueKeys: num('data', { min: 1, max: 1e12 }),
+        zipfAlpha: num('behaviour', { min: 0.3, max: 2.5, step: 0.1, realistic: { min: 0.6, max: 1.4 } }),
+        maxOpsPerSecPerNode: num('capacity', { unitKey: 'rps', min: 1000, max: 10000000, realistic: { min: 30000, max: 200000 } }),
+        networkMbps: num('capacity', { unitKey: 'mbps', min: 10, max: 400000 }),
+        serviceTimeMs: num('performance', { unitKey: 'ms', min: 0.01, max: 1000, step: 0.01 }),
+        consistencyModel: choice('consistency', CONSISTENCY_MODEL),
+        replicationMode: choice('consistency', REPLICATION_MODE),
+        replicaLagMs: num('consistency', { unitKey: 'ms', min: 0, max: 60000, realistic: { min: 0, max: 100 } }),
+        replicaLagSigma: num('consistency', { min: 0.1, max: 3, step: 0.1 }),
+        concurrencyControl: choice('consistency', CONCURRENCY_CONTROL),
+        conflictResolution: choice('consistency', CONFLICT_RESOLUTION),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.001 }),
+    },
+    model: hazelcastModel,
+    helpId: 'hazelcast',
+});
+
 export const cacheComponents: ComponentDefinition[] = [
     redis,
     memcached,
     localCache,
+    hazelcast,
 ] as unknown as ComponentDefinition[];

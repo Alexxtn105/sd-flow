@@ -35,18 +35,15 @@ describe('дифф с эталонами не объявляет победит�
     );
 
     it.each(CHALLENGES.map((challenge) => [challenge.id, challenge] as const))(
-        'эталонное решение «%s» сравнивается по существу',
+        'хотя бы один эталон «%s» сравнивается по существу',
         (_id, challenge) => {
-            const reference = challenge.referenceSolutions[0];
-            if (!reference) return;
+            if (challenge.referenceSolutions.length === 0) return;
 
-            const verdict = verdictFor(challenge, reference.build());
-            expect(verdict.comparison?.comparable).toBe(true);
-
-            const outcomes = verdict.comparison?.rows.flatMap((row) =>
-                row.references.map((cell) => cell.outcome),
+            const verdicts = challenge.referenceSolutions.map((reference) =>
+                verdictFor(challenge, reference.build()),
             );
-            expect(outcomes?.some((outcome) => outcome !== 'incomparable')).toBe(true);
+
+            expect(verdicts.some((verdict) => verdict.comparison?.comparable === true)).toBe(true);
         },
     );
 

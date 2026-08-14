@@ -10,23 +10,23 @@ import enGroups from '../../src/locales/en/groups.json';
 import ruParams from '../../src/locales/ru/params.json';
 import enParams from '../../src/locales/en/params.json';
 
-const EXPECTED_SHIPPED_COUNT = 109;
+const EXPECTED_SHIPPED_COUNT = 127;
 
-const SHIPPED_WAVES = new Set<Wave>(['mvp', 'v1']);
+const SHIPPED_WAVES = new Set<Wave>(['mvp', 'v1', 'v2']);
 
 const EXPECTED_PER_GROUP: Record<string, number> = {
     clients: 7,
-    edge: 11,
-    compute: 11,
-    sql: 5,
-    nosql: 10,
-    search: 4,
-    olap: 5,
-    cache: 3,
-    messaging: 11,
-    storage: 5,
-    platform: 13,
-    observability: 5,
+    edge: 12,
+    compute: 13,
+    sql: 8,
+    nosql: 13,
+    search: 5,
+    olap: 7,
+    cache: 4,
+    messaging: 12,
+    storage: 7,
+    platform: 14,
+    observability: 6,
     topology: 8,
     probes: 11,
 };

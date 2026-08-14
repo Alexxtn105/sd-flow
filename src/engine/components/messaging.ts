@@ -11,6 +11,7 @@ import {
     quotaBound,
     resourceLimit,
     totalCost,
+    weightedUnitBound,
 } from '../sim/resources';
 import { bool, choice, defineComponent, num } from './_shared/params';
 
@@ -1257,6 +1258,202 @@ const schedulerQueue = defineComponent({
     helpId: 'scheduler-queue',
 });
 
+const PULSAR_OFFLOAD_STREAM_COPIES = 1;
+
+const pulsarDefaults = {
+    brokers: 3,
+    bookies: 4,
+    topics: 20,
+    partitions: 12,
+    replicationFactor: 3,
+    minInsync: 2,
+    subscriptionType: 'shared',
+    consumerGroups: 4,
+    consumersPerGroup: 6,
+    messageSizeKb: 4,
+    compression: 'lz4',
+    batchMs: 10,
+    retentionHours: 168,
+    tieredStorage: true,
+    tieredOffloadHours: 24,
+    diskGbPerBookie: 2000,
+    throughputMbsPerBroker: 250,
+    produceLatencyMs: 5,
+    availability: 0.9995,
+    costPerInstanceHour: 0.45,
+    costPerGbMonth: 0.1,
+    costPerGbMonthOffload: 0.023,
+};
+
+function pulsarMessageBytes(params: typeof pulsarDefaults): number {
+    return (params.messageSizeKb * 1000) / (COMPRESSION_RATIO[params.compression] ?? 1);
+}
+
+function pulsarLocalRetentionHours(params: typeof pulsarDefaults): number {
+    return params.tieredStorage
+        ? Math.min(params.tieredOffloadHours, params.retentionHours)
+        : params.retentionHours;
+}
+
+function pulsarLocalRetentionShare(params: typeof pulsarDefaults): number {
+    return Math.min(1, pulsarLocalRetentionHours(params) / Math.max(params.retentionHours, 1));
+}
+
+function pulsarLocalDiskBytes(params: typeof pulsarDefaults): number {
+    return params.bookies * params.diskGbPerBookie * 1e9;
+}
+
+function pulsarStreamCopies(params: typeof pulsarDefaults): number {
+    return (
+        params.replicationFactor +
+        params.consumerGroups +
+        (params.tieredStorage ? PULSAR_OFFLOAD_STREAM_COPIES : 0)
+    );
+}
+
+const pulsarModel = defineModel<typeof pulsarDefaults>({
+    serviceSec: (ctx) => ctx.params.produceLatencyMs / 1000,
+    resources: (ctx) => {
+        const messageBytes = pulsarMessageBytes(ctx.params);
+        const localRetentionSec = pulsarLocalRetentionHours(ctx.params) * SECONDS_PER_HOUR;
+
+        return [
+            partitionBound(
+                'partitions',
+                ctx.params.partitions,
+                (PARTITION_THROUGHPUT_MBS * 1e6) / messageBytes,
+            ),
+            bandwidthBound(
+                'broker-network',
+                ctx.params.brokers * ctx.params.throughputMbsPerBroker * 8,
+                messageBytes * pulsarStreamCopies(ctx.params),
+            ),
+            weightedUnitBound(
+                'retention-disk',
+                'bookies × diskGbPerBookie × 10⁹ / (messageBytes × replicationFactor × localRetentionSec × writeShare)',
+                {
+                    bookies: ctx.params.bookies,
+                    diskGbPerBookie: ctx.params.diskGbPerBookie,
+                    messageBytes,
+                    replicationFactor: ctx.params.replicationFactor,
+                    localRetentionSec,
+                    tieredStorage: String(ctx.params.tieredStorage),
+                    writeShare: ctx.writeShare,
+                },
+                0,
+                (messageBytes * ctx.params.replicationFactor * localRetentionSec) /
+                    pulsarLocalDiskBytes(ctx.params),
+                ctx.readShare,
+                ctx.writeShare,
+            ),
+        ];
+    },
+    storage: (ctx) => {
+        const messageBytes = pulsarMessageBytes(ctx.params);
+        const growthGbDay =
+            (ctx.writeRps * SECONDS_PER_DAY * messageBytes * ctx.params.replicationFactor) / 1e9;
+        const retainedDays = Math.min(ctx.params.retentionHours / 24, ctx.horizonDays);
+        const totalGb = growthGbDay * retainedDays;
+        const localShare = pulsarLocalRetentionShare(ctx.params);
+
+        return {
+            totalGb,
+            growthGbDay,
+            memoryGb: 0,
+            explain: [
+                explain(
+                    'writeRps × 86400 × messageSizeKb × 1000 / compressionRatio × RF / 10⁹',
+                    {
+                        writeRps: ctx.writeRps,
+                        messageSizeKb: ctx.params.messageSizeKb,
+                        compressionRatio: COMPRESSION_RATIO[ctx.params.compression] ?? 1,
+                        RF: ctx.params.replicationFactor,
+                    },
+                    growthGbDay,
+                    'gb/day',
+                ),
+                explain(
+                    'growthGbDay × min(retentionHours / 24, horizonDays)',
+                    {
+                        growthGbDay,
+                        retentionHours: ctx.params.retentionHours,
+                        horizonDays: ctx.horizonDays,
+                    },
+                    totalGb,
+                    'gb',
+                ),
+                explain(
+                    'totalGb × localRetentionHours / retentionHours',
+                    {
+                        totalGb,
+                        localRetentionHours: pulsarLocalRetentionHours(ctx.params),
+                        retentionHours: ctx.params.retentionHours,
+                        tieredStorage: String(ctx.params.tieredStorage),
+                    },
+                    totalGb * localShare,
+                    'gb',
+                ),
+            ],
+        };
+    },
+    cost: (ctx) => {
+        const localShare = pulsarLocalRetentionShare(ctx.params);
+
+        return totalCost({
+            compute:
+                (ctx.params.brokers + ctx.params.bookies) *
+                ctx.params.costPerInstanceHour *
+                HOURS_PER_MONTH *
+                ctx.regionCostMultiplier,
+            storage:
+                ctx.storageGb * localShare * ctx.params.costPerGbMonth +
+                ctx.storageGb * (1 - localShare) * ctx.params.costPerGbMonthOffload,
+            network: 0,
+            requests: 0,
+        });
+    },
+    availability: (params) => params.availability,
+});
+
+const pulsar = defineComponent({
+    id: 'pulsar',
+    group: 'messaging',
+    shape: 'node',
+    wave: 'v2',
+    icon: 'sd-queue',
+    ports: {
+        in: [{ id: 'produce', protocols: ['kafka'], role: 'serve' }],
+        out: [{ id: 'consume', protocols: ['kafka'], role: 'emit' }],
+    },
+    defaultParams: pulsarDefaults,
+    paramSchema: {
+        brokers: num('topology', { min: 1, max: 500, realistic: { min: 3, max: 30 } }),
+        bookies: num('topology', { min: 1, max: 500, realistic: { min: 3, max: 40 } }),
+        topics: num('topology', { min: 1, max: 1000000 }),
+        partitions: num('capacity', { min: 1, max: 10000, realistic: { min: 3, max: 200 } }),
+        replicationFactor: num('reliability', { min: 1, max: 9, realistic: { min: 2, max: 3 } }),
+        minInsync: num('reliability', { min: 1, max: 9 }),
+        subscriptionType: choice('consistency', ['exclusive', 'failover', 'shared', 'key-shared']),
+        consumerGroups: num('scale', { min: 0, max: 1000 }),
+        consumersPerGroup: num('scale', { min: 1, max: 10000 }),
+        messageSizeKb: num('data', { unitKey: 'kb', min: 0.05, max: 10240, step: 0.05 }),
+        compression: choice('data', ['none', 'gzip', 'snappy', 'lz4', 'zstd']),
+        batchMs: num('behaviour', { unitKey: 'ms', min: 0, max: 10000 }),
+        retentionHours: num('data', { min: 1, max: 87600, realistic: { min: 24, max: 8760 } }),
+        tieredStorage: bool('data'),
+        tieredOffloadHours: num('data', { min: 1, max: 8760, realistic: { min: 1, max: 168 } }),
+        diskGbPerBookie: num('capacity', { unitKey: 'gb', min: 10, max: 500000 }),
+        throughputMbsPerBroker: num('capacity', { min: 1, max: 10000, realistic: { min: 100, max: 500 } }),
+        produceLatencyMs: num('performance', { unitKey: 'ms', min: 0.1, max: 10000, step: 0.1 }),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.001 }),
+        costPerGbMonth: num('cost', { unitKey: 'usd', min: 0, max: 10, step: 0.001 }),
+        costPerGbMonthOffload: num('cost', { unitKey: 'usd', min: 0, max: 10, step: 0.001 }),
+    },
+    model: pulsarModel,
+    helpId: 'pulsar',
+});
+
 export const messagingComponents: ComponentDefinition[] = [
     kafka,
     rabbitmq,
@@ -1269,4 +1466,5 @@ export const messagingComponents: ComponentDefinition[] = [
     cdc,
     dlq,
     schedulerQueue,
+    pulsar,
 ] as unknown as ComponentDefinition[];

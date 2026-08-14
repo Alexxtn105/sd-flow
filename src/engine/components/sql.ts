@@ -8,6 +8,7 @@ import {
     iopsBound,
     littleLaw,
     totalCost,
+    vendorUnitBound,
     weightedUnitBound,
 } from '../sim/resources';
 import { bool, choice, defineComponent, num, text } from './_shared/params';
@@ -750,82 +751,356 @@ const cockroachDefaults = {
     costPerGbMonth: 0.1,
 };
 
-function cockroachWriteQuorum(params: typeof cockroachDefaults): number {
+interface DistributedSqlParams extends ComponentParams {
+    nodes: number;
+    regions: number;
+    replicationFactor: number;
+    partitionStrategy: string;
+    maxConnections: number;
+    connectionPooler: string;
+    connectionsPerQuery: number;
+    cpuCores: number;
+    maxOpsPerSecPerNode: number;
+    provisionedIops: number;
+    iopsPerRead: number;
+    iopsPerWrite: number;
+    rowSizeBytes: number;
+    rowCount: number;
+    indexOverhead: number;
+    intraAzLatencyMs: number;
+    crossRegionRttMs: number;
+    readServiceMs: number;
+    writeServiceMs: number;
+    transactionScope: string;
+    availability: number;
+    costPerInstanceHour: number;
+    costPerGbMonth: number;
+}
+
+function distributedWriteQuorum(params: DistributedSqlParams): number {
     return Math.floor(params.replicationFactor / 2) + 1;
 }
 
-function cockroachQuorumRttMs(params: typeof cockroachDefaults): number {
+function distributedQuorumRttMs(params: DistributedSqlParams): number {
     const quorumStaysInRegion = params.partitionStrategy === 'geo-partitioned' || params.regions <= 1;
 
     return quorumStaysInRegion ? params.intraAzLatencyMs : params.crossRegionRttMs;
 }
 
-function cockroachWriteSec(params: typeof cockroachDefaults): number {
+function distributedWriteSec(params: DistributedSqlParams): number {
     return (
-        ((params.writeServiceMs + cockroachQuorumRttMs(params)) *
+        ((params.writeServiceMs + distributedQuorumRttMs(params)) *
             transactionScopeCost(params.transactionScope)) /
         1000
     );
 }
 
-function cockroachServiceSec(
-    params: typeof cockroachDefaults,
+function distributedServiceSec(
+    params: DistributedSqlParams,
     readShare: number,
     writeShare: number,
 ): number {
-    return (readShare * params.readServiceMs) / 1000 + writeShare * cockroachWriteSec(params);
+    return (readShare * params.readServiceMs) / 1000 + writeShare * distributedWriteSec(params);
 }
 
-const cockroachModel = defineModel<typeof cockroachDefaults>({
-    serviceSec: (ctx) => cockroachServiceSec(ctx.params, ctx.readShare, ctx.writeShare),
+function distributedSqlModel<P extends DistributedSqlParams>() {
+    return defineModel<P>({
+        serviceSec: (ctx) => distributedServiceSec(ctx.params, ctx.readShare, ctx.writeShare),
+        resources: (ctx) => {
+            const serviceSec = distributedServiceSec(ctx.params, ctx.readShare, ctx.writeShare);
+            const quorum = distributedWriteQuorum(ctx.params);
+            const clusterOps = ctx.params.nodes * ctx.params.maxOpsPerSecPerNode;
+            const clusterIops = ctx.params.provisionedIops * ctx.params.nodes;
+
+            return [
+                weightedUnitBound(
+                    'raft-quorum',
+                    'nodes × maxOpsPerSecPerNode / (readShare + writeShare × quorum)',
+                    {
+                        nodes: ctx.params.nodes,
+                        maxOpsPerSecPerNode: ctx.params.maxOpsPerSecPerNode,
+                        quorum,
+                        replicationFactor: ctx.params.replicationFactor,
+                        readShare: ctx.readShare,
+                        writeShare: ctx.writeShare,
+                    },
+                    1 / clusterOps,
+                    quorum / clusterOps,
+                    ctx.readShare,
+                    ctx.writeShare,
+                ),
+                littleLaw('cpu', ctx.params.nodes * ctx.params.cpuCores, serviceSec),
+                connectionBound(
+                    'connections',
+                    ctx.params.maxConnections *
+                        ctx.params.nodes *
+                        poolerMultiplier(ctx.params.connectionPooler),
+                    ctx.params.connectionsPerQuery,
+                    serviceSec,
+                ),
+                weightedUnitBound(
+                    'iops',
+                    'provisionedIops × nodes / (readShare × iopsPerRead + writeShare × iopsPerWrite × RF)',
+                    {
+                        provisionedIops: ctx.params.provisionedIops,
+                        nodes: ctx.params.nodes,
+                        iopsPerRead: ctx.params.iopsPerRead,
+                        iopsPerWrite: ctx.params.iopsPerWrite,
+                        RF: ctx.params.replicationFactor,
+                        readShare: ctx.readShare,
+                        writeShare: ctx.writeShare,
+                    },
+                    ctx.params.iopsPerRead / clusterIops,
+                    (ctx.params.iopsPerWrite * ctx.params.replicationFactor) / clusterIops,
+                    ctx.readShare,
+                    ctx.writeShare,
+                ),
+            ];
+        },
+        storage: (ctx) => {
+            const factor = ctx.params.replicationFactor;
+            const bytesPerRow = ctx.params.rowSizeBytes * (1 + ctx.params.indexOverhead);
+            const growthGbDay = (ctx.writeRps * SECONDS_PER_DAY * bytesPerRow * factor) / 1e9;
+            const baseGb = (ctx.params.rowCount * bytesPerRow * factor) / 1e9;
+
+            return {
+                totalGb: baseGb + growthGbDay * ctx.horizonDays,
+                growthGbDay,
+                memoryGb: 0,
+                explain: [
+                    explain(
+                        'rowCount × rowSize × (1 + indexOverhead) × RF / 10⁹',
+                        {
+                            rowCount: ctx.params.rowCount,
+                            rowSize: ctx.params.rowSizeBytes,
+                            indexOverhead: ctx.params.indexOverhead,
+                            RF: factor,
+                        },
+                        baseGb,
+                        'gb',
+                    ),
+                    explain(
+                        'writeRps × 86400 × rowSize × (1 + indexOverhead) × RF / 10⁹',
+                        {
+                            writeRps: ctx.writeRps,
+                            rowSize: ctx.params.rowSizeBytes,
+                            indexOverhead: ctx.params.indexOverhead,
+                            RF: factor,
+                        },
+                        growthGbDay,
+                        'gb/day',
+                    ),
+                ],
+            };
+        },
+        cost: (ctx) =>
+            totalCost({
+                compute:
+                    ctx.params.nodes *
+                    ctx.params.costPerInstanceHour *
+                    HOURS_PER_MONTH *
+                    ctx.regionCostMultiplier,
+                storage: ctx.storageGb * ctx.params.costPerGbMonth,
+                network: 0,
+                requests: 0,
+            }),
+        availability: (params) => params.availability,
+    });
+}
+
+const DISTRIBUTED_SQL_SCHEMA = {
+    nodes: num('topology', { min: 3, max: 1000, realistic: { min: 3, max: 100 } }),
+        regions: num('topology', { min: 1, max: 20 }),
+        replicationFactor: num('topology', { min: 1, max: 9, realistic: { min: 3, max: 5 } }),
+        partitionStrategy: choice('topology', PARTITION_STRATEGY),
+        partitionKey: text('topology'),
+        partitionSizeMb: num('data', { unitKey: 'mb', min: 1, max: 8192, realistic: { min: 128, max: 1024 } }),
+        maxConnections: num('capacity', { min: 10, max: 20000, realistic: { min: 100, max: 1000 } }),
+        connectionPooler: choice('capacity', CONNECTION_POOLER),
+        connectionsPerQuery: num('capacity', { min: 0.01, max: 10, step: 0.01 }),
+        cpuCores: num('capacity', { min: 1, max: 192 }),
+        maxOpsPerSecPerNode: num('capacity', { unitKey: 'rps', min: 100, max: 1000000, realistic: { min: 3000, max: 20000 } }),
+        storageGbPerNode: num('capacity', { unitKey: 'gb', min: 10, max: 200000 }),
+        provisionedIops: num('capacity', { min: 100, max: 1000000 }),
+        iopsPerRead: num('capacity', { min: 0.1, max: 100, step: 0.1 }),
+        iopsPerWrite: num('capacity', { min: 0.1, max: 100, step: 0.1, realistic: { min: 2, max: 6 } }),
+        rowSizeBytes: num('data', { unitKey: 'bytes', min: 10, max: 1000000 }),
+        rowCount: num('data', { min: 0, max: 1000000000000 }),
+        indexOverhead: num('data', { min: 0, max: 3, step: 0.1, realistic: { min: 0.2, max: 1 } }),
+        queryProfile: choice('performance', QUERY_PROFILE),
+        intraAzLatencyMs: num('performance', { unitKey: 'ms', min: 0.05, max: 50, step: 0.05, realistic: { min: 0.2, max: 2 } }),
+        crossRegionRttMs: num('performance', { unitKey: 'ms', min: 1, max: 500, realistic: { min: 30, max: 150 } }),
+        readServiceMs: num('performance', { unitKey: 'ms', min: 0.05, max: 60000, step: 0.05 }),
+        writeServiceMs: num('performance', { unitKey: 'ms', min: 0.05, max: 60000, step: 0.05 }),
+        consistencyModel: choice('consistency', CONSISTENCY_MODEL),
+        replicationMode: choice('consistency', REPLICATION_MODE),
+        replicaLagMs: num('consistency', { unitKey: 'ms', min: 0, max: 600000, realistic: { min: 10, max: 500 } }),
+        replicaLagSigma: num('consistency', { min: 0.1, max: 3, step: 0.1 }),
+        readFromReplica: num('consistency', { min: 0, max: 1, step: 0.05 }),
+        stickyReadShare: num('consistency', { min: 0, max: 1, step: 0.05 }),
+        concurrencyControl: choice('consistency', CONCURRENCY_CONTROL),
+        isolationLevel: choice('consistency', ISOLATION_LEVEL),
+        conflictResolution: choice('consistency', CONFLICT_RESOLUTION),
+        transactionScope: choice('consistency', TRANSACTION_SCOPE),
+        multiAz: bool('reliability'),
+        failoverSec: num('reliability', { unitKey: 'sec', min: 1, max: 3600, realistic: { min: 5, max: 30 } }),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.001 }),
+        costPerGbMonth: num('cost', { unitKey: 'usd', min: 0, max: 10, step: 0.001 }),
+};
+
+const cockroach = defineComponent({
+    id: 'cockroach',
+    group: 'sql',
+    shape: 'node',
+    wave: 'v1',
+    icon: 'sd-sql-distributed',
+    ports: SQL_PORTS,
+    defaultParams: cockroachDefaults,
+    paramSchema: DISTRIBUTED_SQL_SCHEMA,
+    model: distributedSqlModel<typeof cockroachDefaults>(),
+    helpId: 'cockroach',
+});
+
+const yugabyteDefaults = {
+    ...cockroachDefaults,
+    nodes: 6,
+    partitionSizeMb: 256,
+    maxConnections: 300,
+    maxOpsPerSecPerNode: 6000,
+    storageGbPerNode: 2000,
+    provisionedIops: 16000,
+    iopsPerWrite: 3,
+    rowCount: 1500000000,
+    readServiceMs: 1,
+    writeServiceMs: 1.8,
+    replicaLagMs: 60,
+    isolationLevel: 'snapshot',
+    failoverSec: 12,
+    costPerInstanceHour: 0.65,
+};
+
+const yugabyte = defineComponent({
+    id: 'yugabyte',
+    group: 'sql',
+    shape: 'node',
+    wave: 'v2',
+    icon: 'sd-sql-distributed',
+    ports: SQL_PORTS,
+    defaultParams: yugabyteDefaults,
+    paramSchema: DISTRIBUTED_SQL_SCHEMA,
+    model: distributedSqlModel<typeof yugabyteDefaults>(),
+    helpId: 'yugabyte',
+});
+
+const SPANNER_COMMIT_WAIT_FACTOR = 2;
+
+const spannerDefaults = {
+    nodes: 3,
+    regions: 3,
+    replicationFactor: 5,
+    partitionStrategy: 'global-table',
+    partitionKey: 'userId',
+    partitionSizeMb: 512,
+    maxSessions: 10000,
+    connectionsPerQuery: 1,
+    maxReadsPerSecPerNode: 22500,
+    maxWritesPerSecPerNode: 13900,
+    commitConcurrency: 300,
+    trueTimeUncertaintyMs: 3,
+    storageGbPerNode: 4000,
+    indexCount: 2,
+    rowSizeBytes: 400,
+    rowCount: 2000000000,
+    indexOverhead: 0.4,
+    queryProfile: 'point-read',
+    intraAzLatencyMs: 0.5,
+    crossRegionRttMs: 70,
+    readServiceMs: 1.5,
+    writeServiceMs: 3,
+    consistencyModel: 'linearizable',
+    replicationMode: 'sync',
+    replicaLagMs: 10,
+    replicaLagSigma: 0.8,
+    readFromReplica: 0.3,
+    stickyReadShare: 0,
+    concurrencyControl: 'pessimistic',
+    isolationLevel: 'serializable',
+    conflictResolution: 'single-writer-per-key',
+    transactionScope: 'distributed-2pc',
+    multiAz: true,
+    failoverSec: 10,
+    availability: 0.99999,
+    costPerInstanceHour: 3,
+    costPerGbMonth: 0.3,
+};
+
+function spannerQuorumRttMs(params: typeof spannerDefaults): number {
+    const quorumStaysInRegion = params.partitionStrategy === 'geo-partitioned' || params.regions <= 1;
+
+    return quorumStaysInRegion ? params.intraAzLatencyMs : params.crossRegionRttMs;
+}
+
+function spannerCommitWaitMs(params: typeof spannerDefaults): number {
+    return SPANNER_COMMIT_WAIT_FACTOR * params.trueTimeUncertaintyMs;
+}
+
+function spannerWriteSec(params: typeof spannerDefaults): number {
+    return (
+        (params.writeServiceMs * transactionScopeCost(params.transactionScope) +
+            spannerQuorumRttMs(params) +
+            spannerCommitWaitMs(params)) /
+        1000
+    );
+}
+
+function spannerServiceSec(
+    params: typeof spannerDefaults,
+    readShare: number,
+    writeShare: number,
+): number {
+    return (readShare * params.readServiceMs) / 1000 + writeShare * spannerWriteSec(params);
+}
+
+const spannerModel = defineModel<typeof spannerDefaults>({
+    serviceSec: (ctx) => spannerServiceSec(ctx.params, ctx.readShare, ctx.writeShare),
     resources: (ctx) => {
-        const serviceSec = cockroachServiceSec(ctx.params, ctx.readShare, ctx.writeShare);
-        const quorum = cockroachWriteQuorum(ctx.params);
-        const clusterOps = ctx.params.nodes * ctx.params.maxOpsPerSecPerNode;
-        const clusterIops = ctx.params.provisionedIops * ctx.params.nodes;
+        const serviceSec = spannerServiceSec(ctx.params, ctx.readShare, ctx.writeShare);
+        const commitSlots = ctx.params.nodes * ctx.params.commitConcurrency;
 
         return [
-            weightedUnitBound(
-                'raft-quorum',
-                'nodes × maxOpsPerSecPerNode / (readShare + writeShare × quorum)',
-                {
-                    nodes: ctx.params.nodes,
-                    maxOpsPerSecPerNode: ctx.params.maxOpsPerSecPerNode,
-                    quorum,
-                    replicationFactor: ctx.params.replicationFactor,
-                    readShare: ctx.readShare,
-                    writeShare: ctx.writeShare,
-                },
-                1 / clusterOps,
-                quorum / clusterOps,
+            vendorUnitBound(
+                'vendor-units',
+                ctx.params.nodes * ctx.params.maxReadsPerSecPerNode,
+                ctx.params.nodes * ctx.params.maxWritesPerSecPerNode,
+                1,
+                1 + ctx.params.indexCount,
                 ctx.readShare,
                 ctx.writeShare,
             ),
-            littleLaw('cpu', ctx.params.nodes * ctx.params.cpuCores, serviceSec),
+            weightedUnitBound(
+                'commit-wait',
+                'nodes × commitConcurrency / (writeShare × (writeServiceMs × scopeCost + quorumRttMs + commitWaitMs))',
+                {
+                    nodes: ctx.params.nodes,
+                    commitConcurrency: ctx.params.commitConcurrency,
+                    writeServiceMs: ctx.params.writeServiceMs,
+                    scopeCost: transactionScopeCost(ctx.params.transactionScope),
+                    quorumRttMs: spannerQuorumRttMs(ctx.params),
+                    trueTimeUncertaintyMs: ctx.params.trueTimeUncertaintyMs,
+                    commitWaitMs: spannerCommitWaitMs(ctx.params),
+                    writeShare: ctx.writeShare,
+                },
+                0,
+                spannerWriteSec(ctx.params) / commitSlots,
+                ctx.readShare,
+                ctx.writeShare,
+            ),
             connectionBound(
                 'connections',
-                ctx.params.maxConnections *
-                    ctx.params.nodes *
-                    poolerMultiplier(ctx.params.connectionPooler),
+                ctx.params.maxSessions * ctx.params.nodes,
                 ctx.params.connectionsPerQuery,
                 serviceSec,
-            ),
-            weightedUnitBound(
-                'iops',
-                'provisionedIops × nodes / (readShare × iopsPerRead + writeShare × iopsPerWrite × RF)',
-                {
-                    provisionedIops: ctx.params.provisionedIops,
-                    nodes: ctx.params.nodes,
-                    iopsPerRead: ctx.params.iopsPerRead,
-                    iopsPerWrite: ctx.params.iopsPerWrite,
-                    RF: ctx.params.replicationFactor,
-                    readShare: ctx.readShare,
-                    writeShare: ctx.writeShare,
-                },
-                ctx.params.iopsPerRead / clusterIops,
-                (ctx.params.iopsPerWrite * ctx.params.replicationFactor) / clusterIops,
-                ctx.readShare,
-                ctx.writeShare,
             ),
         ];
     },
@@ -879,30 +1154,30 @@ const cockroachModel = defineModel<typeof cockroachDefaults>({
     availability: (params) => params.availability,
 });
 
-const cockroach = defineComponent({
-    id: 'cockroach',
+const spanner = defineComponent({
+    id: 'spanner',
     group: 'sql',
     shape: 'node',
-    wave: 'v1',
+    wave: 'v2',
     icon: 'sd-sql-distributed',
     ports: SQL_PORTS,
-    defaultParams: cockroachDefaults,
+    managed: true,
+    defaultParams: spannerDefaults,
     paramSchema: {
-        nodes: num('topology', { min: 3, max: 1000, realistic: { min: 3, max: 100 } }),
+        nodes: num('topology', { min: 1, max: 1000, realistic: { min: 1, max: 100 } }),
         regions: num('topology', { min: 1, max: 20 }),
         replicationFactor: num('topology', { min: 1, max: 9, realistic: { min: 3, max: 5 } }),
         partitionStrategy: choice('topology', PARTITION_STRATEGY),
         partitionKey: text('topology'),
         partitionSizeMb: num('data', { unitKey: 'mb', min: 1, max: 8192, realistic: { min: 128, max: 1024 } }),
-        maxConnections: num('capacity', { min: 10, max: 20000, realistic: { min: 100, max: 1000 } }),
-        connectionPooler: choice('capacity', CONNECTION_POOLER),
+        maxSessions: num('capacity', { min: 100, max: 1000000, realistic: { min: 1000, max: 100000 } }),
         connectionsPerQuery: num('capacity', { min: 0.01, max: 10, step: 0.01 }),
-        cpuCores: num('capacity', { min: 1, max: 192 }),
-        maxOpsPerSecPerNode: num('capacity', { unitKey: 'rps', min: 100, max: 1000000, realistic: { min: 3000, max: 20000 } }),
+        maxReadsPerSecPerNode: num('capacity', { unitKey: 'rps', min: 100, max: 1000000, realistic: { min: 10000, max: 30000 } }),
+        maxWritesPerSecPerNode: num('capacity', { unitKey: 'rps', min: 100, max: 1000000, realistic: { min: 5000, max: 20000 } }),
+        commitConcurrency: num('capacity', { min: 1, max: 100000, realistic: { min: 100, max: 1000 } }),
+        trueTimeUncertaintyMs: num('performance', { unitKey: 'ms', min: 0.1, max: 100, step: 0.1, realistic: { min: 1, max: 7 } }),
         storageGbPerNode: num('capacity', { unitKey: 'gb', min: 10, max: 200000 }),
-        provisionedIops: num('capacity', { min: 100, max: 1000000 }),
-        iopsPerRead: num('capacity', { min: 0.1, max: 100, step: 0.1 }),
-        iopsPerWrite: num('capacity', { min: 0.1, max: 100, step: 0.1, realistic: { min: 2, max: 6 } }),
+        indexCount: num('data', { min: 0, max: 64 }),
         rowSizeBytes: num('data', { unitKey: 'bytes', min: 10, max: 1000000 }),
         rowCount: num('data', { min: 0, max: 1000000000000 }),
         indexOverhead: num('data', { min: 0, max: 3, step: 0.1, realistic: { min: 0.2, max: 1 } }),
@@ -913,7 +1188,7 @@ const cockroach = defineComponent({
         writeServiceMs: num('performance', { unitKey: 'ms', min: 0.05, max: 60000, step: 0.05 }),
         consistencyModel: choice('consistency', CONSISTENCY_MODEL),
         replicationMode: choice('consistency', REPLICATION_MODE),
-        replicaLagMs: num('consistency', { unitKey: 'ms', min: 0, max: 600000, realistic: { min: 10, max: 500 } }),
+        replicaLagMs: num('consistency', { unitKey: 'ms', min: 0, max: 600000, realistic: { min: 1, max: 100 } }),
         replicaLagSigma: num('consistency', { min: 0.1, max: 3, step: 0.1 }),
         readFromReplica: num('consistency', { min: 0, max: 1, step: 0.05 }),
         stickyReadShare: num('consistency', { min: 0, max: 1, step: 0.05 }),
@@ -927,8 +1202,225 @@ const cockroach = defineComponent({
         costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.001 }),
         costPerGbMonth: num('cost', { unitKey: 'usd', min: 0, max: 10, step: 0.001 }),
     },
-    model: cockroachModel,
-    helpId: 'cockroach',
+    model: spannerModel,
+    helpId: 'spanner',
+});
+
+const JOURNAL_MODE = ['rollback', 'wal'];
+
+const SYNCHRONOUS_MODE = ['off', 'normal', 'full'];
+
+const JOURNAL_WRITE_AMPLIFICATION: Record<string, number> = {
+    rollback: 2,
+    wal: 1,
+};
+
+const SYNCHRONOUS_FSYNC_SHARE: Record<string, number> = {
+    off: 0,
+    normal: 0.5,
+    full: 1,
+};
+
+const READER_BLOCKED_BY_WRITER: Record<string, number> = {
+    rollback: 1,
+    wal: 0,
+};
+
+const SQLITE_PAGE_FAULT_MS = 0.15;
+
+const SQLITE_WRITERS = 1;
+
+const sqliteDefaults = {
+    journalMode: 'wal',
+    synchronous: 'normal',
+    writesPerTransaction: 1,
+    cacheSizeMb: 64,
+    databaseSizeMb: 2000,
+    rowSizeBytes: 200,
+    rowCount: 5000000,
+    indexOverhead: 0.3,
+    cpuCores: 4,
+    provisionedIops: 8000,
+    iopsPerRead: 1,
+    iopsPerWrite: 4,
+    queryProfile: 'point-read',
+    readServiceMs: 0.05,
+    writeServiceMs: 0.3,
+    fsyncMs: 2,
+    consistencyModel: 'linearizable',
+    concurrencyControl: 'pessimistic',
+    isolationLevel: 'serializable',
+    availability: 0.99,
+    costPerGbMonth: 0.1,
+};
+
+function sqliteJournalAmplification(params: typeof sqliteDefaults): number {
+    return JOURNAL_WRITE_AMPLIFICATION[params.journalMode] ?? 1;
+}
+
+function sqliteReaderBlockShare(params: typeof sqliteDefaults): number {
+    return READER_BLOCKED_BY_WRITER[params.journalMode] ?? 0;
+}
+
+function sqliteCacheMissShare(params: typeof sqliteDefaults): number {
+    return Math.max(0, 1 - params.cacheSizeMb / Math.max(1, params.databaseSizeMb));
+}
+
+function sqliteFsyncMs(params: typeof sqliteDefaults): number {
+    return (
+        ((SYNCHRONOUS_FSYNC_SHARE[params.synchronous] ?? 1) * params.fsyncMs) /
+        Math.max(1, params.writesPerTransaction)
+    );
+}
+
+function sqliteReadSec(params: typeof sqliteDefaults): number {
+    return (params.readServiceMs + sqliteCacheMissShare(params) * SQLITE_PAGE_FAULT_MS) / 1000;
+}
+
+function sqliteWriteSec(params: typeof sqliteDefaults): number {
+    return (
+        (params.writeServiceMs * sqliteJournalAmplification(params) + sqliteFsyncMs(params)) / 1000
+    );
+}
+
+function sqliteServiceSec(
+    params: typeof sqliteDefaults,
+    readShare: number,
+    writeShare: number,
+): number {
+    return readShare * sqliteReadSec(params) + writeShare * sqliteWriteSec(params);
+}
+
+const sqliteModel = defineModel<typeof sqliteDefaults>({
+    serviceSec: (ctx) => sqliteServiceSec(ctx.params, ctx.readShare, ctx.writeShare),
+    resources: (ctx) => {
+        const readSec = sqliteReadSec(ctx.params);
+        const writeSec = sqliteWriteSec(ctx.params);
+        const readerBlockShare = sqliteReaderBlockShare(ctx.params);
+
+        return [
+            weightedUnitBound(
+                'single-writer',
+                'writers / (writeShare × writeSec + readShare × readerBlockShare × readSec)',
+                {
+                    writers: SQLITE_WRITERS,
+                    journalMode: ctx.params.journalMode,
+                    synchronous: ctx.params.synchronous,
+                    writeSec,
+                    readSec,
+                    readerBlockShare,
+                    fsyncMs: sqliteFsyncMs(ctx.params),
+                    writesPerTransaction: ctx.params.writesPerTransaction,
+                    readShare: ctx.readShare,
+                    writeShare: ctx.writeShare,
+                },
+                (readerBlockShare * readSec) / SQLITE_WRITERS,
+                writeSec / SQLITE_WRITERS,
+                ctx.readShare,
+                ctx.writeShare,
+            ),
+            weightedUnitBound(
+                'cpu',
+                'cpuCores / (readShare × readSec + writeShare × writeSec)',
+                {
+                    cpuCores: ctx.params.cpuCores,
+                    readSec,
+                    writeSec,
+                    cacheMissShare: sqliteCacheMissShare(ctx.params),
+                    readShare: ctx.readShare,
+                    writeShare: ctx.writeShare,
+                },
+                readSec / ctx.params.cpuCores,
+                writeSec / ctx.params.cpuCores,
+                ctx.readShare,
+                ctx.writeShare,
+            ),
+            iopsBound(
+                'iops',
+                ctx.params.provisionedIops,
+                sqliteCacheMissShare(ctx.params) * ctx.params.iopsPerRead,
+                ctx.params.iopsPerWrite * sqliteJournalAmplification(ctx.params),
+                ctx.readShare,
+                ctx.writeShare,
+            ),
+        ];
+    },
+    storage: (ctx) => {
+        const bytesPerRow = ctx.params.rowSizeBytes * (1 + ctx.params.indexOverhead);
+        const baseGb = (ctx.params.rowCount * bytesPerRow) / 1e9;
+        const growthGbDay = (ctx.writeRps * SECONDS_PER_DAY * bytesPerRow) / 1e9;
+
+        return {
+            totalGb: baseGb + growthGbDay * ctx.horizonDays,
+            growthGbDay,
+            memoryGb: ctx.params.cacheSizeMb / 1000,
+            explain: [
+                explain(
+                    'rowCount × rowSize × (1 + indexOverhead) / 10⁹',
+                    {
+                        rowCount: ctx.params.rowCount,
+                        rowSize: ctx.params.rowSizeBytes,
+                        indexOverhead: ctx.params.indexOverhead,
+                    },
+                    baseGb,
+                    'gb',
+                ),
+                explain(
+                    'writeRps × 86400 × rowSize × (1 + indexOverhead) / 10⁹',
+                    {
+                        writeRps: ctx.writeRps,
+                        rowSize: ctx.params.rowSizeBytes,
+                        indexOverhead: ctx.params.indexOverhead,
+                    },
+                    growthGbDay,
+                    'gb/day',
+                ),
+            ],
+        };
+    },
+    cost: (ctx) =>
+        totalCost({
+            compute: 0,
+            storage: ctx.storageGb * ctx.params.costPerGbMonth,
+            network: 0,
+            requests: 0,
+        }),
+    availability: (params) => params.availability,
+});
+
+const sqlite = defineComponent({
+    id: 'sqlite',
+    group: 'sql',
+    shape: 'node',
+    wave: 'v2',
+    icon: 'sd-sql',
+    ports: SQL_PORTS,
+    defaultParams: sqliteDefaults,
+    paramSchema: {
+        journalMode: choice('behaviour', JOURNAL_MODE),
+        synchronous: choice('reliability', SYNCHRONOUS_MODE),
+        writesPerTransaction: num('behaviour', { min: 1, max: 100000, realistic: { min: 1, max: 1000 } }),
+        cacheSizeMb: num('capacity', { unitKey: 'mb', min: 0.1, max: 65536, step: 0.1 }),
+        databaseSizeMb: num('data', { unitKey: 'mb', min: 0.1, max: 1000000, step: 0.1 }),
+        rowSizeBytes: num('data', { unitKey: 'bytes', min: 10, max: 1000000 }),
+        rowCount: num('data', { min: 0, max: 1000000000 }),
+        indexOverhead: num('data', { min: 0, max: 3, step: 0.1, realistic: { min: 0.2, max: 1 } }),
+        cpuCores: num('capacity', { min: 1, max: 64 }),
+        provisionedIops: num('capacity', { min: 10, max: 1000000, realistic: { min: 500, max: 50000 } }),
+        iopsPerRead: num('capacity', { min: 0.1, max: 100, step: 0.1 }),
+        iopsPerWrite: num('capacity', { min: 0.1, max: 100, step: 0.1, realistic: { min: 2, max: 8 } }),
+        queryProfile: choice('performance', QUERY_PROFILE),
+        readServiceMs: num('performance', { unitKey: 'ms', min: 0.01, max: 60000, step: 0.01 }),
+        writeServiceMs: num('performance', { unitKey: 'ms', min: 0.01, max: 60000, step: 0.01 }),
+        fsyncMs: num('performance', { unitKey: 'ms', min: 0, max: 1000, step: 0.1, realistic: { min: 0.5, max: 20 } }),
+        consistencyModel: choice('consistency', CONSISTENCY_MODEL),
+        concurrencyControl: choice('consistency', CONCURRENCY_CONTROL),
+        isolationLevel: choice('consistency', ISOLATION_LEVEL),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerGbMonth: num('cost', { unitKey: 'usd', min: 0, max: 10, step: 0.001 }),
+    },
+    model: sqliteModel,
+    helpId: 'sqlite',
 });
 
 export const sqlComponents: ComponentDefinition[] = [
@@ -937,4 +1429,7 @@ export const sqlComponents: ComponentDefinition[] = [
     aurora,
     vitess,
     cockroach,
+    yugabyte,
+    spanner,
+    sqlite,
 ] as unknown as ComponentDefinition[];

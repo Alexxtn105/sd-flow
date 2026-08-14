@@ -15,11 +15,11 @@ Behind us are the scheme editor (phase 0), the steady-state load model (phase 1)
 Challenges mode (phase 2). Phase 3 added the passage of time, probes, the second catalogue wave
 and ten new challenges.
 
-* **Catalogue — 109 blocks in 14 groups**: the MVP wave (44) plus the V1 wave (65). A capacity
-  model is filled in for 83 blocks — every block that carries traffic; clients have none by
-  construction (they are sources), and containers, links and probes never have one. 98 generic
-  icons, no vendor logos as a matter of principle.
-* **21 challenges** across levels 1–5, accepted by predicates, a Realism Gate, an anti-pattern
+* **Catalogue — 127 blocks in 14 groups: the whole planned catalogue**, MVP (44) plus V1 (65)
+  plus V2 (18). A capacity model is filled in for 101 blocks — every block that carries traffic;
+  clients have none by construction (they are sources), and containers, links and probes never
+  have one. 99 generic icons, no vendor logos as a matter of principle.
+* **23 challenges** across levels 1–5, accepted by predicates, a Realism Gate, an anti-pattern
   linter, a seven-axis rubric and stars.
 * **16 scenarios**, ten of which run over time.
 * The computation is deterministic: the seed is derived from the scheme, the scenario and the
@@ -88,7 +88,7 @@ compact form inside the `probe-waterfall` window.
 
 ### Challenges mode
 
-21 challenges across levels 1–5: from a static site and a URL shortener to payments, a matching
+23 challenges across levels 1–5: from a static site and a URL shortener to payments, a matching
 engine, a global feed and live streaming. Each one has a brief with input numbers and SLOs,
 machine-readable requirements, a scenario battery, hints priced in points, and reference solutions
 that unlock after submission.
@@ -107,10 +107,13 @@ and always points at the specific requirement that failed.
 * **The `split-brain` scenario** — it needs a model of replica divergence and merge, not merely a
   shape of the input load.
 * **Mirrored regions `mirrorOf`** — every region is described with its own nodes by hand.
-* **The `k8s-cluster` pod ceiling** is diagnosed by a finding but not enforced on the computation.
-* **The V2 catalogue wave** — 20 blocks from [docs/01-components.md](docs/01-components.md) §15.
-* The `custom` predicate and the diff against a reference solution, the Incident, Golf and
-  Interview modes, the challenge editor and leaderboards — those are phase 4.
+* **A `k8s-cluster` grows without a ceiling**: with `autoscaleNodes` on it adds as many nodes as
+  the pods need and bills for them, but cloud quotas, subnet addresses and instance availability
+  are not modelled. No document specifies a cap, so none was invented.
+* **The structural diff against a reference solution** — the metric diff exists; matching nodes
+  between two schemes with independent ids does not.
+* The `custom` predicate, the Incident, Golf and Interview modes, the challenge editor and
+  leaderboards — those are still ahead.
 * The whole scheme is always recomputed; there is no incremental recomputation by subgraph.
 
 ## Demo schemes
@@ -157,10 +160,10 @@ The documentation is written in Russian; this README is the English entry point.
 | Document | About |
 |---|---|
 | **[PRD.md](PRD.md)** | The main document: goals, audience, modes, functional requirements, UX, roadmap |
-| [docs/01-components.md](docs/01-components.md) | Catalogue of building blocks: 14 groups, 129 types (109 in the registry), parameters of each |
+| [docs/01-components.md](docs/01-components.md) | Catalogue of building blocks: 14 groups, 127 types, all of them in the registry, parameters of each |
 | [docs/02-simulation.md](docs/02-simulation.md) | Simulation model: capacity, queues, latency, cache, multi-region, consistency anomalies, storage, cost, availability, constants; §15 — what of it is implemented |
 | [docs/03-connections.md](docs/03-connections.md) | Connections: read/write/mixed, sync/async, traffic visualisation |
-| [docs/04-challenges.md](docs/04-challenges.md) | Challenges mode and the acceptance algorithm, a catalogue of 28 tasks (21 implemented), the "YouTube" walkthrough |
+| [docs/04-challenges.md](docs/04-challenges.md) | Challenges mode and the acceptance algorithm, a catalogue of 28 tasks (23 implemented), the "YouTube" walkthrough |
 | [docs/05-architecture.md](docs/05-architecture.md) | Technical architecture, repository structure, code reuse plan, ADRs |
 
 **Decisions taken (2026-08-14):**

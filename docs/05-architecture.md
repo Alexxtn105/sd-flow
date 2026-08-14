@@ -32,7 +32,7 @@ sd-flow/
 │   │   ├── ports.ts                   ← совместимость портов по протоколам
 │   │   ├── edgeDefaults.ts            ← профили вызова по умолчанию + посев payload
 │   │   ├── ids.ts                     ← счётчик идентификаторов без Math.random
-│   │   ├── initComponents.ts          ← регистрация 14 групп и 109 блоков
+│   │   ├── initComponents.ts          ← регистрация 14 групп и 127 блоков
 │   │   ├── types/
 │   │   │   ├── component.ts           ← ComponentDefinition, ComponentModel, контексты
 │   │   │   ├── scheme.ts              ← SchemeV1, CallProfile, EdgePolicy, настройки
@@ -83,7 +83,7 @@ sd-flow/
 │   ├── contexts/                      ← ThemeContext, TouchContext
 │   ├── data/
 │   │   ├── demoSchemes.ts             ← демо-схемы, они же приёмка Definition of Done
-│   │   └── challenges/                ← 21 задание, один модуль на задачу + index.ts
+│   │   └── challenges/                ← 23 задания, один модуль на задачу + index.ts
 │   ├── locales/                       ← ru/en × {common, blocks, groups, params}
 │   ├── services/                      ← storage, файлы, сериализация, конструктор схем, воркеры,
 │   │                                    share-link, экспорт PNG и Markdown, service worker
@@ -382,7 +382,7 @@ install → lint → typecheck → test → compile-challenges (YAML→JSON) →
 |---|---|---|
 | `vite.config`, `eslint.config`, `tsconfig`, `deploy.yml` | те же, `base: '/sd-flow/'`, всё на TypeScript | каркас |
 | `styles/variables.css` | + токены трафика (`--traffic-read/write/replication/event/stream/batch`), утилизации и групп | расширен |
-| `Dialog`, `ErrorBoundary`, `Icon` | те же, `DspIcons` → `SdIcons` (98 родовых иконок, без вендорских логотипов, ADR-10) | почти как есть |
+| `Dialog`, `ErrorBoundary`, `Icon` | те же, `DspIcons` → `SdIcons` (99 родовых иконок, без вендорских логотипов, ADR-10) | почти как есть |
 | `ThemeContext`, `TouchContext`, `useTheme` | как есть, переписаны на TS | как есть |
 | `locales/i18n.js` + неймспейсы | `i18n.ts`, языки ru/en, неймспейсы `common`/`blocks`/`groups`/`params` | как есть |
 | `storageService` | ключи `sd-*`, типизированный `SaveResult`, guard на отсутствие `localStorage` (нужен для тестов в Node) | переписан |
@@ -432,7 +432,7 @@ install → lint → typecheck → test → compile-challenges (YAML→JSON) →
 
 | Появилось | Где | Суть |
 |---|---|---|
-| Волна V1 каталога | `engine/components/*` | 44 → 109 блоков в 14 группах; модель ёмкости у 83 блоков, несущих трафик; 98 родовых иконок |
+| Волны V1 и V2 каталога | `engine/components/*` | 44 → 127 блоков в 14 группах — весь запланированный каталог; модель ёмкости у 101 блока, несущего трафик; 99 родовых иконок |
 | Ход времени | `sim/transient.ts` | Прогон по шагам: лаг автоскейлера, очереди с памятью между шагами, прогрев кэша; ряд `timeline` в `SimResult`, 16 сценариев (10 transient) |
 | Группы `vpc` и `k8s-cluster` | `engine/components/topology.ts`, `sim/{compile,findings}.ts` | Межсетевой хоп и выход через NAT в задержке, стоимость control plane, находки `k8s-pods-exceeded` и `nat-saturated` |
 | Показания проб | `sim/probes.ts` | 11 измерителей считают значение, единицу, статус и `explain`; расчёт схемы от них не меняется — пробы вырезаются из топологии |

@@ -2,6 +2,7 @@ import type { ComponentDefinition, PortSpec } from '../types/component';
 import { HOURS_PER_MONTH, SECONDS_PER_MONTH } from '../sim/constants';
 import {
     bandwidthBound,
+    connectionBound,
     defineModel,
     explicitRps,
     littleLaw,
@@ -967,6 +968,75 @@ const serviceMesh = defineComponent({
     helpId: 'service-mesh',
 });
 
+const natEgressDefaults = {
+    gateways: 2,
+    publicIps: 1,
+    portsPerIp: 64000,
+    connectionsPerRequest: 0.2,
+    portHoldSec: 30,
+    throughputGbps: 45,
+    latencyMs: 0.1,
+    idleTimeoutSec: 350,
+    availability: 0.9995,
+    costPerGatewayHour: 0.045,
+    costPerGb: 0.045,
+};
+
+function natEgressPorts(params: typeof natEgressDefaults): number {
+    return params.gateways * params.publicIps * params.portsPerIp;
+}
+
+const natEgressModel = defineModel<typeof natEgressDefaults>({
+    serviceSec: (ctx) => ctx.params.latencyMs / 1000,
+    resources: (ctx) => [
+        connectionBound(
+            'ports',
+            natEgressPorts(ctx.params),
+            ctx.params.connectionsPerRequest,
+            ctx.params.portHoldSec,
+        ),
+        bandwidthBound(
+            'throughput',
+            ctx.params.gateways * ctx.params.throughputGbps * 1000,
+            ctx.requestBytes + ctx.responseBytes,
+        ),
+    ],
+    cost: (ctx) =>
+        totalCost({
+            compute: ctx.params.gateways * ctx.params.costPerGatewayHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
+            storage: 0,
+            network: ctx.egressGbMonth * (ctx.params.costPerGb + ctx.pricing.egressPerGb),
+            requests: 0,
+        }),
+    availability: (params) => params.availability,
+});
+
+const natEgress = defineComponent({
+    id: 'nat-egress',
+    group: 'edge',
+    shape: 'node',
+    wave: 'v2',
+    icon: 'sd-nat-egress',
+    ports: { in: PROXY_IN, out: PROXY_OUT },
+    defaultParams: natEgressDefaults,
+    paramSchema: {
+        gateways: num('scale', { min: 1, max: 50 }),
+        publicIps: num('scale', { min: 1, max: 256 }),
+        portsPerIp: num('capacity', { min: 1000, max: 65535, realistic: { min: 55000, max: 64512 } }),
+        connectionsPerRequest: num('behaviour', { min: 0.001, max: 10, step: 0.001, realistic: { min: 0.05, max: 1 } }),
+        portHoldSec: num('behaviour', { unitKey: 'sec', min: 1, max: 600, realistic: { min: 15, max: 120 } }),
+        throughputGbps: num('capacity', { min: 0.1, max: 400, step: 0.1 }),
+        latencyMs: num('performance', { unitKey: 'ms', min: 0, max: 50, step: 0.1 }),
+        idleTimeoutSec: num('behaviour', { unitKey: 'sec', min: 1, max: 4000 }),
+        availability: num('reliability', { min: 0.99, max: 0.999999, step: 0.0001 }),
+        costPerGatewayHour: num('cost', { unitKey: 'usd', min: 0, max: 100, step: 0.001 }),
+        costPerGb: num('cost', { unitKey: 'usd', min: 0, max: 5, step: 0.001 }),
+    },
+    model: natEgressModel,
+    helpId: 'nat-egress',
+    managed: true,
+});
+
 export const edgeComponents: ComponentDefinition[] = [
     dns,
     cdn,
@@ -979,4 +1049,5 @@ export const edgeComponents: ComponentDefinition[] = [
     reverseCache,
     wsGateway,
     serviceMesh,
+    natEgress,
 ] as unknown as ComponentDefinition[];

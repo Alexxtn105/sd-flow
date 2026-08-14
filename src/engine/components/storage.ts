@@ -1,5 +1,5 @@
 import type { ComponentDefinition, PortSpec } from '../types/component';
-import { SECONDS_PER_DAY, SECONDS_PER_MONTH } from '../sim/constants';
+import { HOURS_PER_MONTH, SECONDS_PER_DAY, SECONDS_PER_MONTH } from '../sim/constants';
 import {
     bandwidthBound,
     defineModel,
@@ -7,6 +7,7 @@ import {
     explicitRps,
     iopsBound,
     littleLaw,
+    resourceLimit,
     totalCost,
     weightedUnitBound,
 } from '../sim/resources';
@@ -606,10 +607,276 @@ const block = defineComponent({
     helpId: 'block',
 });
 
+const NAMENODE_BYTES_PER_INODE = 150;
+
+const NAMENODE_BYTES_PER_BLOCK = 150;
+
+const NAMENODE_BYTES_PER_REPLICA = 16;
+
+const MIN_HEAP_GB = 1e-6;
+
+const hdfsDefaults = {
+    nodes: 20,
+    blockSizeMb: 128,
+    replication: 3,
+    fileCount: 80000000,
+    avgFileSizeMb: 256,
+    namenodeMemoryGb: 64,
+    namenodeHandlers: 64,
+    namenodeServiceMs: 1,
+    metadataOpsPerRead: 1,
+    metadataOpsPerWrite: 3,
+    throughputMbsPerNode: 500,
+    storageGbPerNode: 8000,
+    latencyMs: 8,
+    availability: 0.999,
+    costPerInstanceHour: 0.4,
+};
+
+function hdfsBlocksPerFile(params: typeof hdfsDefaults): number {
+    return Math.max(1, Math.ceil(params.avgFileSizeMb / params.blockSizeMb));
+}
+
+function hdfsNamenodeBytesPerFile(params: typeof hdfsDefaults): number {
+    return (
+        NAMENODE_BYTES_PER_INODE +
+        hdfsBlocksPerFile(params) *
+            (NAMENODE_BYTES_PER_BLOCK + params.replication * NAMENODE_BYTES_PER_REPLICA)
+    );
+}
+
+function hdfsNamenodeHeapGb(params: typeof hdfsDefaults): number {
+    return (params.fileCount * hdfsNamenodeBytesPerFile(params)) / 1e9;
+}
+
+function hdfsNamenodeResidentShare(params: typeof hdfsDefaults): number {
+    return Math.min(1, params.namenodeMemoryGb / Math.max(hdfsNamenodeHeapGb(params), MIN_HEAP_GB));
+}
+
+function hdfsMetadataOpsPerRequest(
+    params: typeof hdfsDefaults,
+    readShare: number,
+    writeShare: number,
+): number {
+    return readShare * params.metadataOpsPerRead + writeShare * params.metadataOpsPerWrite;
+}
+
+function hdfsServiceSec(params: typeof hdfsDefaults, readShare: number, writeShare: number): number {
+    const metadataMs =
+        params.namenodeServiceMs * hdfsMetadataOpsPerRequest(params, readShare, writeShare);
+
+    return (params.latencyMs + metadataMs) / 1000;
+}
+
+const hdfsModel = defineModel<typeof hdfsDefaults>({
+    serviceSec: (ctx) => hdfsServiceSec(ctx.params, ctx.readShare, ctx.writeShare),
+    resources: (ctx) => {
+        const metadataOps = hdfsMetadataOpsPerRequest(ctx.params, ctx.readShare, ctx.writeShare);
+        const residentShare = hdfsNamenodeResidentShare(ctx.params);
+        const namenodeServiceSec = (ctx.params.namenodeServiceMs * metadataOps) / 1000;
+
+        return [
+            resourceLimit(
+                'namenode-metadata',
+                (ctx.params.namenodeHandlers * residentShare) / namenodeServiceSec,
+                'namenodeHandlers × min(1, namenodeMemoryGb / namenodeHeapGb) / (namenodeServiceSec × metadataOps)',
+                {
+                    namenodeHandlers: ctx.params.namenodeHandlers,
+                    namenodeMemoryGb: ctx.params.namenodeMemoryGb,
+                    namenodeHeapGb: hdfsNamenodeHeapGb(ctx.params),
+                    namenodeServiceMs: ctx.params.namenodeServiceMs,
+                    metadataOps,
+                },
+            ),
+            bandwidthBound(
+                'throughput',
+                ctx.params.nodes * ctx.params.throughputMbsPerNode * 8,
+                ctx.readShare * ctx.responseBytes + ctx.writeShare * ctx.requestBytes * ctx.params.replication,
+            ),
+        ];
+    },
+    storage: (ctx) => {
+        const fileBytes = ctx.params.avgFileSizeMb * 1e6;
+        const baseGb = (ctx.params.fileCount * fileBytes * ctx.params.replication) / 1e9;
+        const growthGbDay =
+            (ctx.writeRps * SECONDS_PER_DAY * ctx.requestBytes * ctx.params.replication) / 1e9;
+
+        return {
+            totalGb: baseGb + growthGbDay * ctx.horizonDays,
+            growthGbDay,
+            memoryGb: Math.min(hdfsNamenodeHeapGb(ctx.params), ctx.params.namenodeMemoryGb),
+            explain: [
+                explain(
+                    'fileCount × avgFileSizeMb × 10⁶ × replication / 10⁹',
+                    {
+                        fileCount: ctx.params.fileCount,
+                        avgFileSizeMb: ctx.params.avgFileSizeMb,
+                        replication: ctx.params.replication,
+                    },
+                    baseGb,
+                    'gb',
+                ),
+                explain(
+                    'writeRps × 86400 × requestBytes × replication / 10⁹',
+                    {
+                        writeRps: ctx.writeRps,
+                        requestBytes: ctx.requestBytes,
+                        replication: ctx.params.replication,
+                    },
+                    growthGbDay,
+                    'gb/day',
+                ),
+                explain(
+                    'fileCount × (inodeBytes + blocksPerFile × (blockBytes + replication × replicaBytes)) / 10⁹',
+                    {
+                        fileCount: ctx.params.fileCount,
+                        inodeBytes: NAMENODE_BYTES_PER_INODE,
+                        blocksPerFile: hdfsBlocksPerFile(ctx.params),
+                        blockBytes: NAMENODE_BYTES_PER_BLOCK,
+                        replicaBytes: NAMENODE_BYTES_PER_REPLICA,
+                        replication: ctx.params.replication,
+                    },
+                    hdfsNamenodeHeapGb(ctx.params),
+                    'gb',
+                ),
+            ],
+        };
+    },
+    cost: (ctx) =>
+        totalCost({
+            compute:
+                ctx.params.nodes * ctx.params.costPerInstanceHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
+            storage: 0,
+            network: 0,
+            requests: 0,
+        }),
+    availability: (params) => params.availability,
+});
+
+const hdfs = defineComponent({
+    id: 'hdfs',
+    group: 'storage',
+    shape: 'node',
+    wave: 'v2',
+    icon: 'sd-bucket-self',
+    ports: FILE_PORTS,
+    defaultParams: hdfsDefaults,
+    paramSchema: {
+        nodes: num('topology', { min: 1, max: 10000, realistic: { min: 3, max: 500 } }),
+        blockSizeMb: num('data', { unitKey: 'mb', min: 1, max: 4096, realistic: { min: 64, max: 512 } }),
+        replication: num('reliability', { min: 1, max: 10, realistic: { min: 2, max: 3 } }),
+        fileCount: num('data', { min: 0, max: 10000000000 }),
+        avgFileSizeMb: num('data', { unitKey: 'mb', min: 0.001, max: 1048576, step: 0.001 }),
+        namenodeMemoryGb: num('capacity', { unitKey: 'gb', min: 1, max: 4096, realistic: { min: 16, max: 256 } }),
+        namenodeHandlers: num('capacity', { min: 1, max: 5000, realistic: { min: 32, max: 512 } }),
+        namenodeServiceMs: num('performance', { unitKey: 'ms', min: 0.01, max: 1000, step: 0.01 }),
+        metadataOpsPerRead: num('performance', { min: 0.1, max: 100, step: 0.1 }),
+        metadataOpsPerWrite: num('performance', { min: 0.1, max: 100, step: 0.1, realistic: { min: 2, max: 6 } }),
+        throughputMbsPerNode: num('capacity', { min: 1, max: 100000, realistic: { min: 100, max: 2000 } }),
+        storageGbPerNode: num('capacity', { unitKey: 'gb', min: 10, max: 500000 }),
+        latencyMs: num('performance', { unitKey: 'ms', min: 0.1, max: 5000, step: 0.1 }),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.001 }),
+    },
+    model: hdfsModel,
+    helpId: 'hdfs',
+});
+
+const ftpLegacyDefaults = {
+    throughputMbs: 100,
+    perSessionMbs: 10,
+    concurrency: 50,
+    avgFileSizeMb: 8,
+    storageGb: 4000,
+    latencyMs: 40,
+    availability: 0.99,
+    costPerInstanceHour: 0.1,
+    costPerGbMonth: 0.1,
+};
+
+function ftpLegacyFileBytes(params: typeof ftpLegacyDefaults): number {
+    return params.avgFileSizeMb * 1e6;
+}
+
+function ftpLegacyServiceSec(params: typeof ftpLegacyDefaults): number {
+    const transferSec = ftpLegacyFileBytes(params) / ((params.perSessionMbs * 1e6) / 8);
+
+    return params.latencyMs / 1000 + transferSec;
+}
+
+const ftpLegacyModel = defineModel<typeof ftpLegacyDefaults>({
+    serviceSec: (ctx) => ftpLegacyServiceSec(ctx.params),
+    resources: (ctx) => [
+        littleLaw('concurrency', ctx.params.concurrency, ftpLegacyServiceSec(ctx.params)),
+        bandwidthBound('throughput', ctx.params.throughputMbs * 8, ftpLegacyFileBytes(ctx.params)),
+    ],
+    storage: (ctx) => {
+        const growthGbDay = (ctx.writeRps * SECONDS_PER_DAY * ftpLegacyFileBytes(ctx.params)) / 1e9;
+        const totalGb = ctx.params.storageGb + growthGbDay * ctx.horizonDays;
+
+        return {
+            totalGb,
+            growthGbDay,
+            memoryGb: 0,
+            explain: [
+                explain(
+                    'writeRps × 86400 × avgFileSizeMb × 10⁶ / 10⁹',
+                    { writeRps: ctx.writeRps, avgFileSizeMb: ctx.params.avgFileSizeMb },
+                    growthGbDay,
+                    'gb/day',
+                ),
+                explain(
+                    'storageGb + growthGbDay × horizonDays',
+                    {
+                        storageGb: ctx.params.storageGb,
+                        growthGbDay,
+                        horizonDays: ctx.horizonDays,
+                    },
+                    totalGb,
+                    'gb',
+                ),
+            ],
+        };
+    },
+    cost: (ctx) =>
+        totalCost({
+            compute: ctx.params.costPerInstanceHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
+            storage: ctx.storageGb * ctx.params.costPerGbMonth,
+            network: 0,
+            requests: 0,
+        }),
+    availability: (params) => params.availability,
+});
+
+const ftpLegacy = defineComponent({
+    id: 'ftp-legacy',
+    group: 'storage',
+    shape: 'node',
+    wave: 'v2',
+    icon: 'sd-file-share',
+    ports: FILE_PORTS,
+    defaultParams: ftpLegacyDefaults,
+    paramSchema: {
+        throughputMbs: num('capacity', { min: 1, max: 100000, realistic: { min: 10, max: 1000 } }),
+        perSessionMbs: num('capacity', { min: 0.1, max: 10000, step: 0.1, realistic: { min: 1, max: 100 } }),
+        concurrency: num('capacity', { min: 1, max: 100000, realistic: { min: 10, max: 500 } }),
+        avgFileSizeMb: num('data', { unitKey: 'mb', min: 0.001, max: 1048576, step: 0.001 }),
+        storageGb: num('capacity', { unitKey: 'gb', min: 1, max: 10000000 }),
+        latencyMs: num('performance', { unitKey: 'ms', min: 0.1, max: 5000, step: 0.1, realistic: { min: 5, max: 200 } }),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.001 }),
+        costPerGbMonth: num('cost', { unitKey: 'usd', min: 0, max: 10, step: 0.001 }),
+    },
+    model: ftpLegacyModel,
+    helpId: 'ftp-legacy',
+});
+
 export const storageComponents: ComponentDefinition[] = [
     s3,
     minio,
     glacier,
     nfs,
     block,
+    hdfs,
+    ftpLegacy,
 ] as unknown as ComponentDefinition[];

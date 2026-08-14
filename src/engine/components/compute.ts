@@ -938,6 +938,172 @@ const searchIndexer = defineComponent({
     helpId: 'search-indexer',
 });
 
+const edgeFunctionDefaults = {
+    popCount: 300,
+    isolatesPerPop: 2000,
+    cpuCoresPerPop: 2,
+    cpuMsPerRequest: 8,
+    cpuMsLimit: 50,
+    serviceTimeMs: 25,
+    coldStartMs: 5,
+    coldStartShare: 0.05,
+    subrequestsPerInvocation: 1,
+    logLinesPerRequest: 2,
+    logBytesPerLine: 300,
+    costPerMillionRequests: 0.3,
+    costPerMillionCpuMs: 0.02,
+};
+
+function edgeFunctionCpuSec(params: typeof edgeFunctionDefaults): number {
+    return Math.min(params.cpuMsPerRequest, params.cpuMsLimit) / 1000;
+}
+
+function edgeFunctionServiceSec(params: typeof edgeFunctionDefaults): number {
+    return (params.serviceTimeMs + params.coldStartMs * params.coldStartShare) / 1000;
+}
+
+const edgeFunctionModel = defineModel<typeof edgeFunctionDefaults>({
+    serviceSec: (ctx) => edgeFunctionServiceSec(ctx.params),
+    resources: (ctx) => [
+        littleLaw(
+            'cpu',
+            ctx.params.popCount * ctx.params.cpuCoresPerPop,
+            edgeFunctionCpuSec(ctx.params),
+        ),
+        littleLaw(
+            'concurrency',
+            ctx.params.popCount * ctx.params.isolatesPerPop,
+            edgeFunctionServiceSec(ctx.params),
+        ),
+    ],
+    cost: (ctx) => {
+        const requestsMillions = (ctx.lambda * SECONDS_PER_MONTH) / 1e6;
+        const cpuMsMillions =
+            (ctx.lambda * SECONDS_PER_MONTH * edgeFunctionCpuSec(ctx.params) * 1000) / 1e6;
+
+        return totalCost({
+            compute: cpuMsMillions * ctx.params.costPerMillionCpuMs * ctx.regionCostMultiplier,
+            storage: 0,
+            network: ctx.egressGbMonth * ctx.pricing.egressPerGb,
+            requests: requestsMillions * ctx.params.costPerMillionRequests,
+        });
+    },
+});
+
+const edgeFunction = defineComponent({
+    id: 'edge-function',
+    group: 'compute',
+    shape: 'node',
+    wave: 'v2',
+    icon: 'sd-serverless',
+    ports: { in: SERVER_IN, out: CALLER_OUT },
+    defaultParams: edgeFunctionDefaults,
+    paramSchema: {
+        popCount: num('scale', { min: 1, max: 1000, realistic: { min: 50, max: 400 } }),
+        isolatesPerPop: num('capacity', { min: 1, max: 1000000 }),
+        cpuCoresPerPop: num('capacity', { min: 0.25, max: 256, step: 0.25 }),
+        cpuMsPerRequest: num('performance', { unitKey: 'ms', min: 0.1, max: 1000, step: 0.1, realistic: { min: 1, max: 30 } }),
+        cpuMsLimit: num('capacity', { unitKey: 'ms', min: 1, max: 30000, realistic: { min: 10, max: 50 } }),
+        serviceTimeMs: num('performance', { unitKey: 'ms', min: 0.1, max: 30000, step: 0.1 }),
+        coldStartMs: num('performance', { unitKey: 'ms', min: 0, max: 1000, realistic: { min: 0, max: 20 } }),
+        coldStartShare: num('performance', { min: 0, max: 1, step: 0.01, realistic: { min: 0, max: 0.1 } }),
+        subrequestsPerInvocation: num('behaviour', { min: 0, max: 50 }),
+        logLinesPerRequest: num('data', { min: 0, max: 1000 }),
+        logBytesPerLine: num('data', { unitKey: 'bytes', min: 10, max: 100000 }),
+        costPerMillionRequests: num('cost', { unitKey: 'usd', min: 0, max: 100, step: 0.01 }),
+        costPerMillionCpuMs: num('cost', { unitKey: 'usd', min: 0, max: 100, step: 0.001 }),
+    },
+    model: edgeFunctionModel,
+    helpId: 'edge-function',
+    managed: true,
+});
+
+const webrtcSfuDefaults = {
+    instances: 4,
+    participantsPerRoom: 8,
+    sessionDurationMin: 25,
+    bitrateKbps: 800,
+    simulcastLayers: 3,
+    cpuPerStream: 0.01,
+    cpuCores: 16,
+    egressGbps: 10,
+    availability: 0.999,
+    costPerInstanceHour: 0.6,
+};
+
+function sfuSessionSec(params: typeof webrtcSfuDefaults): number {
+    return params.sessionDurationMin * SECONDS_PER_MINUTE;
+}
+
+function sfuForwardedStreams(params: typeof webrtcSfuDefaults): number {
+    return params.participantsPerRoom * (params.participantsPerRoom - 1);
+}
+
+function sfuStreamsPerRoom(params: typeof webrtcSfuDefaults): number {
+    return params.participantsPerRoom * params.simulcastLayers + sfuForwardedStreams(params);
+}
+
+function sfuCpuSecPerSession(params: typeof webrtcSfuDefaults): number {
+    return sfuSessionSec(params) * sfuStreamsPerRoom(params) * params.cpuPerStream;
+}
+
+function sfuEgressBitsPerSec(params: typeof webrtcSfuDefaults): number {
+    return sfuForwardedStreams(params) * params.bitrateKbps * 1000;
+}
+
+const webrtcSfuModel = defineModel<typeof webrtcSfuDefaults>({
+    serviceSec: (ctx) => sfuSessionSec(ctx.params),
+    resources: (ctx) => [
+        littleLaw('cpu', ctx.instances * ctx.params.cpuCores, sfuCpuSecPerSession(ctx.params)),
+        resourceLimit(
+            'media-egress',
+            (ctx.instances * ctx.params.egressGbps * 1e9) /
+                sfuEgressBitsPerSec(ctx.params) /
+                sfuSessionSec(ctx.params),
+            'instances × egressGbps × 10⁹ / (forwardedStreams × bitrateKbps × 10³) / sessionSec',
+            {
+                instances: ctx.instances,
+                egressGbps: ctx.params.egressGbps,
+                forwardedStreams: sfuForwardedStreams(ctx.params),
+                bitrateKbps: ctx.params.bitrateKbps,
+                sessionSec: sfuSessionSec(ctx.params),
+            },
+        ),
+    ],
+    cost: (ctx) =>
+        totalCost({
+            compute: ctx.instances * ctx.params.costPerInstanceHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
+            storage: 0,
+            network: ctx.egressGbMonth * ctx.pricing.egressPerGb,
+            requests: 0,
+        }),
+    availability: (params) => params.availability,
+});
+
+const webrtcSfu = defineComponent({
+    id: 'webrtc-sfu',
+    group: 'compute',
+    shape: 'node',
+    wave: 'v2',
+    icon: 'sd-transcoder',
+    ports: { in: SERVER_IN, out: CALLER_OUT },
+    defaultParams: webrtcSfuDefaults,
+    paramSchema: {
+        instances: num('scale', { min: 1, max: 10000, realistic: { min: 2, max: 500 } }),
+        participantsPerRoom: num('scale', { min: 2, max: 1000, realistic: { min: 2, max: 50 } }),
+        sessionDurationMin: num('behaviour', { min: 0.5, max: 1440, step: 0.5, realistic: { min: 5, max: 120 } }),
+        bitrateKbps: num('data', { min: 50, max: 20000, realistic: { min: 300, max: 2500 } }),
+        simulcastLayers: num('behaviour', { min: 1, max: 5, realistic: { min: 1, max: 3 } }),
+        cpuPerStream: num('performance', { min: 0.001, max: 1, step: 0.001, realistic: { min: 0.005, max: 0.05 } }),
+        cpuCores: num('capacity', { min: 1, max: 192 }),
+        egressGbps: num('capacity', { min: 0.1, max: 400, step: 0.1 }),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.001 }),
+    },
+    model: webrtcSfuModel,
+    helpId: 'webrtc-sfu',
+});
+
 export const computeComponents: ComponentDefinition[] = [
     service,
     monolith,
@@ -950,4 +1116,6 @@ export const computeComponents: ComponentDefinition[] = [
     transcoder,
     mlInference,
     searchIndexer,
+    edgeFunction,
+    webrtcSfu,
 ] as unknown as ComponentDefinition[];

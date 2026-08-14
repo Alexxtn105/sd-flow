@@ -5,7 +5,8 @@
 
 **Обозначения:**
 * **M** — блок входит в первую волну (MVP, фаза 1).
-* **V1** — волна v1.0, зарегистрирована в фазе 3. **V2** — позже, в реестре этих блоков ещё нет.
+* **V1** — волна v1.0, зарегистрирована в фазе 3. **V2** — волна v2.0, зарегистрирована в фазе 4.
+  Обе в реестре: каталог покрыт целиком.
 * *Ограничитель* — какой ресурс, как правило, связывает ёмкость этого блока первым.
 
 ---
@@ -339,7 +340,7 @@ poolerFactor:  none 1 · pgbouncer-session 2 · proxy-managed 5 · pgbouncer-tra
 | `scylla` | ScyllaDB | V1 | то же + `shardsPerCore`, `throughputMultiplier` (≈3–5× vs Cassandra) | CPU-shard |
 | `dynamodb` | DynamoDB | **M** | `capacityMode` (provisioned/on-demand), `rcu`, `wcu`, `itemSizeKb`, `partitionKey`, `hotPartitionRisk`, `gsiCount` (каждый GSI = ещё WCU), `ttlEnabled`, `streams`, `costPerMillionRW` | RCU/WCU и **горячая партиция (3000 RCU / 1000 WCU на партицию)** |
 | `hbase` | HBase | V2 | `regionServers`, `regionsPerServer`, `hdfsReplication` | Регионы |
-| `couchbase` | Couchbase | V2 | `buckets`, `memoryQuotaGb`, `ejectionPolicy` | Память |
+| `couchbase` | Couchbase | V2 | `bucketCount`, `memoryQuotaGb`, `ejectionPolicy` | Память |
 | `redis-store` | Redis как основное хранилище | V1 | `persistence` (none/RDB/AOF), `durabilityRisk`, `memoryGb`, `evictionPolicy: noeviction` | Память и durability |
 | `neo4j` | Neo4j / графовая БД | V1 | `nodeCount`, `edgeCount`, `traversalDepth`, `cacheGb`, `queryComplexity` | Память / глубина обхода |
 | `timescale` | TimescaleDB | V1 | `metricsPerSec`, `chunkIntervalHours`, `compressionAfterDays`, `retentionDays` | Запись и сжатие |
@@ -486,7 +487,7 @@ H(n, α)       = Σ_{k=1..n} k^(−α)
 | `glacier` | Холодное хранилище / архив | V1 | `retrievalTier` (expedited/standard/bulk), `retrievalHours`, `costPerGbMonth`, `costPerGbRetrieval`, `minStorageDays` | Время и стоимость извлечения |
 | `nfs` | Сетевая ФС (EFS / NFS) | V1 | `throughputMbs`, `iops`, `burstCredits`, `costPerGbMonth` | Пропускная способность |
 | `block` | Блочное устройство (EBS / локальный NVMe) | V1 | `sizeGb`, `type` (gp3/io2/nvme), `iops`, `throughputMbs`, `latencyUs` (100–500) | IOPS |
-| `hdfs` | HDFS | V2 | `nodes`, `blockSizeMb`, `replication` (3), `namenodeMemory` | Метаданные namenode |
+| `hdfs` | HDFS | V2 | `nodes`, `blockSizeMb`, `replication` (3), `namenodeMemoryGb` | Метаданные namenode |
 | `ftp-legacy` | Legacy файловый сервер | V2 | `throughputMbs`, `concurrency` | — |
 
 ---
@@ -589,34 +590,34 @@ H(n, α)       = Σ_{k=1..n} k^(−α)
 
 ## 15. Сводка по объёму
 
-| Группа | Блоков всего | В коде\* |
+| Группа | Блоков | Из них M / V1 / V2 |
 |---|---|---|
-| clients | 7 | 7 |
-| edge | 12 | 11 |
-| compute | 13 | 11 |
-| sql | 8 | 5 |
-| nosql | 13 | 10 |
-| search | 5 | 4 |
-| olap | 7 | 5 |
-| cache | 4 | 3 |
-| messaging | 12 | 11 |
-| storage | 7 | 5 |
-| platform | 14 | 13 |
-| observability | 6 | 5 |
-| topology | 8 | 8 |
-| probes | 11 | 11 |
-| **Итого** | **127** | **109** |
+| clients | 7 | 2 / 5 / 0 |
+| edge | 12 | 6 / 5 / 1 |
+| compute | 13 | 4 / 7 / 2 |
+| sql | 8 | 2 / 3 / 3 |
+| nosql | 13 | 3 / 7 / 3 |
+| search | 5 | 1 / 3 / 1 |
+| olap | 7 | 1 / 4 / 2 |
+| cache | 4 | 2 / 1 / 1 |
+| messaging | 12 | 4 / 7 / 1 |
+| storage | 7 | 2 / 3 / 2 |
+| platform | 14 | 2 / 11 / 1 |
+| observability | 6 | 2 / 3 / 1 |
+| topology | 8 | 6 / 2 / 0 |
+| probes | 11 | 7 / 4 / 0 |
+| **Итого** | **127** | **44 / 65 / 18** |
 
-Две поправки к прежней редакции этой таблицы, найденные сверкой с реестром: в `platform` стояло
-15 при четырнадцати строках в §11, а в `cache` пятой строкой посчитан `cdn-cache` — но это не
-блок, а перекрёстная ссылка на `cdn` из §2 (волна `—`, собственных параметров нет). Поэтому в
-каталоге 127 типов, а до полного покрытия не хватает **18** блоков, а не двадцати.
+Все 127 типов зарегистрированы в `ComponentRegistry`: MVP-волна пришла из фазы 1, V1 — из фазы 3,
+V2 — из фазы 4. Каталог покрыт целиком, расхождения между документом и реестром больше нет.
+Модель ёмкости заполнена у 101 блока — у всех, кто несёт трафик; у клиентов её нет по построению
+(они источники нагрузки), у контейнеров, линков, политик и проб не бывает.
 
-\* «В коде» — блоки, зарегистрированные в `ComponentRegistry`: волны **M** и **V1**. До фазы 3
-столбец совпадал с MVP-волной (44 блока); фаза 3 добавила волну V1 целиком — ещё 65 блоков,
-в `topology` это `vpc` и `k8s-cluster`. Сама MVP-волна при этом не изменилась, а блоков волны
-**V2** в реестре нет. Значения по группам, итог и порядок групп сверяет
-`tests/engine/catalog.test.ts` — он и есть источник истины.
+Значения по группам, итог и порядок групп сверяет `tests/engine/catalog.test.ts` — он и есть
+источник истины. Прежняя редакция этой таблицы содержала две ошибки, найденные при сверке:
+в `platform` стояло 15 при четырнадцати строках в §11, а в `cache` пятой строкой был посчитан
+`cdn-cache` — но это не блок, а перекрёстная ссылка на `cdn` из §2 (волна `—`, собственных
+параметров нет). Отсюда и прежний неверный итог 129.
 
 Прирост первой волны с 39 до 44 блоков — следствие решения **D1** (мультирегион в MVP):
 в неё добавлены `region`, `link-cross-region`, `multi-region-policy`, `dns` и `glb`.

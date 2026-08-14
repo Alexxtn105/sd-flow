@@ -1,9 +1,11 @@
 import type { Challenge } from '../../engine/challenges/types';
 import { adClicks } from './adClicks';
+import { autocomplete } from './autocomplete';
 import { flashSale } from './flashSale';
 import { geoMatching } from './geoMatching';
 import { globalFeed } from './globalFeed';
 import { imageResize } from './imageResize';
+import { instagramFeed } from './instagramFeed';
 import { jobScheduler } from './jobScheduler';
 import { leaderboard } from './leaderboard';
 import { matchingEngine } from './matchingEngine';
@@ -28,9 +30,11 @@ export const CHALLENGES: Challenge[] = [
     imageResize,
     rateLimiter,
     twitterFeed,
+    instagramFeed,
     notifications,
     shopCatalog,
     videoHosting,
+    autocomplete,
     flashSale,
     payments,
     adClicks,

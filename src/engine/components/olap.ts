@@ -7,6 +7,7 @@ import {
     littleLaw,
     resourceLimit,
     totalCost,
+    weightedUnitBound,
 } from '../sim/resources';
 import { bool, choice, defineComponent, num } from './_shared/params';
 
@@ -722,10 +723,331 @@ const lakehouse = defineComponent({
     managed: true,
 });
 
+const REDSHIFT_NODE_SCAN_MBS: Record<string, number> = {
+    'dense-compute': 2000,
+    'dense-storage': 600,
+    'managed-storage': 2400,
+};
+
+const REDSHIFT_NODE_NETWORK_MBPS: Record<string, number> = {
+    'dense-compute': 10000,
+    'dense-storage': 4000,
+    'managed-storage': 12500,
+};
+
+const REDSHIFT_REDISTRIBUTION_SHARE: Record<string, number> = {
+    even: 0.5,
+    key: 0.1,
+    all: 0.02,
+    auto: 0.2,
+};
+
+const REDSHIFT_SORT_KEY_PRUNE_SHARE: Record<string, number> = {
+    none: 1,
+    compound: 0.25,
+    interleaved: 0.4,
+};
+
+const REDSHIFT_VACUUM_SCAN_PENALTY = 1.35;
+
+const redshiftDefaults = {
+    nodes: 8,
+    nodeType: 'managed-storage',
+    distKey: 'key',
+    sortKey: 'compound',
+    vacuumNeeded: true,
+    bytesScannedPerQuery: 50000000000,
+    compressionRatio: 4,
+    queryConcurrency: 15,
+    maxIngestMbs: 800,
+    writeServiceMs: 50,
+    storageGb: 100000,
+    availability: 0.9995,
+    costPerInstanceHour: 3.26,
+    costPerGbMonth: 0.024,
+};
+
+function redshiftScanMbsPerNode(params: typeof redshiftDefaults): number {
+    return REDSHIFT_NODE_SCAN_MBS[params.nodeType] ?? 1000;
+}
+
+function redshiftNetworkMbpsPerNode(params: typeof redshiftDefaults): number {
+    return REDSHIFT_NODE_NETWORK_MBPS[params.nodeType] ?? 5000;
+}
+
+function redshiftScannedBytes(params: typeof redshiftDefaults): number {
+    const pruneShare = REDSHIFT_SORT_KEY_PRUNE_SHARE[params.sortKey] ?? 1;
+    const vacuumPenalty = params.vacuumNeeded ? REDSHIFT_VACUUM_SCAN_PENALTY : 1;
+
+    return (params.bytesScannedPerQuery / params.compressionRatio) * pruneShare * vacuumPenalty;
+}
+
+function redshiftServiceSec(
+    params: typeof redshiftDefaults,
+    readShare: number,
+    writeShare: number,
+): number {
+    const scanSec = redshiftScannedBytes(params) / (params.nodes * redshiftScanMbsPerNode(params) * 1e6);
+
+    return readShare * scanSec + (writeShare * params.writeServiceMs) / 1000;
+}
+
+const redshiftModel = defineModel<typeof redshiftDefaults>({
+    serviceSec: (ctx) => redshiftServiceSec(ctx.params, ctx.readShare, ctx.writeShare),
+    resources: (ctx) => {
+        const scannedBytes = ctx.readShare * redshiftScannedBytes(ctx.params);
+        const redistributionShare = REDSHIFT_REDISTRIBUTION_SHARE[ctx.params.distKey] ?? 1;
+
+        return [
+            bandwidthBound(
+                'disk-scan',
+                ctx.params.nodes * redshiftScanMbsPerNode(ctx.params) * 8,
+                scannedBytes,
+            ),
+            bandwidthBound(
+                'network',
+                ctx.params.nodes * redshiftNetworkMbpsPerNode(ctx.params),
+                scannedBytes * redistributionShare,
+            ),
+            littleLaw(
+                'query-slots',
+                ctx.params.queryConcurrency,
+                redshiftServiceSec(ctx.params, ctx.readShare, ctx.writeShare),
+            ),
+            bandwidthBound(
+                'ingest-bandwidth',
+                ctx.params.maxIngestMbs * 8,
+                ctx.writeShare * ctx.requestBytes,
+            ),
+        ];
+    },
+    storage: (ctx) => {
+        const storedBytes = ctx.recordBytes / ctx.params.compressionRatio;
+        const growthGbDay = (ctx.writeRps * SECONDS_PER_DAY * storedBytes) / 1e9;
+        const totalGb = ctx.params.storageGb + growthGbDay * ctx.horizonDays;
+
+        return {
+            totalGb,
+            growthGbDay,
+            memoryGb: 0,
+            explain: [
+                explain(
+                    'writeRps × 86400 × recordBytes / compressionRatio / 10⁹',
+                    {
+                        writeRps: ctx.writeRps,
+                        recordBytes: ctx.recordBytes,
+                        compressionRatio: ctx.params.compressionRatio,
+                    },
+                    growthGbDay,
+                    'gb/day',
+                ),
+                explain(
+                    'storageGb + growthGbDay × horizonDays',
+                    {
+                        storageGb: ctx.params.storageGb,
+                        growthGbDay,
+                        horizonDays: ctx.horizonDays,
+                    },
+                    totalGb,
+                    'gb',
+                ),
+            ],
+        };
+    },
+    cost: (ctx) =>
+        totalCost({
+            compute:
+                ctx.params.nodes * ctx.params.costPerInstanceHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
+            storage: ctx.storageGb * ctx.params.costPerGbMonth,
+            network: 0,
+            requests: 0,
+        }),
+    availability: (params) => params.availability,
+});
+
+const redshift = defineComponent({
+    id: 'redshift',
+    group: 'olap',
+    shape: 'node',
+    wave: 'v2',
+    icon: 'sd-olap-managed',
+    ports: OLAP_PORTS,
+    defaultParams: redshiftDefaults,
+    paramSchema: {
+        nodes: num('topology', { min: 1, max: 128, realistic: { min: 2, max: 32 } }),
+        nodeType: choice('capacity', ['dense-compute', 'dense-storage', 'managed-storage']),
+        distKey: choice('data', ['even', 'key', 'all', 'auto']),
+        sortKey: choice('data', ['none', 'compound', 'interleaved']),
+        vacuumNeeded: bool('behaviour'),
+        bytesScannedPerQuery: num('data', { unitKey: 'bytes', min: 1000000, max: 1000000000000000 }),
+        compressionRatio: num('data', { min: 1, max: 50, step: 0.5, realistic: { min: 2, max: 10 } }),
+        queryConcurrency: num('capacity', { min: 1, max: 100, realistic: { min: 5, max: 50 } }),
+        maxIngestMbs: num('capacity', { min: 1, max: 1000000 }),
+        writeServiceMs: num('performance', { unitKey: 'ms', min: 0.5, max: 60000, step: 0.5 }),
+        storageGb: num('capacity', { unitKey: 'gb', min: 0, max: 1000000000 }),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.001 }),
+        costPerGbMonth: num('cost', { unitKey: 'usd', min: 0, max: 10, step: 0.001 }),
+    },
+    model: redshiftModel,
+    helpId: 'redshift',
+    managed: true,
+});
+
+const druidDefaults = {
+    nodes: 6,
+    segments: 20000,
+    segmentsScannedPerQuery: 4,
+    rowsPerSegment: 5000000,
+    rollupRatio: 8,
+    realtimeIngestRps: 40000,
+    rowSizeBytes: 300,
+    compressionRatio: 6,
+    cpuCores: 32,
+    scanThroughputMbsPerCore: 150,
+    queryConcurrency: 20,
+    writeServiceMs: 2,
+    ttlDays: 90,
+    availability: 0.999,
+    costPerInstanceHour: 0.7,
+    costPerGbMonth: 0.08,
+};
+
+function druidStoredRowBytes(params: typeof druidDefaults): number {
+    return params.rowSizeBytes / params.compressionRatio / params.rollupRatio;
+}
+
+function druidSegmentBytes(params: typeof druidDefaults): number {
+    return params.rowsPerSegment * druidStoredRowBytes(params);
+}
+
+function druidScannedSegments(params: typeof druidDefaults): number {
+    return Math.min(params.segmentsScannedPerQuery, params.segments);
+}
+
+function druidScannedBytes(params: typeof druidDefaults): number {
+    return druidScannedSegments(params) * druidSegmentBytes(params);
+}
+
+function druidServiceSec(params: typeof druidDefaults, readShare: number, writeShare: number): number {
+    const scanSec =
+        druidScannedBytes(params) / (params.nodes * params.cpuCores * params.scanThroughputMbsPerCore * 1e6);
+
+    return readShare * scanSec + (writeShare * params.writeServiceMs) / 1000;
+}
+
+const druidModel = defineModel<typeof druidDefaults>({
+    serviceSec: (ctx) => druidServiceSec(ctx.params, ctx.readShare, ctx.writeShare),
+    resources: (ctx) => {
+        const scannedBytes = ctx.readShare * druidScannedBytes(ctx.params);
+
+        return [
+            weightedUnitBound(
+                'realtime-ingest',
+                'realtimeIngestRps / writeShare',
+                { realtimeIngestRps: ctx.params.realtimeIngestRps, writeShare: ctx.writeShare },
+                0,
+                1 / ctx.params.realtimeIngestRps,
+                ctx.readShare,
+                ctx.writeShare,
+            ),
+            bandwidthBound('disk-scan', ctx.params.nodes * DISK_READ_MBS_PER_NODE * 8, scannedBytes),
+            bandwidthBound(
+                'cpu',
+                ctx.params.nodes * ctx.params.cpuCores * ctx.params.scanThroughputMbsPerCore * 8,
+                scannedBytes,
+            ),
+            littleLaw(
+                'query-slots',
+                ctx.params.nodes * ctx.params.queryConcurrency,
+                druidServiceSec(ctx.params, ctx.readShare, ctx.writeShare),
+            ),
+        ];
+    },
+    storage: (ctx) => {
+        const storedRowBytes = druidStoredRowBytes(ctx.params);
+        const baseGb = (ctx.params.segments * druidSegmentBytes(ctx.params)) / 1e9;
+        const growthGbDay = (ctx.writeRps * SECONDS_PER_DAY * storedRowBytes) / 1e9;
+        const retainedDays = Math.min(ctx.horizonDays, ctx.params.ttlDays);
+
+        return {
+            totalGb: baseGb + growthGbDay * retainedDays,
+            growthGbDay,
+            memoryGb: 0,
+            explain: [
+                explain(
+                    'segments × rowsPerSegment × rowSize / compressionRatio / rollupRatio / 10⁹',
+                    {
+                        segments: ctx.params.segments,
+                        rowsPerSegment: ctx.params.rowsPerSegment,
+                        rowSize: ctx.params.rowSizeBytes,
+                        compressionRatio: ctx.params.compressionRatio,
+                        rollupRatio: ctx.params.rollupRatio,
+                    },
+                    baseGb,
+                    'gb',
+                ),
+                explain(
+                    'writeRps × 86400 × rowSize / compressionRatio / rollupRatio / 10⁹',
+                    {
+                        writeRps: ctx.writeRps,
+                        rowSize: ctx.params.rowSizeBytes,
+                        compressionRatio: ctx.params.compressionRatio,
+                        rollupRatio: ctx.params.rollupRatio,
+                    },
+                    growthGbDay,
+                    'gb/day',
+                ),
+            ],
+        };
+    },
+    cost: (ctx) =>
+        totalCost({
+            compute:
+                ctx.params.nodes * ctx.params.costPerInstanceHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
+            storage: ctx.storageGb * ctx.params.costPerGbMonth,
+            network: 0,
+            requests: 0,
+        }),
+    availability: (params) => params.availability,
+});
+
+const druid = defineComponent({
+    id: 'druid',
+    group: 'olap',
+    shape: 'node',
+    wave: 'v2',
+    icon: 'sd-olap',
+    ports: OLAP_PORTS,
+    defaultParams: druidDefaults,
+    paramSchema: {
+        nodes: num('topology', { min: 1, max: 500, realistic: { min: 3, max: 60 } }),
+        segments: num('data', { min: 1, max: 100000000, realistic: { min: 1000, max: 2000000 } }),
+        segmentsScannedPerQuery: num('performance', { min: 1, max: 1000000, realistic: { min: 1, max: 500 } }),
+        rowsPerSegment: num('data', { min: 1000, max: 100000000, realistic: { min: 1000000, max: 10000000 } }),
+        rollupRatio: num('data', { min: 1, max: 1000, step: 0.5, realistic: { min: 2, max: 100 } }),
+        realtimeIngestRps: num('capacity', { unitKey: 'rps', min: 1, max: 100000000, realistic: { min: 10000, max: 2000000 } }),
+        rowSizeBytes: num('data', { unitKey: 'bytes', min: 10, max: 1000000 }),
+        compressionRatio: num('data', { min: 1, max: 50, step: 0.5, realistic: { min: 3, max: 12 } }),
+        cpuCores: num('capacity', { min: 1, max: 192 }),
+        scanThroughputMbsPerCore: num('performance', { min: 1, max: 10000, realistic: { min: 50, max: 500 } }),
+        queryConcurrency: num('capacity', { min: 1, max: 1000 }),
+        writeServiceMs: num('performance', { unitKey: 'ms', min: 0.1, max: 60000, step: 0.1 }),
+        ttlDays: num('data', { min: 1, max: 3650 }),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.001 }),
+        costPerGbMonth: num('cost', { unitKey: 'usd', min: 0, max: 10, step: 0.001 }),
+    },
+    model: druidModel,
+    helpId: 'druid',
+});
+
 export const olapComponents: ComponentDefinition[] = [
     clickhouse,
     bigquery,
     snowflake,
     trino,
     lakehouse,
+    redshift,
+    druid,
 ] as unknown as ComponentDefinition[];

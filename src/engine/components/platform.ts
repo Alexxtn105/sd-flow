@@ -1221,6 +1221,113 @@ const geoIndex = defineComponent({
     helpId: 'geo-index',
 });
 
+const EMAIL_DELIVERY_ATTEMPTS: Record<string, number> = {
+    none: 1,
+    once: 2,
+    'exponential-backoff': 4,
+};
+
+const EMAIL_DKIM_SIGN_MS = 1.5;
+
+const emailSmtpDefaults = {
+    messagesPerEvent: 1,
+    messagesPerSec: 500,
+    bounceRate: 0.02,
+    retryPolicy: 'exponential-backoff',
+    instances: 2,
+    concurrency: 60,
+    maxConnections: 400,
+    serviceTimeMs: 150,
+    dkimSigning: true,
+    deliveryLagSec: 8,
+    maxInflight: 200000,
+    availability: 0.999,
+    costPerThousand: 0.1,
+    costPerInstanceHour: 0.06,
+};
+
+function emailAttemptsPerMessage(params: typeof emailSmtpDefaults): number {
+    return 1 + ((EMAIL_DELIVERY_ATTEMPTS[params.retryPolicy] ?? 1) - 1) * params.bounceRate;
+}
+
+function emailDeliveriesPerEvent(params: typeof emailSmtpDefaults): number {
+    return params.messagesPerEvent * emailAttemptsPerMessage(params);
+}
+
+function emailMessageSec(params: typeof emailSmtpDefaults): number {
+    return (params.serviceTimeMs + (params.dkimSigning ? EMAIL_DKIM_SIGN_MS : 0)) / 1000;
+}
+
+function emailServiceSec(params: typeof emailSmtpDefaults): number {
+    return emailDeliveriesPerEvent(params) * emailMessageSec(params);
+}
+
+const emailSmtpModel = defineModel<typeof emailSmtpDefaults>({
+    serviceSec: (ctx) => emailServiceSec(ctx.params),
+    resources: (ctx) => [
+        resourceLimit(
+            'rate-limit',
+            ctx.params.messagesPerSec / emailDeliveriesPerEvent(ctx.params),
+            'messagesPerSec / (messagesPerEvent × attemptsPerMessage)',
+            {
+                messagesPerSec: ctx.params.messagesPerSec,
+                messagesPerEvent: ctx.params.messagesPerEvent,
+                attemptsPerMessage: emailAttemptsPerMessage(ctx.params),
+            },
+        ),
+        littleLaw('workers', ctx.instances * ctx.params.concurrency, emailServiceSec(ctx.params)),
+        connectionBound(
+            'connections',
+            ctx.instances * ctx.params.maxConnections,
+            emailDeliveriesPerEvent(ctx.params),
+            emailMessageSec(ctx.params),
+        ),
+        littleLaw(
+            'inflight',
+            ctx.params.maxInflight,
+            ctx.params.deliveryLagSec * emailDeliveriesPerEvent(ctx.params),
+        ),
+    ],
+    cost: (ctx) =>
+        totalCost({
+            compute: ctx.instances * ctx.params.costPerInstanceHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
+            storage: 0,
+            network: 0,
+            requests:
+                (ctx.lambda * emailDeliveriesPerEvent(ctx.params) * SECONDS_PER_MONTH * ctx.params.costPerThousand) /
+                1000,
+        }),
+    availability: (params) => params.availability,
+});
+
+const emailSmtp = defineComponent({
+    id: 'email-smtp',
+    group: 'platform',
+    shape: 'node',
+    wave: 'v2',
+    icon: 'sd-notification',
+    ports: DISPATCH_PORTS,
+    defaultParams: emailSmtpDefaults,
+    paramSchema: {
+        messagesPerEvent: num('behaviour', { min: 1, max: 100000, realistic: { min: 1, max: 100 } }),
+        messagesPerSec: num('capacity', { min: 1, max: 1000000, realistic: { min: 50, max: 5000 } }),
+        bounceRate: num('reliability', { min: 0, max: 1, step: 0.001, realistic: { min: 0.005, max: 0.05 } }),
+        retryPolicy: choice('behaviour', ['none', 'once', 'exponential-backoff']),
+        instances: num('scale', { min: 1, max: 1000 }),
+        concurrency: num('capacity', { min: 1, max: 100000 }),
+        maxConnections: num('capacity', { min: 1, max: 1000000, realistic: { min: 50, max: 5000 } }),
+        serviceTimeMs: num('performance', { unitKey: 'ms', min: 1, max: 60000, realistic: { min: 50, max: 500 } }),
+        dkimSigning: bool('reliability'),
+        deliveryLagSec: num('performance', { unitKey: 'sec', min: 0, max: 3600, realistic: { min: 1, max: 60 } }),
+        maxInflight: num('capacity', { min: 100, max: 10000000 }),
+        availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
+        costPerThousand: num('cost', { unitKey: 'usd', min: 0, max: 100, step: 0.001 }),
+        costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.001 }),
+    },
+    model: emailSmtpModel,
+    helpId: 'email-smtp',
+});
+
 export const platformComponents: ComponentDefinition[] = [
     auth,
     sessionStore,
@@ -1235,4 +1342,5 @@ export const platformComponents: ComponentDefinition[] = [
     externalApi,
     sagaOrchestrator,
     geoIndex,
+    emailSmtp,
 ] as unknown as ComponentDefinition[];
