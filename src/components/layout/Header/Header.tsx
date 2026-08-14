@@ -2,9 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Icon from '../../common/Icons/Icon';
 import { LANGUAGES } from '../../../locales/i18n';
+import { SCENARIOS } from '../../../engine/sim/scenarios';
+import { DEMO_SCHEMES } from '../../../data/demoSchemes';
 import { useThemeContext } from '../../../contexts/ThemeContext';
 import { useGraphStore } from '../../../store/graphStore';
 import { useIsDirty, useSchemeStore } from '../../../store/schemeStore';
+import { useSimStore } from '../../../store/simStore';
 import { useUiStore } from '../../../store/uiStore';
 import type { AppMode } from '../../../store/uiStore';
 import './Header.css';
@@ -18,9 +21,10 @@ export interface HeaderProps {
     onLoad: () => void;
     onExport: () => void;
     onImport: () => void;
+    onLoadDemo: (demoId: string) => void;
 }
 
-export default function Header({ onNew, onSave, onSaveAs, onLoad, onExport, onImport }: HeaderProps) {
+export default function Header({ onNew, onSave, onSaveAs, onLoad, onExport, onImport, onLoadDemo }: HeaderProps) {
     const { t, i18n } = useTranslation();
     const { isDarkTheme, toggleTheme } = useThemeContext();
     const [langOpen, setLangOpen] = useState(false);
@@ -30,10 +34,16 @@ export default function Header({ onNew, onSave, onSaveAs, onLoad, onExport, onIm
     const isDirty = useIsDirty();
     const mode = useUiStore((state) => state.mode);
     const setMode = useUiStore((state) => state.setMode);
+    const xray = useUiStore((state) => state.xray);
+    const toggleXray = useUiStore((state) => state.toggleXray);
     const undo = useGraphStore((state) => state.undo);
     const redo = useGraphStore((state) => state.redo);
     const canUndo = useGraphStore((state) => state.past.length > 0);
     const canRedo = useGraphStore((state) => state.future.length > 0);
+    const scenario = useSimStore((state) => state.scenario);
+    const setScenario = useSimStore((state) => state.setScenario);
+    const dashboardOpen = useSimStore((state) => state.dashboardOpen);
+    const toggleDashboard = useSimStore((state) => state.toggleDashboard);
 
     useEffect(() => {
         if (!langOpen) return;
@@ -89,6 +99,22 @@ export default function Header({ onNew, onSave, onSaveAs, onLoad, onExport, onIm
                     <button className="hdr-btn" onClick={onLoad} title={t('header.load')}>
                         <Icon name="folder_open" size="small" />
                     </button>
+                    <select
+                        className="hdr-select"
+                        value=""
+                        onChange={(event) => {
+                            if (event.target.value) onLoadDemo(event.target.value);
+                        }}
+                        title={t('header.demos')}
+                        aria-label={t('header.demos')}
+                    >
+                        <option value="">{t('header.demos')}</option>
+                        {DEMO_SCHEMES.map((demo) => (
+                            <option key={demo.id} value={demo.id}>
+                                {t(`demo.${demo.id}`)}
+                            </option>
+                        ))}
+                    </select>
                     <span className="hdr-divider" />
                     <button className="hdr-btn" onClick={onExport} title={t('header.export')}>
                         <Icon name="download" size="small" />
@@ -100,6 +126,34 @@ export default function Header({ onNew, onSave, onSaveAs, onLoad, onExport, onIm
             </div>
 
             <div className="hdr-right">
+                <select
+                    className="hdr-select"
+                    value={scenario}
+                    onChange={(event) => setScenario(event.target.value)}
+                    title={t('dashboard.scenario')}
+                    aria-label={t('dashboard.scenario')}
+                >
+                    {SCENARIOS.map((item) => (
+                        <option key={item} value={item}>
+                            {t(`scenario.${item}`)}
+                        </option>
+                    ))}
+                </select>
+                <button
+                    className={`hdr-btn ${xray ? 'active' : ''}`}
+                    onClick={toggleXray}
+                    title={t('header.xray')}
+                >
+                    <Icon name="visibility" size="small" />
+                </button>
+                <button
+                    className={`hdr-btn ${dashboardOpen ? 'active' : ''}`}
+                    onClick={toggleDashboard}
+                    title={dashboardOpen ? t('dashboard.hide') : t('dashboard.show')}
+                >
+                    <Icon name="dashboard" size="small" />
+                </button>
+                <span className="hdr-divider" />
                 <button className="hdr-btn" onClick={undo} disabled={!canUndo} title={t('header.undo')}>
                     <Icon name="undo" size="small" />
                 </button>

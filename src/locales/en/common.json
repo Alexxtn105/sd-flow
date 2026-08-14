@@ -17,8 +17,9 @@
         "redo": "Redo",
         "lightTheme": "Light theme",
         "darkTheme": "Dark theme",
-        "xray": "Edge x-ray",
-        "source": "Source code"
+        "xray": "X-ray: traffic labels on edges",
+        "source": "Source code",
+        "demos": "Demo schemes"
     },
     "mode": {
         "sandbox": "Sandbox",
@@ -109,11 +110,173 @@
         "circuitBreaker": "Circuit breaker",
         "idempotent": "Idempotent"
     },
+    "dashboard": {
+        "title": "Dashboard",
+        "show": "Show dashboard",
+        "hide": "Hide dashboard",
+        "scenario": "Simulation scenario",
+        "running": "Recomputing…",
+        "failed": "Simulation failed: {{message}}",
+        "empty": "Add a client and connect the blocks — the load estimate shows up here",
+        "noFlows": "No flows: there is no client, or it is not connected to anything",
+        "noFindings": "No problems found",
+        "computeMs": "computed in {{value}} ms",
+        "iterations": "iterations: {{value}}",
+        "modelVersion": "model {{version}}",
+        "notConverged": "did not converge",
+        "section": {
+            "totals": "Totals",
+            "flows": "Flows",
+            "findings": "Findings",
+            "consistency": "Consistency",
+            "multiRegion": "Multi-region"
+        },
+        "metric": {
+            "rps": "Load",
+            "costMonth": "Cost",
+            "storage": "Storage",
+            "egress": "Egress",
+            "network": "Bandwidth",
+            "availability": "Availability",
+            "readWrite": "read {{read}} · write {{write}}",
+            "growth": "growth {{value}} {{unit}}",
+            "errorBudget": "error budget {{value}} {{unit}}"
+        },
+        "unit": {
+            "rps": "req/s",
+            "usdMonth": "$/mo",
+            "gb": "GB",
+            "pbYear": "PB/year",
+            "gbDay": "GB/day",
+            "gbps": "Gbps",
+            "mbSec": "MB/s",
+            "minMonth": "min/mo",
+            "opsSec": "ops/s",
+            "sec": "s",
+            "ms": "ms",
+            "percent": "%"
+        },
+        "flow": {
+            "entry": "Entry point",
+            "rps": "RPS",
+            "p50": "p50, ms",
+            "p95": "p95, ms",
+            "p99": "p99, ms",
+            "errors": "Errors",
+            "timeouts": "Timeouts"
+        },
+        "anomaly": {
+            "code": "Anomaly",
+            "rate": "Rate",
+            "share": "Share of ops",
+            "nodes": "Blocks"
+        },
+        "region": {
+            "mode": "Mode",
+            "region": "Region",
+            "traffic": "Traffic",
+            "rps": "RPS",
+            "cost": "Cost",
+            "replication": "Replication",
+            "replicationValue": "{{rps}} {{rpsUnit}} · {{bandwidth}} {{bandwidthUnit}} · {{cost}} {{costUnit}}",
+            "rpo": "RPO",
+            "rto": "RTO",
+            "againstTarget": "{{value}} {{unit}} against a {{target}} {{unit}} target"
+        }
+    },
+    "scenario": {
+        "baseline": "Baseline",
+        "peak": "Peak load",
+        "az-failure": "AZ failure",
+        "region-failure": "Region failure",
+        "cache-flush": "Cache flush",
+        "stale-read": "Replica lag",
+        "write-conflict": "Write conflict"
+    },
+    "findings": {
+        "overloaded": "Overloaded: {{nodeNames}} runs at {{utilizationPct}}% and is bound by {{boundBy}} at a capacity of {{capacity}} req/s; {{dropped}} req/s are dropped. Add instances, shard it, or cut the traffic.",
+        "saturated": "Close to the limit: {{nodeNames}} runs at {{utilizationPct}}%, bound by {{boundBy}} at a capacity of {{capacity}} req/s. The queue will grow at peak.",
+        "retry-storm": "Retry storm: the model did not converge — retries add load faster than the system drains it. Reduce the retry count, add backoff and a circuit breaker.",
+        "retry-amplification": "Retries inflate the load: {{nodeNames}} receives {{amplificationPct}}% more requests because of repeats. Raise the timeout or enable exponential backoff.",
+        "spof": "Single point of failure: {{nodeNames}} has no standby — losing it breaks the whole request path. Add a second replica or a second zone.",
+        "hot-key": "Hot key: {{nodeNames}} takes {{hotKeyRps}} req/s on a single shard whose capacity is {{perShardCapacity}} req/s. Spread the key out or put a local cache in front.",
+        "client-direct-to-store": "The client talks to the store directly ({{nodeNames}}). Put a service or a gateway in between — otherwise there is no authorization, no limits and no cache.",
+        "retry-without-idempotency": "Retries without idempotency: {{retries}} retries are configured, but the operation is not idempotent ({{nodeNames}}). A retry creates a duplicate — add an idempotency key.",
+        "backlog-growing": "The backlog grows: the producer emits {{producerRps}} msg/s while the consumer drains {{consumerCapacity}} msg/s — the lag adds {{growthPerSec}} msg/s. Add consumers or partitions.",
+        "read-heavy-without-cache": "Reads without a cache: {{nodeNames}} serves {{readRps}} reads/s at {{utilizationPct}}% utilization. A cache in front of the store removes most of that load.",
+        "egress-dominates": "Traffic dominates the bill: egress is {{sharePct}}% of the cost ({{egressCost}} $/mo). Enable a CDN, compress responses, or keep the traffic inside the region.",
+        "unmodelled": "No model: {{nodeNames}} is not simulated yet — its capacity and latency are excluded from the estimate.",
+        "anomaly-stale-read": "Stale reads: {{ratePerSec}} ops/s ({{sharePct}}% of reads) return outdated data because of replica lag ({{nodeNames}}). Read from the primary where freshness matters.",
+        "anomaly-read-your-writes": "The user does not see their own write: {{ratePerSec}} ops/s ({{sharePct}}%) hit a replica before the change lands ({{nodeNames}}). Pin the session to the primary.",
+        "anomaly-lost-update": "Lost updates: {{ratePerSec}} ops/s ({{sharePct}}% of writes) overwrite each other ({{nodeNames}}). Use versions, CAS, or transactions instead of read-modify-write.",
+        "anomaly-write-conflict": "Write conflicts: {{ratePerSec}} ops/s ({{sharePct}}%) edit the same key from different regions ({{nodeNames}}). Pin the key to one region or switch to CRDTs.",
+        "anomaly-lost-write-lww": "Writes are lost to last-write-wins: {{ratePerSec}} ops/s ({{sharePct}}%) are silently discarded as losers ({{nodeNames}}). Change the conflict resolution strategy.",
+        "anomaly-duplicate-processing": "Duplicate processing: {{ratePerSec}} ops/s ({{sharePct}}%) are handled twice ({{nodeNames}}). At-least-once without idempotency causes double effects.",
+        "unknown-component": "Unknown block \"{{type}}\": it is not in the catalog and is excluded from the estimate.",
+        "dangling-edge": "Dangling edge: one of its ends points at a block that does not exist.",
+        "no-entry-point": "No entry point: add a client — without one there is no load to simulate.",
+        "cycle-detected": "Cycle in the scheme: {{size}} blocks call each other in a loop — latency there is approximated.",
+        "unreachable-node": "Unreachable block: {{nodeNames}} receives no traffic from any client.",
+        "deep-sync-chain": "Deep synchronous chain: {{depth}} hops in a row starting at {{nodeNames}}. Every hop multiplies latency and failure odds — move part of it off the request path."
+    },
+    "anomaly": {
+        "stale-read": "Stale read",
+        "read-your-writes": "Read-your-writes broken",
+        "lost-update": "Lost update",
+        "write-conflict": "Write conflict",
+        "lost-write-lww": "Write lost to LWW",
+        "duplicate-processing": "Duplicate processing"
+    },
+    "bound": {
+        "authoritative-qps": "authoritative server limit",
+        "broker-network": "broker network",
+        "concurrency": "concurrency",
+        "connections": "connection count",
+        "cpu": "CPU",
+        "daily-quota": "daily quota",
+        "db-pool": "database connection pool",
+        "depth": "queue depth",
+        "disabled": "being disabled",
+        "disk-scan": "disk scan rate",
+        "gateway-rps": "gateway limit",
+        "global-rps": "global RPS ceiling",
+        "hot-key": "hot key",
+        "hot-partition": "hot partition",
+        "indexing": "indexing",
+        "inflight": "in-flight requests",
+        "ingest-bandwidth": "ingest bandwidth",
+        "iops": "disk IOPS",
+        "memory": "memory",
+        "network": "network",
+        "new-connections": "new connections",
+        "node-ops": "node operations",
+        "nodes": "node count",
+        "ops": "operation count",
+        "partitions": "partition count",
+        "pop-network": "edge location network",
+        "pop-rps": "edge location limit",
+        "prefix-requests": "prefix requests",
+        "prefix-throughput": "prefix bandwidth",
+        "proxy-rps": "proxy limit",
+        "query-slots": "query slots",
+        "queues": "queues",
+        "quotaRps": "the RPS quota",
+        "rate-limit": "rate limit",
+        "rps-ceiling": "RPS ceiling",
+        "sample-ingest": "metric ingest",
+        "search-threads": "search threads",
+        "source": "traffic source",
+        "throughput": "throughput",
+        "unbounded": "nothing",
+        "unmodelled": "an unmodelled limit",
+        "vendor-units": "billing units",
+        "workers": "worker count"
+    },
     "footer": {
         "nodes": "blocks",
         "edges": "edges",
         "groups": "groups",
-        "phase": "Phase 0 — editor without the model",
+        "phase": "Phase 1 — steady-state load model",
         "storage": "used in storage"
     },
     "dialog": {
@@ -146,10 +309,23 @@
         "confirmLoad": {
             "title": "Open scheme",
             "message": "The current scheme is unsaved. Open another one and lose the changes?"
+        },
+        "importFailed": {
+            "title": "Unsupported file",
+            "message": "This is not a SysDesign Flow scheme or the file is damaged. Check that you are importing JSON exported from the editor."
         }
     },
     "errorBoundary": {
         "message": "Something went wrong in this part of the interface.",
         "retry": "Try again"
+    },
+    "metric": {
+        "throughput": "Throughput",
+        "boundBy": "Capacity limiter",
+        "utilization": "Utilization"
+    },
+    "demo": {
+        "video-platform": "Video platform",
+        "two-region-payments": "Two-region payments"
     }
 }

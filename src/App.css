@@ -13,12 +13,18 @@
 }
 
 .app-content {
-    flex: 1;
+    flex: 1 1 0;
     display: flex;
     position: relative;
     overflow: hidden;
     min-width: 0;
-    min-height: 0;
+    min-height: 120px;
+}
+
+.app > .dash,
+.app > .ftr,
+.app > .error-boundary {
+    flex: 0 0 auto;
 }
 
 .app-inspector-toggle {

@@ -22,75 +22,70 @@
 
 ## 2. Структура репозитория
 
+Ниже — фактическое дерево после фазы 1. Каталоги, помеченные *(фаза 2+)*, ещё не созданы.
+
 ```
 sd-flow/
 ├── src/
-│   ├── engine/                        ← ядро, без React
+│   ├── engine/                        ← ядро, без React, DOM и i18n
 │   │   ├── ComponentRegistry.ts       ← синглтон-реестр (аналог PluginRegistry)
-│   │   ├── TopologyCompiler.ts        ← валидация, SCC, дерево вызовов
-│   │   ├── SimulationEngine.ts        ← оркестратор шагов 2–6
-│   │   ├── solvers/
-│   │   │   ├── FlowSolver.ts          ← распространение λ, итерации, ретраи
-│   │   │   ├── CapacityKernel.ts      ← ёмкость и boundBy
-│   │   │   ├── QueueModel.ts          ← G/G/c, Сакасэгава + Аллен–Каннин
-│   │   │   ├── LatencyMonteCarlo.ts   ← свёртка задержек, квантили
-│   │   │   ├── CacheModel.ts          ← Zipf, hit ratio, прогрев
-│   │   │   ├── GeoRoutingModel.ts     ← гео-профиль → регион, RTT-матрица
-│   │   │   ├── MultiRegionModel.ts    ← режимы репликации, трафик, RPO/RTO
-│   │   │   ├── ConsistencyModel.ts    ← аномалии A1–A8 и средства смягчения
-│   │   │   ├── StorageModel.ts        ← данные, логи, метрики, бэкапы
-│   │   │   ├── CostModel.ts           ← стоимость по профилям цен
-│   │   │   └── AvailabilityModel.ts   ← девятки, SPOF, домены отказа
-│   │   ├── scenarios/                 ← baseline, peak, az-failure, …
-│   │   ├── rules/                     ← RuleEngine: антипаттерны и best practices
-│   │   ├── challenges/                ← движок предикатов, рубрика, вердикт
-│   │   ├── components/                ← ОПРЕДЕЛЕНИЯ БЛОКОВ, один модуль на группу
-│   │   │   ├── _shared/params.ts      ← хелперы num/bool/choice/text/defineComponent
-│   │   │   ├── clients.ts  edge.ts  compute.ts  sql.ts  nosql.ts  search.ts
-│   │   │   ├── olap.ts  cache.ts  messaging.ts  storage.ts  platform.ts
-│   │   │   └── observability.ts  topology.ts  probes.ts
-│   │   ├── types/                     ← Scheme, Node, Edge, Flow, Metrics, Findings
 │   │   ├── ports.ts                   ← совместимость портов по протоколам
-│   │   ├── edgeDefaults.ts            ← профили вызова по умолчанию для новой связи
+│   │   ├── edgeDefaults.ts            ← профили вызова по умолчанию + посев payload
 │   │   ├── ids.ts                     ← счётчик идентификаторов без Math.random
-│   │   ├── rng.ts                     ← xoshiro128**
-│   │   └── initComponents.ts          ← регистрация групп и всех блоков
-│   ├── worker/
-│   │   ├── simulation.worker.ts
-│   │   └── workerClient.ts            ← Comlink-обёртка, отмена, генерации
-│   ├── store/                         ← Zustand slices
-│   │   ├── schemeStore.ts   graphStore.ts   simulationStore.ts
-│   │   ├── challengeStore.ts   uiStore.ts
+│   │   ├── initComponents.ts          ← регистрация групп и всех блоков
+│   │   ├── types/
+│   │   │   ├── component.ts           ← ComponentDefinition, ComponentModel, контексты
+│   │   │   └── scheme.ts              ← SchemeV1, CallProfile, EdgePolicy, настройки
+│   │   ├── sim/                       ← шаги 1–7 модели симуляции
+│   │   │   ├── types.ts               ← SimResult: узлы, рёбра, потоки, итоги, находки
+│   │   │   ├── rng.ts                 ← xoshiro128** + хэш схемы
+│   │   │   ├── constants.ts           ← RTT-матрица гео-зон, профили цен, календарь
+│   │   │   ├── resources.ts           ← билдеры ограничителей ёмкости + defineModel
+│   │   │   ├── compile.ts             ← [1] валидация, SCC, порядок, размещение, RTT
+│   │   │   ├── flows.ts               ← λ из клиентских блоков
+│   │   │   ├── solver.ts              ← [2] распространение λ, ретраи, поглощение
+│   │   │   ├── queueing.ts            ← [4] Сакасэгава + Аллен–Каннин, p_fail
+│   │   │   ├── cacheModel.ts          ← [6] Ципф, hit ratio, горячий ключ
+│   │   │   ├── latency.ts             ← [5] Monte-Carlo по дереву вызовов
+│   │   │   ├── consistency.ts         ← [5а] аномалии A1, A2, A4, A5, A6
+│   │   │   ├── derived.ts             ← [6] хранилище, логи, egress
+│   │   │   ├── cost.ts                ← [6б] стоимость по профилям цен
+│   │   │   ├── availability.ts        ← девятки с резервированием, SPOF
+│   │   │   ├── multiRegion.ts         ← доли регионов, репликация, RPO/RTO
+│   │   │   ├── scenarios.ts           ← 7 сценариев фазы 1
+│   │   │   ├── findings.ts            ← [7] RuleEngine
+│   │   │   └── simulate.ts            ← оркестратор, отдаёт SimResult
+│   │   └── components/                ← ОПРЕДЕЛЕНИЯ БЛОКОВ, один модуль на группу
+│   │       ├── _shared/params.ts      ← хелперы num/bool/choice/text/defineComponent
+│   │       ├── clients.ts  edge.ts  compute.ts  sql.ts  nosql.ts  search.ts
+│   │       ├── olap.ts  cache.ts  messaging.ts  storage.ts  platform.ts
+│   │       └── observability.ts  topology.ts  probes.ts
+│   ├── workers/simulation.worker.ts   ← расчёт вне главного потока
+│   ├── store/                         ← Zustand: graphStore, schemeStore, uiStore, simStore
 │   ├── components/
-│   │   ├── canvas/                    ← SdEditor, SdNode, edges/*, groups/*
-│   │   ├── panels/                    ← Palette, Inspector, Dock, RequirementsPanel
-│   │   ├── dashboards/                ← SummaryBar, Findings, Waterfall, CostBreakdown
-│   │   ├── probes/                    ← окна измерителей
-│   │   ├── dialogs/                   ← Save/Load/Settings/Help/Confirm/Verdict
-│   │   ├── challenges/                ← Catalog, Briefing, Report, ReferenceDiff
-│   │   ├── layout/                    ← Header, Footer, ControlToolbar
+│   │   ├── canvas/                    ← SdEditor, SdNode, GroupNode, ProbeNode, TrafficEdge
+│   │   ├── panels/                    ← Palette, Inspector, Dashboard
+│   │   ├── dialogs/                   ← Save, Load, Confirm
+│   │   ├── layout/                    ← Header, Footer
 │   │   └── common/                    ← Dialog, ErrorBoundary, Icon, SdIcons
-│   ├── hooks/                         ← useSimulation, useSchemeStorage, useAutoSave, …
+│   ├── hooks/                         ← useSimulation, useAutoSave, useDialogManager, useTheme
 │   ├── contexts/                      ← ThemeContext, TouchContext
-│   ├── data/
-│   │   ├── defaults/                  ← latency.json, capacities.json, pricing-*.json
-│   │   ├── presets/                   ← инстансы, шаблоны подсхем
-│   │   ├── challenges/                ← YAML-задания (компилируются при сборке)
-│   │   └── help/                      ← справка по блокам
-│   ├── locales/                       ← ru/en × {common, blocks, groups, params, help, validation, challenges}
-│   ├── services/                      ← storage, share-link, export
+│   ├── data/demoSchemes.ts            ← демо-схемы, они же приёмка Definition of Done
+│   ├── locales/                       ← ru/en × {common, blocks, groups, params}
+│   ├── services/                      ← storage, файлы, сериализация, конструктор схем, воркер
 │   ├── styles/                        ← variables.css, index.css
-│   └── utils/
+│   └── utils/format.ts
 ├── tests/
-│   ├── engine/                        ← solvers, compiler, registry
-│   ├── components/                    ← по одному файлу на группу блоков
-│   ├── golden/                        ← эталонные схемы + снапшоты метрик
-│   ├── challenges/                    ← прогон эталонных решений через приёмку
-│   └── integration/
+│   ├── engine/                        ← реестр, каталог, порты, сериализация, модель, демо
+│   ├── store/                         ← graphStore
+│   └── helpers/                       ← конструктор схем для тестов
 ├── docs/                              ← этот каталог
-├── scripts/                           ← компиляция YAML-заданий, генерация OG-картинки
 └── .github/workflows/deploy.yml
 ```
+
+**Чего пока нет** *(фаза 2+)*: `engine/challenges/`, `data/challenges/` (YAML-задания),
+`data/defaults/*.json` (константы живут в `sim/constants.ts` и в дефолтах блоков),
+`components/probes/` (окна измерителей), `tests/golden/`, `scripts/`.
 
 ---
 
@@ -385,17 +380,37 @@ install → lint → typecheck → test → compile-challenges (YAML→JSON) →
 **Что НЕ переносим:** всё содержимое `engine/plugins/**` (DSP-алгоритмы), `visualization/**`
 (осциллограф/спектр/созвездие), `MicrophoneService`, `WavFileService`, Web Audio-слой.
 
-### 12.1. Что осталось на фазу 1 в уже написанном коде
+### 12.1. Что добавила фаза 1
 
-* `ComponentDefinition.model` не заполнен ни у одного блока — солверы из
-  [02-simulation.md](02-simulation.md) появятся вместе с воркером.
-* `TrafficEdge` кодирует долю профиля прозрачностью, но не кодирует RPS толщиной и не анимирует
-  поток: нет чисел. Формула `w = clamp(1 + 1.6·log10(rps), 1, 8)` из
-  [03-connections.md](03-connections.md) §5.1 включается вместе с движком.
+Движок целиком свой — из dsp-flow здесь не переиспользуется ничего, кроме идеи реестра.
+
+| Появилось | Где | Суть |
+|---|---|---|
+| Слот модели у блока | `types/component.ts` | `ComponentModel` = `serviceSec` + `capacity` (+ опционально `autoscale`, `cost`, `storage`, `availability`, `cache`). Заполнен у всех блоков MVP, несущих трафик |
+| Декларативные ограничители | `sim/resources.ts` | `littleLaw`, `explicitRps`, `connectionBound`, `iopsBound`, `vendorUnitBound`, `bandwidthBound`, `partitionBound`, `quotaBound`, `memoryResidencyBound`. Каждый отдаёт `Explain` с формулой и подставленными значениями, поэтому `boundBy` всегда объясним |
+| Расчёт вне UI | `workers/simulation.worker.ts`, `services/simulationService.ts` | Web Worker с отбрасыванием устаревших ответов; в Node и при отказе воркера — синхронный fallback через динамический импорт |
+| Метрики на канвасе | `SdNode`, `TrafficEdge` | Полоса утилизации с цветом по порогу, RPS, переведённое имя ограничителя; толщина жилы по RPS, красный отлив при ρ > 0.8, подписи в X-ray |
+| Панель результатов | `panels/Dashboard` | Итоги, потоки с квантилями, находки с переходом на узел, аномалии согласованности, мультирегион с RPO/RTO |
+| Демо-схемы | `data/demoSchemes.ts` | «Видеоплатформа» и «Платежи в двух регионах» — они же приёмочный тест фазы |
+
+Известное ограничение визуализации: формула толщины из
+[03-connections.md](03-connections.md) §5.1 — `w = clamp(1 + 1.6·log10(rps), 1, 8)` — насыщается
+при `rps ≳ 24k`, поэтому на схемах масштаба «Видеоплатформы» почти все жилы получают максимальную
+толщину. Формула оставлена абсолютной намеренно: только так легенда «толщина ↔ RPS» осмысленна и
+сравнима между схемами.
+
+### 12.2. Что осталось на следующие фазы
+
 * Пробы (`probe-*`) ставятся на схему и хранятся, но окон измерителей ещё нет.
-* Undo/redo пишет в историю только структурные правки: перетаскивание и ресайз оформляются
-  транзакцией (`beginTransaction`/`commitTransaction`), а служебные изменения React Flow
-  (`select`, `dimensions`) не попадают в историю и не помечают схему изменённой.
+* Transient-режим, оставшиеся сценарии и аномалии A3/A7/A8 — см.
+  [02-simulation.md](02-simulation.md) §15.3, там же полный перечень нереализованного.
+* Зеркальные регионы `mirrorOf` (ADR-13): регионы пока описываются явно.
+* Инкрементальный пересчёт по хэшу подграфа; сейчас схема считается целиком.
+* Режим заданий целиком (фаза 2).
+
+Поведение undo/redo не менялось: в историю пишутся только структурные правки, перетаскивание и
+ресайз оформляются транзакцией (`beginTransaction`/`commitTransaction`), а служебные изменения
+React Flow (`select`, `dimensions`) не попадают в историю и не помечают схему изменённой.
 
 ---
 

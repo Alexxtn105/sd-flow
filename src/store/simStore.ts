@@ -1,0 +1,76 @@
+import { create } from 'zustand';
+import { DEFAULT_SAMPLE_COUNT, PREVIEW_SAMPLE_COUNT } from '../engine/sim/simulate';
+import type { SimResult } from '../engine/sim/types';
+import type { SchemeV1 } from '../engine/types/scheme';
+import { runSimulation } from '../services/simulationService';
+
+export type SimStatus = 'idle' | 'running' | 'ready' | 'error';
+
+export interface SimState {
+    result: SimResult | null;
+    status: SimStatus;
+    error: string | null;
+    scenario: string;
+    preview: boolean;
+    dashboardOpen: boolean;
+    run: (scheme: SchemeV1) => void;
+    setScenario: (scenario: string) => void;
+    setPreview: (preview: boolean) => void;
+    toggleDashboard: () => void;
+    reset: () => void;
+}
+
+let latestRequest = 0;
+
+export const useSimStore = create<SimState>((set, get) => ({
+    result: null,
+    status: 'idle',
+    error: null,
+    scenario: 'baseline',
+    preview: false,
+    dashboardOpen: true,
+
+    run: (scheme) => {
+        const { scenario, preview } = get();
+
+        if (scheme.nodes.length === 0) {
+            latestRequest += 1;
+            set({ result: null, status: 'idle', error: null });
+            return;
+        }
+
+        latestRequest += 1;
+        const requestId = latestRequest;
+        set({ status: 'running', error: null });
+
+        runSimulation({
+            scheme,
+            scenario,
+            sampleCount: preview ? PREVIEW_SAMPLE_COUNT : DEFAULT_SAMPLE_COUNT,
+        })
+            .then((result) => {
+                if (requestId !== latestRequest) return;
+                set({ result, status: 'ready', error: null });
+            })
+            .catch((error: Error) => {
+                if (requestId !== latestRequest) return;
+                set({ status: 'error', error: error.message });
+            });
+    },
+
+    setScenario: (scenario) => set({ scenario }),
+    setPreview: (preview) => set({ preview }),
+    toggleDashboard: () => set((state) => ({ dashboardOpen: !state.dashboardOpen })),
+    reset: () => {
+        latestRequest += 1;
+        set({ result: null, status: 'idle', error: null });
+    },
+}));
+
+export function useNodeResult(nodeId: string | undefined) {
+    return useSimStore((state) => (nodeId ? (state.result?.nodes[nodeId] ?? null) : null));
+}
+
+export function useEdgeResult(edgeId: string | undefined) {
+    return useSimStore((state) => (edgeId ? (state.result?.edges[edgeId] ?? null) : null));
+}

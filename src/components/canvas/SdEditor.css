@@ -29,3 +29,33 @@
     font-size: 12px;
     color: var(--text-tertiary);
 }
+
+.sd-edge-label {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 7px;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+    border: 1px solid var(--border-primary);
+    box-shadow: var(--shadow-sm);
+    font-size: 10px;
+    line-height: 1.4;
+    white-space: nowrap;
+    pointer-events: none;
+    font-variant-numeric: tabular-nums;
+}
+
+.sd-edge-label-rps {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.sd-edge-label-bytes {
+    color: var(--text-secondary);
+}
+
+.sd-edge-label-latency {
+    color: var(--text-tertiary);
+}

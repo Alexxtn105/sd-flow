@@ -8,9 +8,15 @@
 Короткое техническое имя (папка, репозиторий, пакет) — `sd-flow`; продуктовое имя в любом
 пользовательском тексте — **SysDesign Flow**.
 
-**Статус: фаза 0 завершена** — работает редактор схем (палитра 44 блоков, канвас, связи,
-группы Region/AZ, инспектор, undo/redo, хранение, экспорт/импорт, темы, ru/en).
-Модели нагрузки нет: слот `ComponentDefinition.model` пуст у всех блоков, солверы — фаза 1.
+**Статус: фаза 1 завершена** — к редактору схем из фазы 0 (палитра 44 блоков, канвас, связи,
+группы Region/AZ, инспектор, undo/redo, хранение, экспорт/импорт, темы, ru/en) добавлена
+стационарная модель нагрузки. Слот `ComponentDefinition.model` заполнен у 29 блоков — всех, кто
+несёт трафик (у клиентов модели нет по построению, у контейнеров, линков и проб её не бывает).
+Движок в `src/engine/sim/` считает потоки с ретраями, ёмкость с названным ограничителем, очереди,
+latency p50/p95/p99 по Monte-Carlo, hit ratio кэша по Ципфу, хранилище, стоимость, доступность,
+мультирегион с RPO/RTO, аномалии согласованности, 7 сценариев и Findings; расчёт идёт в Web Worker
+и детерминирован по seed. Чего нет: transient-режима, аномалий A3/A7/A8, зеркальных регионов
+`mirrorOf`, окон проб, режима заданий — полный список в `docs/02-simulation.md` §15.3.
 
 ```bash
 npm run dev        # http://localhost:5173/sd-flow/
@@ -23,7 +29,7 @@ npm run lint && npm run typecheck && npm test && npm run build
 |---|---|
 | `PRD.md` | Главный документ: цели, персоны, режимы, функциональные требования, UX, дорожная карта, риски |
 | `docs/01-components.md` | Каталог строительных блоков: 14 групп, 129 типов (44 в MVP), параметры каждого |
-| `docs/02-simulation.md` | Модель симуляции: ёмкость, очереди, latency, кэш, мультирегион, аномалии согласованности, стоимость, константы |
+| `docs/02-simulation.md` | Модель симуляции: ёмкость, очереди, latency, кэш, мультирегион, аномалии согласованности, стоимость, константы; §15 — что из этого реализовано в фазе 1 |
 | `docs/03-connections.md` | Семантика связей, профили вызова, визуальное кодирование трафика |
 | `docs/04-challenges.md` | Режим заданий, алгоритм приёмки, рубрика, линтер, каталог задач |
 | `docs/05-architecture.md` | Техническая архитектура, структура репозитория, ADR |
@@ -113,7 +119,7 @@ D1: мультирегион в MVP; D2: симуляция аномалий с�
 ### Добавление блока
 
 Один модуль на группу: `src/engine/components/<группа>.ts`. Блок описывается через
-`defineComponent({ id, group, shape, wave, icon, ports, defaultParams, paramSchema, helpId })`
+`defineComponent({ id, group, shape, wave, icon, ports, defaultParams, paramSchema, model, helpId })`
 и добавляется в экспортируемый массив группы. Реестр при старте проверяет, что ключи
 `defaultParams` и `paramSchema` совпадают один в один, поэтому опечатка падает сразу.
 
@@ -121,3 +127,65 @@ D1: мультирегион в MVP; D2: симуляция аномалий с�
 параметров — в `params.json` обоих языков, все новые значения enum — в секцию `params.enum`.
 Тест `tests/engine/catalog.test.ts` проверяет и покрытие локалей, и число блоков по группам
 против `docs/01-components.md` §15 — при расширении каталога правится и документ, и ожидания теста.
+
+Блок, несущий трафик, без модели считается недоделанным: `boundBy` у него станет `unmodelled`,
+и он выпадет из расчёта. Как заполнять слот `model` — ниже.
+
+### Добавление модели блока
+
+Контракт — `ComponentModel<P>` в `src/engine/types/component.ts`: обязательны `serviceSec(ctx)`
+(время обслуживания одного запроса, секунды) и `capacity(ctx)` (ёмкость плюс список ограничителей);
+опциональны `autoscale`, `cost`, `storage`, `availability`, `cache`. На вход приходит
+`NodeContext`: `params`, `instances` (уже после автоскейлинга), `lambda`, `readShare`/`writeShare`,
+`requestBytes`/`responseBytes`. У `cost` контекст шире (`pricing`, `storageGb`, `egressGbMonth`,
+`regionCostMultiplier`), у `storage` — тоже (`writeRps`, `recordBytes`, `horizonDays`).
+
+Пишется модель не руками, а через `defineModel` — он сворачивает список ограничителей в
+`capacity` (минимум побеждает, его имя становится `boundBy`) и отбрасывает `null` и бесконечности:
+
+```ts
+const redisDefaults = { shards: 3, memoryGb: 26, serviceTimeMs: 0.2, /* … */ };
+
+const redisModel = defineModel<typeof redisDefaults>({
+    serviceSec: (ctx) => ctx.params.serviceTimeMs / 1000,
+    resources: (ctx) => [
+        explicitRps('ops', ctx.params.shards, opsPerShard(ctx.params)),
+        memoryResidencyBound('memory', capacityGb(ctx.params), perRequestGb(ctx)),
+    ],
+    cost: (ctx) =>
+        totalCost({
+            compute: nodeCount(ctx.params) * ctx.params.costPerInstanceHour * HOURS_PER_MONTH,
+            storage: 0,
+            network: 0,
+            requests: 0,
+        }),
+});
+
+const redis = defineComponent({ /* … */ defaultParams: redisDefaults, model: redisModel });
+```
+
+Типизация идёт через `typeof <блок>Defaults` — тогда опечатка в имени параметра внутри модели
+падает на этапе компиляции.
+
+Ограничители собираются декларативными билдерами из `src/engine/sim/resources.ts`, а не
+арифметикой на месте: `littleLaw` (приборы / S), `explicitRps`, `connectionBound`, `iopsBound`,
+`vendorUnitBound` (RCU/WCU), `bandwidthBound`, `partitionBound`, `quotaBound`,
+`memoryResidencyBound`, `weightedUnitBound`, `resourceLimit` для общего случая. Стоимость —
+`totalCost` / `emptyCost`, пояснения к хранилищу — `explain`.
+
+Требования, которые проверяет `tests/engine/capacity-coverage.test.ts` при трёх смесях
+(100/0, 80/20, 0/100 чтение/запись):
+
+* у каждого блока, который несёт трафик, есть `model`;
+* ёмкость положительна, список ограничителей непуст, значения конечны;
+* у каждого ограничителя есть `explain` с непустой формулой и подставленными значениями —
+  билдеры делают это сами, для `resourceLimit` формулу передаёте вы;
+* **каждое имя ресурса переведено в `locales/{ru,en}/common.json` в секцию `bound.*`** — забыли
+  перевод, тест красный.
+
+В движке запрещены `Math.random()` и `Date.now()`: только seeded PRNG `src/engine/sim/rng.ts` и
+переданное время, иначе ломается детерминизм. Модель — чистая функция от контекста: ни стора, ни
+DOM, ни i18n, ни обращений к другим узлам.
+
+Изменение модели влечёт правку `docs/02-simulation.md` (в том числе §15 — что реализовано) и, если
+затронуты параметры, `docs/01-components.md`.

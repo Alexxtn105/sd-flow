@@ -4,7 +4,7 @@ import type { Connection, Edge, EdgeChange, Node, NodeChange, XYPosition } from 
 import { applyPatches, enablePatches, produceWithPatches } from 'immer';
 import type { Patch } from 'immer';
 import registry from '../engine/ComponentRegistry';
-import { createDefaultEdge } from '../engine/edgeDefaults';
+import { applySourcePayload, createDefaultEdge } from '../engine/edgeDefaults';
 import { nextId } from '../engine/ids';
 import { isConnectionAllowed } from '../engine/ports';
 import type { ComponentParams, ComponentShape, ComponentTypeId, ParamValue } from '../engine/types/component';
@@ -203,14 +203,17 @@ export const useGraphStore = create<GraphState>((set, get) => {
             const target = nodes.find((node) => node.id === connection.target);
             if (!source || !target) return;
 
-            const scheme = createDefaultEdge({
-                source: source.id,
-                target: target.id,
-                sourceHandle: connection.sourceHandle ?? '',
-                targetHandle: connection.targetHandle ?? '',
-                sourceType: source.data.componentType,
-                targetType: target.data.componentType,
-            });
+            const scheme = applySourcePayload(
+                createDefaultEdge({
+                    source: source.id,
+                    target: target.id,
+                    sourceHandle: connection.sourceHandle ?? '',
+                    targetHandle: connection.targetHandle ?? '',
+                    sourceType: source.data.componentType,
+                    targetType: target.data.componentType,
+                }),
+                source.data.params,
+            );
 
             const edge: SdEdge = {
                 id: scheme.id,

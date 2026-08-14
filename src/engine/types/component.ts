@@ -117,14 +117,63 @@ export interface CostBreakdown {
     total: number;
 }
 
+export interface StorageResult {
+    totalGb: number;
+    growthGbDay: number;
+    memoryGb: number;
+    explain: Explain[];
+}
+
+export interface CacheProfile {
+    uniqueKeys: number;
+    zipfAlpha: number;
+    entryBytes: number;
+    capacityBytes: number;
+    ttlSec: number;
+}
+
+export interface PricingProfile {
+    id: string;
+    asOf: string;
+    egressPerGb: number;
+    crossAzPerGb: number;
+    crossRegionPerGb: number;
+    requestsPerMillion: number;
+    managedMultiplier: number;
+}
+
 export interface NodeContext<P extends ComponentParams = ComponentParams> {
     nodeId: string;
     params: P;
+    instances: number;
+    lambda: number;
+    readShare: number;
+    writeShare: number;
+    requestBytes: number;
+    responseBytes: number;
+}
+
+export interface CostContext<P extends ComponentParams = ComponentParams> extends NodeContext<P> {
+    pricing: PricingProfile;
+    storageGb: number;
+    egressGbMonth: number;
+    regionCostMultiplier: number;
+}
+
+export interface StorageContext<P extends ComponentParams = ComponentParams> extends NodeContext<P> {
+    writeRps: number;
+    recordBytes: number;
+    horizonDays: number;
 }
 
 export interface ComponentModel<P extends ComponentParams = ComponentParams> {
+    serviceSec(ctx: NodeContext<P>): number;
     capacity(ctx: NodeContext<P>): CapacityResult;
-    cost(ctx: NodeContext<P>): CostBreakdown;
+    autoscale?(ctx: NodeContext<P>): number;
+    cost?(ctx: CostContext<P>): CostBreakdown;
+    storage?(ctx: StorageContext<P>): StorageResult;
+    availability?(params: P): number;
+    cache?(ctx: NodeContext<P>): CacheProfile;
 }
 
 export interface ComponentDefinition<P extends ComponentParams = ComponentParams> {

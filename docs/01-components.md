@@ -76,12 +76,41 @@
 |---|---|---|
 | `consistencyModel` | `linearizable` / `sequential` / `bounded-staleness` / `read-your-writes` / `monotonic` / `eventual` | Верхняя граница гарантий, которую блок вообще способен дать |
 | `replicationMode` | `sync` / `semi-sync` / `async` | Определяет распределение лага |
-| `replicaLagMs` | авто (median) + `replicaLagSigma` | Основной вход расчёта устаревших чтений |
+| `replicaLagMs` | мс, задаётся явно; дефолты по блокам — в таблице ниже | Медиана логнормального лага — основной вход расчёта устаревших чтений |
+| `replicaLagSigma` | 0.1–3.0, шаг 0.1; **по умолчанию 0.8** у всех блоков | σ того же логнормального распределения. Медиана задаёт «типичный» лаг, σ — длину хвоста; именно из хвоста берётся частота устаревших чтений и RPO |
 | `quorum` | `N`, `R`, `W` | При `R + W > N` устаревшие чтения исчезают (без учёта отказов) |
 | `concurrencyControl` | `none` / `optimistic` (CAS, версии) / `pessimistic` (блокировки) / `crdt` | Определяет вероятность потерянных обновлений |
 | `conflictResolution` | `lww` / `vector-clock` / `crdt` / `single-writer-per-key` / `manual` | Что происходит при конфликте мульти-мастера |
 | `transactionScope` | `none` / `single-row` / `single-shard` / `cross-shard` / `distributed-2pc` | Стоимость и хрупкость транзакций |
 | `isolationLevel` | `read-uncommitted` … `serializable` | Для SQL: какие аномалии в принципе возможны |
+
+**Лаг репликации: дефолты по блокам первой волны.** Пара `replicaLagMs` + `replicaLagSigma` есть
+у девяти блоков MVP — у всех, где в модели вообще есть реплики:
+
+| Блок | `replicaLagMs` | Реалистичный диапазон медианы | Допустимо | `replicaLagSigma` |
+|---|---|---|---|---|
+| `postgres` | 200 мс | 50–2000 мс | 0–600 000 мс | 0.8 |
+| `mysql` | 500 мс | 50–2000 мс | 0–600 000 мс | 0.8 |
+| `mongodb` | 100 мс | 20–2000 мс | 0–600 000 мс | 0.8 |
+| `cassandra` | 30 мс | 5–500 мс | 0–600 000 мс | 0.8 |
+| `dynamodb` | 20 мс | 5–500 мс | 0–600 000 мс | 0.8 |
+| `elasticsearch` | 1000 мс | 200–30 000 мс | 0–600 000 мс | 0.8 |
+| `clickhouse` | 500 мс | 100–10 000 мс | 0–600 000 мс | 0.8 |
+| `redis` | 5 мс | 1–100 мс | 0–60 000 мс | 0.8 |
+| `local-cache` | 1000 мс | — (рассогласование копий в процессах) | 0–600 000 мс | 0.8 |
+
+У `replicaLagSigma` во всех девяти блоках один диапазон: 0.1–3.0 с шагом 0.1, значение по
+умолчанию 0.8. Лаг разыгрывается как `L ~ LogNormal(median = replicaLagMs, σ = replicaLagSigma)`,
+и из этого распределения движок берёт две величины:
+
+```
+E[L]   = median · e^(σ²/2)         при σ = 0.8 → 1.38 × медианы  → частота устаревших чтений
+p99(L) = median · e^(2.3263 · σ)   при σ = 0.8 → 6.43 × медианы  → RPO мультирегиона
+```
+
+То есть для `postgres` с дефолтами: средний лаг ≈ 276 мс, p99 ≈ 1.29 с, и именно 1.29 с станет
+расчётным RPO при потере региона. Медиана дополнительно растёт с утилизацией источника
+(`median_eff = median · (1 + ρ²/(1 − ρ))`) — перегруженный primary реплицируется хуже.
 
 **У рёбер (профилей вызова):**
 
@@ -154,11 +183,11 @@
 
 | ID | Название | Волна | Специфичные параметры | Ограничитель |
 |---|---|---|---|---|
-| `service` | Stateless-сервис / микросервис | **M** | `runtime` (JVM/Go/Node/Python/.NET — влияет на дефолты concurrency и cold start), `workers`, `serviceTimeMs`, `cpuBoundShare` (доля CPU-времени в service time), `memoryPerRequestMb`, `startupSec`, `callMode`, `logLinesPerRequest`, `logBytesPerLine` | CPU / воркеры |
-| `monolith` | Монолит | **M** | то же + `moduleCount`, `sharedDbConnections`, `deployRiskFactor` (для сценариев) | Соединения к БД |
+| `service` | Stateless-сервис / микросервис | **M** | `runtime` (JVM/Go/Node/Python/.NET — влияет на дефолты concurrency и cold start), `concurrencyPerInstance`, `serviceTimeMs`, `serviceTimeSigma`, `cpuShare` (доля CPU-времени в service time), `cpuCores`, `networkMbps`, `callMode`, `logLinesPerRequest`, `logBytesPerLine` | CPU / воркеры |
+| `monolith` | Монолит | **M** | то же + `moduleCount`, `sharedDbConnections`, `startupSec` | CPU, затем пул соединений к БД |
 | `bff` | BFF / агрегатор | V1 | `downstreamCalls` (авто из рёбер), `callMode: parallel`, `aggregationMs`, `partialFailureMode` (fail-fast / degrade) | Хвост параллельных вызовов |
-| `serverless` | Serverless-функция (Lambda / Cloud Run) | **M** | `memoryMb`, `coldStartMs`, `coldStartRate` (авто от RPS и `keepWarm`), `maxConcurrency`, `initSec`, `costPerGbSecond`, `costPerMillionInvocations`, `maxDurationSec`, `provisionedConcurrency` | Лимит конкурентности аккаунта |
-| `worker` | Фоновый воркер / консьюмер | **M** | `concurrency`, `processingTimeMs`, `prefetch`, `batchSize`, `retryPolicy`, `dlqEnabled`, `idempotent` | Пропускная способность vs лаг очереди |
+| `serverless` | Serverless-функция (Lambda / Cloud Run) | **M** | `memoryMb`, `coldStartMs`, `coldStartShare` (доля вызовов, попавших в холодный старт), `maxConcurrency`, `costPerGbSecond`, `costPerMillionInvocations`, `maxDurationSec`, `provisionedConcurrency` | Лимит конкурентности аккаунта |
+| `worker` | Фоновый воркер / консьюмер | **M** | `concurrency`, `processingTimeMs`, `cpuShare`, `cpuCores`, `prefetch`, `batchSize`, `retries`, `dlqEnabled`, `idempotent` | CPU, затем воркеры (`instances × concurrency × batchSize`) |
 | `cron` | Планировщик / cron | V1 | `scheduleCron`, `jobDurationSec`, `overlapPolicy`, `spikeFactor` (пик от единовременного запуска) | Всплеск в момент запуска |
 | `batch` | Батч-обработка (Spark / Airflow-джоба) | V1 | `datasetGb`, `throughputMbPerCoreSec`, `cores`, `windowHours`, `shuffleFactor` | ЦПУ × окно |
 | `stream-processor` | Стрим-процессор (Flink / Kafka Streams / Spark Streaming) | V1 | `parallelism`, `recordsPerSecPerTask`, `stateSizeGb`, `checkpointIntervalSec`, `windowType`, `exactlyOnce`, `watermarkLagSec` | Параллелизм = число партиций |
@@ -167,6 +196,53 @@
 | `search-indexer` | Индексатор | V1 | `docsPerSec`, `docSizeKb`, `indexLagSec`, `refreshIntervalSec` | Пропускная способность индексации |
 | `webrtc-sfu` | Медиасервер / SFU | V2 | `participantsPerRoom`, `bitrateKbps`, `simulcastLayers`, `cpuPerStream`, `egressGbps` | Пропускная способность и CPU |
 | `edge-function` | Edge-compute (Cloudflare Workers) | V2 | `cpuMsLimit`, `popCount`, `costPerMillionRequests` | CPU-ms |
+
+### Доля CPU в времени обслуживания (`cpuShare`)
+
+`serviceTimeMs` — это всё время обслуживания запроса, включая ожидание диска, БД и соседних
+сервисов. На процессоре из него проводится только часть, и задаёт её `cpuShare`. Именно этот
+параметр отделяет I/O-bound сервис от CPU-bound: ёмкость по процессору считается по CPU-времени,
+а не по полному времени обслуживания.
+
+```
+S            = serviceTimeMs / 1000                    # полное время обслуживания, с
+capacity_cpu = instances × cpuCores / (S × cpuShare)   # ёмкость по процессору, запр./с
+capacity_wrk = instances × concurrencyPerInstance / S  # ёмкость по воркерам, запр./с
+```
+
+| Блок | Дефолт | Реалистичный диапазон | Допустимо | `S` по умолчанию | CPU-время | `capacity_cpu` на дефолтах |
+|---|---|---|---|---|---|---|
+| `service` | 0.15 | 0.05–0.5 | 0.01–1.0, шаг 0.01 | 20 мс | 3 мс | 4000 запр./с (3 инстанса × 4 ядра) |
+| `monolith` | 0.25 | 0.1–0.6 | 0.01–1.0, шаг 0.01 | 45 мс | 11.25 мс | 2844 запр./с (4 инстанса × 8 ядер) |
+| `worker` | 0.5 | 0.2–1.0 | 0.01–1.0, шаг 0.01 | 120 мс | 60 мс | 133 сообщ./с (4 инстанса × 2 ядра) |
+
+Проверка на дефолтах `service`: воркеры дают `3 × 200 / 0.02 = 30 000 запр./с`, процессор —
+`3 × 4 / 0.003 = 4000 запр./с`, сеть — `3 × 1000 Мбит/с / 8 / 22 КБ = 17 045 запр./с`
+(при 2 КБ запроса и 20 КБ ответа). Минимум даёт процессор, поэтому `boundBy = cpu`. Поставьте
+`cpuShare = 0.02` — сервис, который почти всё время ждёт БД, — и ограничителем станут воркеры:
+тот же блок, другой урок.
+
+У `worker` в формулу входит `batchSize`: ёмкость считается по времени обработки целой пачки
+(`processingTimeMs`), а время обслуживания одного сообщения — `processingTimeMs / batchSize`.
+
+### Доля холодных стартов (`coldStartShare`)
+
+У `serverless` время обслуживания складывается из «горячего» времени и амортизированного
+холодного старта:
+
+```
+S = (serviceTimeMs + coldStartMs × coldStartShare) / 1000
+```
+
+| Параметр | Дефолт | Реалистичный диапазон | Допустимо |
+|---|---|---|---|
+| `coldStartMs` | 400 мс | — | 0–10 000 мс |
+| `coldStartShare` | 0.02 (2% вызовов) | 0–0.1 | 0–1.0, шаг 0.01 |
+
+С дефолтами `S = 80 мс + 400 мс × 0.02 = 88 мс` против 80 мс «горячих» — холодные старты
+добавляют 10% к времени обслуживания и, через него, к p50/p95/p99 всего потока. Ограничитель
+`concurrency` при этом считается по горячему времени, без надбавки за холодный старт:
+`maxConcurrency / (serviceTimeMs / 1000) = 1000 / 0.08 = 12 500 запр./с`.
 
 **Автоматически выводимое для `service`:** объём логов (`λ × logLinesPerRequest × logBytesPerLine × 86400`),
 метрик и трейсов — уходит в блоки группы `observability` (см. §12) и в статью стоимости.
@@ -193,12 +269,13 @@
 | Топология | `role` | `primary` / `read-replica` / `standby` |
 | | `readReplicas` | Число реплик чтения |
 | | `replicationMode` | `async` / `semi-sync` / `sync` — влияет на latency записи и на RPO |
-| | `replicaLagMs` | Производное от режима и нагрузки (async: 50–2000 мс) |
+| | `replicaLagMs` | Медиана лага: 200 мс у `postgres`, 500 мс у `mysql`; реалистично 50–2000 мс. Эффективная медиана растёт с утилизацией primary |
+| | `replicaLagSigma` | σ логнормального лага, по умолчанию 0.8 (диапазон 0.1–3.0, шаг 0.1). Задаёт хвост: p99 лага = медиана × 6.43, и это же значение становится RPO (§0.3) |
 | | `sharding.enabled`, `.shardCount`, `.shardKey`, `.strategy` | `hash` / `range` / `directory` |
 | | `failoverSec` | 15–120 с; попадает в расчёт доступности |
 | Ёмкость | `instanceClass` | Пресет (vCPU/RAM/сеть) |
-| | `maxConnections` | 100–5000; **типичный ограничитель Postgres** |
-| | `connectionPooler` | none / pgbouncer(transaction) / RDS Proxy — радикально меняет потолок |
+| | `maxConnections` | 200 у `postgres`, 500 у `mysql`; реалистично 100–1000 |
+| | `connectionPooler` | `none` / `pgbouncer-transaction` / `pgbouncer-session` / `proxy-managed` — умножает потолок соединений на 1 / 10 / 2 / 5 |
 | | `storageGb`, `storageType` | gp3 / io2 / local NVMe |
 | | `provisionedIops`, `iopsPerRead`, `iopsPerWrite` | Запись обычно 3–8 IOPS (WAL + страницы + индексы) |
 | | `bufferPoolGb` | Кэш страниц; влияет на долю попаданий в память |
@@ -211,15 +288,37 @@
 | Консистентность | `isolationLevel`, `readYourWrites`, `readFromReplica` (доля чтений с реплик) | Предикаты заданий проверяют это |
 | Надёжность | `backupSchedule`, `pitrDays`, `multiAz` | Хранилище бэкапов идёт в стоимость |
 
-**Модель ёмкости Postgres (пример):**
+**Что из этой таблицы считает фаза 1.** У `postgres` и `mysql` задан 31 параметр. В расчёт идут
+`readReplicas`, `shardCount`, `maxConnections`, `connectionPooler`, `connectionsPerQuery`,
+`cpuCores`, `provisionedIops`, `iopsPerRead` / `iopsPerWrite`, `readServiceMs` / `writeServiceMs`,
+`rowSizeBytes`, `rowCount`, `indexOverhead`, `readFromReplica`, `replicationMode`,
+`consistencyModel`, `replicaLagMs` / `replicaLagSigma`, `concurrencyControl`, `failoverSec`,
+`availability` и обе статьи стоимости. Параметры `bufferPoolGb`, `workingSetGb`, `queryProfile`,
+`storageGb`, `multiAz`, `isolationLevel` пока только хранятся; `conflictResolution` у самого блока
+не читается — конфликты мульти-мастера разрешаются значением из `multi-region-policy` (§13.1).
+Строки `role`, `instanceClass`, `sharding.*`, `storageType`, `indexCount`, `transactionsPerWrite`,
+`lockContention`, `backupSchedule`, `pitrDays`, `retentionDays`, `compressionRatio` — задел на V1,
+а `readYourWrites` задаётся не на блоке, а на ребре (§0.3).
+
+**Модель ёмкости `postgres` и `mysql` (так считает движок):**
 ```
-capacity_read  = min( maxConnections/connPerQuery × 1000/readServiceMs ,
-                      provisionedIops/iopsPerRead ,
-                      cpuCores × 1000/(readServiceMs × cpuShare) )
-capacity_write = min( provisionedIops/iopsPerWrite , walMbps/(rowBytes×amplification) , … )
+S           = (readShare × readServiceMs + writeShare × writeServiceMs) / 1000
+cpu         = cpuCores × shardCount × (1 + readReplicas × readFromReplica) / S
+connections = maxConnections × shardCount × poolerFactor / connectionsPerQuery / S
+iops        = provisionedIops × shardCount / (readShare × iopsPerRead + writeShare × iopsPerWrite)
+capacity    = min(cpu, connections, iops)
+
+poolerFactor:  none 1 · pgbouncer-session 2 · proxy-managed 5 · pgbouncer-transaction 10
 ```
-`boundBy` почти всегда покажет `connections` без пулера и `iops` — с пулером. Это ровно тот инсайт,
-за которым идут на интервью.
+На дефолтах `postgres` при смеси 80% чтения / 20% записи: `S = 1.14 мс`, `cpu = 11 228 запр./с`,
+`connections = 175 439 запр./с`, `iops = 7500 запр./с` — `boundBy = iops`, и всё упирается в
+дорогую запись (`iopsPerWrite = 4` против `iopsPerRead = 1`).
+
+Классическое «Postgres упёрся в соединения» появляется, когда
+`maxConnections × poolerFactor / connectionsPerQuery` опускается ниже
+`cpuCores × shardCount × (1 + readReplicas × readFromReplica)` — на дефолтах это 12.8, то есть
+нужно либо урезать `maxConnections`, либо поднять `connectionsPerQuery` (транзакция из нескольких
+запросов). Пулер двигает ту же границу в обратную сторону, умножая потолок соединений на 2–10×.
 
 ---
 
@@ -241,6 +340,10 @@ capacity_write = min( provisionedIops/iopsPerWrite , walMbps/(rowBytes×amplific
 | `etcd` | etcd / ZooKeeper / Consul (KV, координация) | V1 | `nodes` (нечётное), `writeQuorumMs`, `maxDbSizeMb`, `watchers`, `leaseCount` | Кворум записи, **не масштабируется записью** |
 | `s3-table` | Iceberg / Delta Lake поверх объектного хранилища | V2 | `fileSizeMb`, `partitioning`, `compaction`, `manifestOverhead` | Метаданные и compaction |
 
+У всех трёх блоков MVP этой группы есть полный набор параметров согласованности из §0.3, включая
+`replicaLagMs` + `replicaLagSigma`: `mongodb` — 100 мс, `cassandra` — 30 мс, `dynamodb` — 20 мс,
+σ = 0.8 у всех трёх.
+
 ---
 
 ## 6. Поиск и векторы (`search`)
@@ -252,6 +355,10 @@ capacity_write = min( provisionedIops/iopsPerWrite , walMbps/(rowBytes×amplific
 | `solr` | Apache Solr | V2 | `shards`, `replicas`, `softCommitMs` | — |
 | `vector-db` | Векторная БД (Pinecone / Milvus / Qdrant / pgvector) | V1 | `vectorCount`, `dimensions`, `indexType` (HNSW/IVF), `memoryPerVectorBytes` (`dim × 4 × 1.5`), `recallTarget`, `queryMs`, `topK` | Память (вектора живут в RAM) |
 | `autocomplete` | Сервис автодополнения (Trie/FST) | V1 | `prefixCount`, `memoryGb`, `queryMs`, `updateLagMin` | Память |
+
+У `elasticsearch` «свежесть» задают два независимых параметра: `refreshIntervalSec` (1 с по
+умолчанию — когда документ становится видимым в индексе) и лаг реплик `replicaLagMs = 1000 мс`
+при `replicaLagSigma = 0.8` — именно второй идёт в расчёт устаревших чтений (§0.3).
 
 ---
 
@@ -267,15 +374,19 @@ capacity_write = min( provisionedIops/iopsPerWrite , walMbps/(rowBytes×amplific
 | `trino` | Trino / Presto | V1 | `workers`, `bytesScanned`, `pushdown` | Скан |
 | `lakehouse` | Data Lake (S3 + каталог) | V1 | `rawGbPerDay`, `format` (parquet/orc), `compression`, `partitionScheme`, `lifecycleDays` | Стоимость хранения |
 
+У `clickhouse` реплики асинхронные: `replicaLagMs = 500 мс`, `replicaLagSigma = 0.8` (§0.3), а
+`concurrencyControl = none` — то есть блок штатно даёт и устаревшие чтения, и потерянные
+обновления, если писать в один ключ из нескольких мест.
+
 ---
 
 ## 8. Кэши (`cache`)
 
 | ID | Название | Волна | Ключевые параметры | Ограничитель |
 |---|---|---|---|---|
-| `redis` | Redis (standalone / sentinel / cluster) | **M** | `mode`, `shards`, `replicasPerShard`, `memoryGb`, `evictionPolicy` (LRU/LFU/TTL/noeviction), `ttlSec`, `keySizeBytes`, `valueSizeBytes`, `overheadPerKeyBytes` (~50–100), `maxOpsPerSec` (~80–150k/ядро), `pipelining`, `maxConnections`, `persistence`, `clusterHashSlots`, `hotKeyRisk` | Память → затем ops/sec одного ядра |
+| `redis` | Redis (standalone / sentinel / cluster) | **M** | `mode`, `shards`, `replicasPerShard`, `memoryGb`, `evictionPolicy` (LRU/LFU/TTL/noeviction), `ttlSec`, `keySizeBytes`, `valueSizeBytes`, `overheadPerKeyBytes` (~50–100), `uniqueKeys`, `zipfAlpha`, `maxOpsPerSec` (на шард, ~80–150k; ×2 при `pipelining`), `maxConnections`, `persistence`, `clusterHashSlots`, `hotKeyShare` | Операции шарда → затем память |
 | `memcached` | Memcached | V1 | `memoryGb`, `slabSize`, `threads`, `maxOpsPerSec` | Память |
-| `local-cache` | In-process кэш (Caffeine / LRU) | **M** | `sizeMb`, `ttlSec`, `perInstance: true`, `coherenceRisk` (рассогласование между инстансами!) | Память процесса, консистентность |
+| `local-cache` | In-process кэш (Caffeine / LRU) | **M** | `sizeMb`, `maxEntries`, `ttlSec`, `perInstance: true`, `coherenceRisk` (рассогласование между инстансами!), `uniqueKeys`, `zipfAlpha`, `stampedeProtection`, `refreshAhead` | Память процесса, консистентность |
 | `hazelcast` | Распределённый in-memory grid | V2 | `nodes`, `backupCount`, `nearCache` | Память + сеть |
 | `cdn-cache` | Кэш CDN | — | см. `cdn` в §2 | Egress |
 
@@ -290,8 +401,47 @@ capacity_write = min( provisionedIops/iopsPerWrite , walMbps/(rowBytes×amplific
 | `write-around` | Запись минует кэш: меньше засорения, ниже hitRatio на свежих данных |
 | `refresh-ahead` | Проактивное обновление до истечения TTL: меньше промахов, лишний трафик в БД |
 
-**Hit ratio по умолчанию считается, а не задаётся** — из распределения Zipf по ключам и размера кэша
-(см. [02-simulation.md](02-simulation.md), §6). Ручной override доступен, но помечается как «допущение».
+### Пространство ключей и скос популярности (`uniqueKeys`, `zipfAlpha`)
+
+**Hit ratio не задаётся, а выводится** — из размера пространства ключей, скоса популярности,
+объёма памяти, TTL и доли записи (формулы — [02-simulation.md](02-simulation.md), §6). Поэтому у
+`redis` и `local-cache` нет параметра «hit ratio»: есть `uniqueKeys` и `zipfAlpha`, из которых он
+получается.
+
+| Параметр | `redis` | `local-cache` | Допустимо | Реалистичный диапазон |
+|---|---|---|---|---|
+| `uniqueKeys` | 10 000 000 | 1 000 000 | 1–10¹² | — |
+| `zipfAlpha` | 1.0 | 1.0 | 0.3–2.5, шаг 0.1 | 0.6–1.4 |
+
+Пресеты α: `0.6` — почти равномерное обращение (кэшируется плохо), `1.0` — типичный веб,
+`1.3` — соцсеть и новости, `2.0` — сильно скошенный поток (тренды, звёзды).
+
+```
+entryBytes    = keySizeBytes + valueSizeBytes + overheadPerKeyBytes   # local-cache: +64 Б всегда
+capacityBytes = shards × memoryGb × 0.75                              # redis: 75% памяти под данные
+                min(sizeMb, maxEntries × entryBytes)                  # local-cache
+M             = capacityBytes / entryBytes                            # сколько ключей влезло
+t_reaccess    = min(M, N) / λ_read                                    # интервал повторного обращения
+ttlFactor     = 1 − e^(−ttlSec / t_reaccess)                          # 1, если ttlSec = 0
+h             = H(M, α) / H(N, α) × (1 − writeShare) × ttlFactor      # N = uniqueKeys
+H(n, α)       = Σ_{k=1..n} k^(−α)
+```
+
+На дефолтах `local-cache`: `entryBytes = 40 + 512 + 64 = 616 Б`, ёмкость
+`min(256 МБ, 100 000 записей × 616 Б) = 61.6 МБ` → влезает 100 000 ключей из 1 000 000, базовый
+`h = H(10⁵, 1) / H(10⁶, 1) ≈ 0.84`. Дальше его срезают запись и TTL: при 800 чтениях/с интервал
+повторного обращения — 125 с, при `ttlSec = 60 с` это даёт `ttlFactor = 0.38`, и с 20% записи
+итоговый hit ratio выходит 0.26.
+
+На дефолтах `redis` картина обратная: `entryBytes = 40 + 1024 + 64 = 1128 Б`, ёмкость
+`3 шарда × 26 ГБ × 0.75 = 58.5 ГБ` → влезает 51.9 млн ключей при `uniqueKeys = 10 млн`, то есть
+всё пространство ключей помещается целиком и `H(M, α) / H(N, α) = 1`. Дальше всё решает TTL: при
+`ttlSec = 300 с` и 1000 чтений/с интервал повторного обращения к ключу — 10 000 с, ключ протухает
+задолго до него, и hit ratio падает до 3%. Кэш размером с базу не помогает, если TTL короче
+интервала повторного обращения — это и есть тот урок, который не виден, когда hit ratio вбивают руками.
+
+Ручной override в первой волне есть только у блоков, где кэш — не отдельный узел, а свойство
+самого блока: `cdn.cacheHitRatio` (0.92 по умолчанию) и `dns.resolverCacheHitRatio` (0.9).
 
 ---
 

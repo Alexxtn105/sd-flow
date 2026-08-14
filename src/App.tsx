@@ -6,6 +6,7 @@ import Header from './components/layout/Header/Header';
 import Footer from './components/layout/Footer/Footer';
 import Palette from './components/panels/Palette/Palette';
 import Inspector from './components/panels/Inspector/Inspector';
+import Dashboard from './components/panels/Dashboard/Dashboard';
 import SdEditor from './components/canvas/SdEditor';
 import ErrorBoundary from './components/common/ErrorBoundary/ErrorBoundary';
 import SaveDialog from './components/dialogs/SaveDialog';
@@ -13,11 +14,14 @@ import LoadDialog from './components/dialogs/LoadDialog';
 import ConfirmDialog from './components/dialogs/ConfirmDialog';
 import Icon from './components/common/Icons/Icon';
 
+import { DEMO_SCHEMES } from './data/demoSchemes';
 import { useAutoSave } from './hooks/useAutoSave';
 import { useDialogManager } from './hooks/useDialogManager';
+import { useSimulation } from './hooks/useSimulation';
 import { useGraphStore } from './store/graphStore';
 import { useIsDirty, useSchemeStore } from './store/schemeStore';
 import type { StoredSchemeInfo } from './store/schemeStore';
+import { useSimStore } from './store/simStore';
 import { useUiStore } from './store/uiStore';
 import { downloadJson, pickJsonFile, slugify } from './services/fileService';
 import './App.css';
@@ -38,6 +42,7 @@ export default function App() {
     const replaceGraph = useGraphStore((state) => state.replaceGraph);
     const inspectorOpen = useUiStore((state) => state.inspectorOpen);
     const toggleInspector = useUiStore((state) => state.toggleInspector);
+    const dashboardOpen = useSimStore((state) => state.dashboardOpen);
 
     const meta = useSchemeStore((state) => state.meta);
     const library = useSchemeStore((state) => state.library);
@@ -51,6 +56,8 @@ export default function App() {
     const importScheme = useSchemeStore((state) => state.importScheme);
 
     const { loadAutoSave, clearAutoSave } = useAutoSave(true);
+
+    useSimulation();
 
     useEffect(() => {
         if (restored.current) return;
@@ -122,8 +129,30 @@ export default function App() {
 
     const handleImport = useCallback(async () => {
         const raw = await pickJsonFile();
-        if (raw) importScheme(raw);
-    }, [importScheme]);
+        if (raw === null) return;
+
+        if (!importScheme(raw)) {
+            setConfirmState({
+                title: t('dialog.importFailed.title'),
+                message: t('dialog.importFailed.message'),
+                action: () => undefined,
+            });
+        }
+    }, [importScheme, t]);
+
+    const handleLoadDemo = useCallback(
+        (demoId: string) => {
+            const demo = DEMO_SCHEMES.find((item) => item.id === demoId);
+            if (!demo) return;
+
+            guard(t('dialog.confirmLoad.title'), t('dialog.confirmLoad.message'), () => {
+                const scheme = demo.build();
+                scheme.meta.name = t(`demo.${demoId}`);
+                importScheme(scheme);
+            });
+        },
+        [guard, importScheme, t],
+    );
 
     return (
         <ReactFlowProvider>
@@ -135,6 +164,7 @@ export default function App() {
                     onLoad={handleLoad}
                     onExport={handleExport}
                     onImport={handleImport}
+                    onLoadDemo={handleLoadDemo}
                 />
 
                 <div className="app-content">
@@ -160,6 +190,12 @@ export default function App() {
                         </button>
                     )}
                 </div>
+
+                {dashboardOpen && (
+                    <ErrorBoundary>
+                        <Dashboard />
+                    </ErrorBoundary>
+                )}
 
                 <Footer />
 

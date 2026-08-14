@@ -7,7 +7,8 @@ import registry from '../../engine/ComponentRegistry';
 import type { ParamField, ParamValue, PortDefinition } from '../../engine/types/component';
 import { useGraphStore } from '../../store/graphStore';
 import type { SdNode as SdNodeType } from '../../store/graphStore';
-import { formatParamValue } from '../../utils/format';
+import { useNodeResult } from '../../store/simStore';
+import { formatParamValue, formatPercent, formatRps, utilizationLevel } from '../../utils/format';
 import './SdNode.css';
 
 const MAX_VISIBLE_PARAMS = 3;
@@ -30,8 +31,9 @@ function renderHandles(ports: PortDefinition[], position: Position, type: 'targe
 }
 
 function SdNodeView({ id, data, selected }: NodeProps<SdNodeType>) {
-    const { t } = useTranslation(['params', 'blocks', 'groups']);
+    const { t } = useTranslation(['params', 'blocks', 'groups', 'common']);
     const updateNodeParam = useGraphStore((state) => state.updateNodeParam);
+    const metrics = useNodeResult(id);
     const [editing, setEditing] = useState<string | null>(null);
     const [draft, setDraft] = useState('');
 
@@ -115,8 +117,14 @@ function SdNodeView({ id, data, selected }: NodeProps<SdNodeType>) {
         );
     };
 
+    const showMetrics = metrics !== null && metrics.lambdaOffered > 0;
+    const bounded = showMetrics && Number.isFinite(metrics.capacity);
+    const level = bounded ? utilizationLevel(metrics.utilization) : 'idle';
+
     return (
-        <div className={`sd-node sd-node-${definition.group} ${selected ? 'selected' : ''}`}>
+        <div
+            className={`sd-node sd-node-${definition.group} ${selected ? 'selected' : ''} ${showMetrics ? `sd-node-load-${level}` : ''}`}
+        >
             {renderHandles(definition.ports.in, Position.Left, 'target')}
 
             <div className="sd-node-header">
@@ -140,6 +148,32 @@ function SdNodeView({ id, data, selected }: NodeProps<SdNodeType>) {
                         </div>
                     ))}
                     {hiddenCount > 0 && <div className="sd-node-more">+{hiddenCount}</div>}
+                </div>
+            )}
+
+            {showMetrics && (
+                <div className={`sd-node-metrics sd-metrics-${level}`}>
+                    {bounded && (
+                        <div className="sd-util-track">
+                            <div
+                                className="sd-util-fill"
+                                style={{ width: `${Math.min(metrics.utilization, 1) * 100}%` }}
+                            />
+                        </div>
+                    )}
+                    <div className="sd-metric-row">
+                        <span className="sd-metric-rps" title={t('metric.throughput', { ns: 'common' })}>
+                            {formatRps(metrics.throughput)}
+                        </span>
+                        <span className="sd-metric-bound" title={t('metric.boundBy', { ns: 'common' })}>
+                            {t(`bound.${metrics.boundBy}`, { ns: 'common', defaultValue: metrics.boundBy })}
+                        </span>
+                        {bounded && (
+                            <span className="sd-metric-util" title={t('metric.utilization', { ns: 'common' })}>
+                                {formatPercent(metrics.utilization)}
+                            </span>
+                        )}
+                    </div>
                 </div>
             )}
 

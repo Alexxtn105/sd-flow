@@ -25,6 +25,27 @@ export function formatParamValue(
     return unit ? `${formatNumber(value)} ${unit}` : formatNumber(value);
 }
 
+export function formatRps(value: number): string {
+    if (!Number.isFinite(value)) return '∞';
+    if (value === 0) return '0';
+    if (value < 1) return value.toFixed(2);
+    if (value < 1000) return String(Math.round(value));
+    if (value < 1_000_000) return `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)}k`;
+    return `${(value / 1_000_000).toFixed(2)}M`;
+}
+
+export function formatPercent(value: number, digits = 0): string {
+    if (!Number.isFinite(value)) return '—';
+    return `${(value * 100).toFixed(digits)}%`;
+}
+
+export function utilizationLevel(utilization: number): 'idle' | 'ok' | 'warn' | 'hot' {
+    if (utilization >= 1) return 'hot';
+    if (utilization > 0.8) return 'warn';
+    if (utilization > 0.02) return 'ok';
+    return 'idle';
+}
+
 export function formatBytes(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;

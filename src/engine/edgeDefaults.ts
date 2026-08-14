@@ -3,6 +3,7 @@ import { findPort } from './ports';
 import { nextId } from './ids';
 import { DEFAULT_POLICY } from './types/scheme';
 import type { CallProfile, EdgeKind, SchemeEdge } from './types/scheme';
+import type { ComponentParams } from './types/component';
 import type { ComponentTypeId, GroupId } from './types/component';
 
 const STORAGE_GROUPS: GroupId[] = ['sql', 'nosql', 'search', 'olap', 'storage'];
@@ -104,5 +105,21 @@ export function createDefaultEdge(endpoints: EdgeEndpoints): SchemeEdge {
         policy: { ...DEFAULT_POLICY },
         pull,
         weight: 1,
+    };
+}
+
+export function applySourcePayload(edge: SchemeEdge, sourceParams: ComponentParams): SchemeEdge {
+    const requestKb = sourceParams.avgRequestKb;
+    const responseKb = sourceParams.avgResponseKb;
+
+    if (typeof requestKb !== 'number' || typeof responseKb !== 'number') return edge;
+
+    return {
+        ...edge,
+        calls: edge.calls.map((call) => ({
+            ...call,
+            requestBytes: requestKb * 1000,
+            responseBytes: responseKb * 1000,
+        })),
     };
 }
