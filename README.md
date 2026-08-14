@@ -1,135 +1,175 @@
 # SysDesign Flow
 
-Визуальный тренажёр по проектированию высоконагруженных систем: собери схему из блоков
-(клиенты, балансировщики, гейтвеи, сервисы, БД, кэши, брокеры, S3, CDN) — и узнай, какой RPS она
-держит, где узкое место, какая latency p99, сколько петабайт накопится за год и сколько это стоит.
+*[Русская версия →](README.ru.md)*
 
-**[Открыть редактор →](https://alexxtn105.github.io/sd-flow/)**
+A visual trainer for designing high-load systems: assemble a scheme out of blocks (clients, load
+balancers, gateways, services, databases, caches, brokers, S3, CDN) and find out what RPS it
+sustains, where the bottleneck is, what the p99 latency looks like, how many petabytes pile up in
+a year and what all of it costs.
 
-## Статус: фаза 1 завершена
+**[Open the editor →](https://alexxtn105.github.io/sd-flow/)**
 
-Редактор схем из фазы 0 на месте: палитра из **44 блоков** первой волны, drag & drop на канвас,
-порты с проверкой совместимости по протоколам, связи с профилями вызова read/write,
-группы-контейнеры Region и AZ, инспектор параметров, undo/redo, сохранение в браузере, экспорт и
-импорт JSON, светлая и тёмная темы, русский и английский языки.
+## Status: phase 3 done (v1.0)
 
-**Цифры на схеме теперь считаются, а не задаются.** Модель нагрузки заполнена у 29 блоков —
-у всех, кто несёт трафик; у клиентов её нет по построению (они источники), у контейнеров, линков
-и проб её не бывает.
+Behind us are the scheme editor (phase 0), the steady-state load model (phase 1) and the
+Challenges mode (phase 2). Phase 3 added the passage of time, probes, the second catalogue wave
+and ten new challenges.
 
-### Что считает движок
+* **Catalogue — 109 blocks in 14 groups**: the MVP wave (44) plus the V1 wave (65). A capacity
+  model is filled in for 83 blocks — every block that carries traffic; clients have none by
+  construction (they are sources), and containers, links and probes never have one. 98 generic
+  icons, no vendor logos as a matter of principle.
+* **21 challenges** across levels 1–5, accepted by predicates, a Realism Gate, an anti-pattern
+  linter, a seven-axis rubric and stars.
+* **16 scenarios**, ten of which run over time.
+* The computation is deterministic: the seed is derived from the scheme, the scenario and the
+  model version; `Math.random()` is banned inside the engine.
 
-* **Стационарный решатель потоков** — демпфированные итерации (ω = 0.5, до 50 проходов, порог
-  сходимости 0.001) с усилением ретраями, поглощением трафика кэшем и автоскейлингом.
-* **Ёмкость с названным ограничителем** — `cpu`, `iops`, `connections`, `ops`, `memory`,
-  `partitions`, всего 39 названий ресурсов. Каждый ограничитель показывает формулу с
-  подставленными значениями, а `boundBy` выводится прямо на блок.
-* **Очереди** — аппроксимация Сакасэгавы для G/G/c с поправкой на вариативность потока и
-  обслуживания: ожидание, глубина очереди, сброс нагрузки сверх ёмкости, таймауты.
-* **Latency p50/p95/p99** — Monte-Carlo по дереву вызовов, 20 000 сэмплов на поток: логнормальное
-  время обслуживания, ожидание в очереди, `sequential` против `parallel`, ретраи с
-  экспоненциальным backoff, таймауты и промахи кэша.
-* **Hit ratio кэша выводится, а не задаётся** — из распределения Ципфа по ключам, объёма памяти,
-  TTL и доли записи. Кэш размером с базу не спасает, если TTL короче интервала повторного
-  обращения, и это видно на цифрах.
-* **Хранилище, логи, egress, стоимость** — накопление на горизонте 365 суток, объём логов из
-  `logLinesPerRequest × logBytesPerLine`, четыре профиля цен (AWS, GCP, Hetzner, on-prem).
-* **Доступность** — с учётом резервирования и 5% коррелированных отказов (иначе три реплики по
-  99.9% давали бы девять девяток), поиск единых точек отказа.
-* **Мультирегион** — доли трафика по регионам, трафик и стоимость репликации,
-  `RPO = p99 лага репликации`, `RTO = обнаружение 30 с + TTL DNS 60 с + failover блока + прогрев
-  60 с` (плюс 900 с при ручном переключении), сравнение с целевыми значениями.
-* **Симуляция аномалий согласованности** — шесть типов: устаревшее чтение, «не вижу свою запись»,
-  потерянное обновление, конфликт записи в мульти-мастере, потеря записи при last-write-wins,
-  повторная обработка при at-least-once.
-* **7 сценариев** — `baseline`, `peak`, `az-failure`, `region-failure`, `cache-flush`,
-  `stale-read`, `write-conflict`.
-* **Findings** — 12 правил (перегрузка, насыщение, шторм ретраев, SPOF, горячий ключ, растущий
-  backlog, чтение без кэша, ретраи без идемпотентности, egress съедает счёт и другие) плюс
-  аномалии согласованности, каждая с объяснением и подставленными числами.
+### What the engine computes
 
-Результат виден в дашборде (итоги, потоки, находки, согласованность, мультирегион), на самих
-блоках (пропускная способность, ограничитель, утилизация) и на рёбрах (RPS, байты в секунду,
-толщина по нагрузке). Расчёт идёт в Web Worker с дебаунсом 250 мс, поэтому канвас не подтормаживает;
-при недоступности воркера движок считает в основном потоке. Расчёт детерминирован: seed выводится
-из схемы, сценария и версии модели, `Math.random()` в движке запрещён.
+* **Steady-state flow solver** — damped iterations (ω = 0.5, up to 50 passes, convergence
+  threshold 0.001) with retry amplification, traffic absorbed by caches and autoscaling.
+* **Capacity with a named limiter** — `cpu`, `iops`, `connections`, `ops`, `memory`, `partitions`
+  and some fifty more resource names. Every limiter shows its formula with the values substituted,
+  and `boundBy` is printed straight onto the block.
+* **Queues** — the Sakasegawa approximation for G/G/c corrected for arrival and service
+  variability: waiting time, queue depth, load shedding above capacity, timeouts.
+* **Latency p50/p95/p99** — Monte-Carlo over the call tree, 20 000 samples per flow: log-normal
+  service time, queue waiting, `sequential` versus `parallel`, retries with exponential backoff,
+  timeouts and cache misses.
+* **Transient mode** — a run over time steps instead of a single slice: autoscaler lag, queues
+  that carry memory between steps, cache warm-up. Series for load, utilisation, p99, backlog,
+  errors and instance count are drawn as a timeline in the dashboard, with SLO breaches banded.
+* **Cache hit ratio is derived, not declared** — from the Zipf distribution over keys, the memory
+  size, the TTL and the write share. A cache as large as the database does not help when the TTL
+  is shorter than the re-access interval, and the numbers show it.
+* **Storage, logs, egress, cost** — accumulation over a 365-day horizon, log volume from
+  `logLinesPerRequest × logBytesPerLine`, four price profiles (AWS, GCP, Hetzner, on-prem).
+* **Availability** — accounting for redundancy and 5% correlated failures (otherwise three
+  replicas at 99.9% would yield nine nines), plus single points of failure.
+* **Multi-region** — traffic shares per region, replication traffic and cost,
+  `RPO = p99 of replication lag`, `RTO = 30 s detection + 60 s DNS TTL + block failover + 60 s
+  warm-up` (plus 900 s for a manual switch), compared against the targets.
+* **Network perimeter** — the `vpc` and `k8s-cluster` groups: the inter-network hop and the NAT
+  egress land in latency, the control plane lands in cost, and NAT saturation or an exceeded pod
+  ceiling arrive as findings.
+* **Consistency anomaly simulation** — six kinds: stale read, read-your-writes violation, lost
+  update, multi-master write conflict, silent write loss under last-write-wins, duplicate
+  processing under at-least-once.
+* **16 scenarios** — steady-state `baseline`, `peak`, `az-failure`, `region-failure`, `stale-read`,
+  `write-conflict`, and transient `spike`, `growth`, `black-friday`, `db-failover`, `cache-flush`,
+  `thundering-herd`, `hot-key`, `slow-dependency`, `retry-storm`, `poison-message`.
+* **Findings** — 14 engine rules (overload, saturation, retry storm, SPOF, hot key, growing
+  backlog, read-heavy without a cache, retries without idempotency, egress eating the bill and
+  others), the compiler's structural checks and the consistency anomalies — each with an
+  explanation and the numbers substituted in.
 
-### Чего ещё нет
+### Probes and the waterfall
 
-* **Transient-режима.** Всё считается в стационаре: всплесков во времени нет, лаг автоскейлинга
-  не моделируется. Из-за этого не реализованы сценарии `spike`, `growth`, `db-failover`,
-  `hot-key`, `slow-dependency`, `thundering-herd`, `retry-storm`, `poison-message`, `split-brain`,
-  `black-friday` из [docs/02-simulation.md](docs/02-simulation.md) §12.
-* **Аномалий A3 (монотонность чтений), A7 (нарушение порядка), A8 (аномалии изоляции SQL)**
-  из [docs/02-simulation.md](docs/02-simulation.md) §7а.2.
-* **Зеркальных регионов `mirrorOf`** — каждый регион описывается своими узлами вручную.
-* **Окон проб.** Блоки `probe-*` ставятся на схему и сохраняются, но измерителей за ними ещё нет.
-* **Режима заданий.** Переключатель в шапке есть, но заблокирован: рубрика, линтер и каталог
-  задач — фаза 2.
-* Автоскейлинг работает только у `service`; у остальных блоков число инстансов задаётся руками.
-  Пересчитывается всегда вся схема целиком — инкрементального пересчёта по подграфу нет.
+Eleven `probe-*` blocks attach to any node of the scheme and take a reading: RPS, latency,
+utilisation, queue lag, storage projection, subtree cost, SLO and error budget, availability
+nines, traffic breakdown, heat map, latency waterfall.
 
-## Демо-схемы
+The reading is shown on the probe block itself and coloured by status; a double click opens a
+draggable window with the number, the formula and its inputs. When a probe is attached to nothing,
+or the block cannot yield the measured quantity, the window explains why instead of showing a zero.
 
-Обе открываются из выпадающего списка в шапке и служат приёмочным тестом фазы
+**The latency waterfall** decomposes a flow into hops: bar width is the hop's own contribution,
+its position is the accumulated time, and a separate row shows how much of the percentile the hops
+failed to account for. It lives in the dashboard (with a flow and a p50/p95/p99 selector) and in a
+compact form inside the `probe-waterfall` window.
+
+### Challenges mode
+
+21 challenges across levels 1–5: from a static site and a URL shortener to payments, a matching
+engine, a global feed and live streaming. Each one has a brief with input numbers and SLOs,
+machine-readable requirements, a scenario battery, hints priced in points, and reference solutions
+that unlock after submission.
+
+Acceptance runs as a pipeline: compilation → Realism Gate (which catches sham schemes) →
+predicates → scenario battery → linter → seven-axis rubric → stars. The verdict is deterministic
+and always points at the specific requirement that failed.
+
+### Not there yet
+
+* **The graphical side of some probes**: `probe-rps` has no time series, `probe-latency` no
+  histogram, `probe-heatmap` no overlay on the scheme — these instruments still return a number
+  rather than a picture.
+* **Anomalies A3 (monotonic reads), A7 (ordering violation), A8 (SQL isolation anomalies)** from
+  [docs/02-simulation.md](docs/02-simulation.md) §7а.2.
+* **The `split-brain` scenario** — it needs a model of replica divergence and merge, not merely a
+  shape of the input load.
+* **Mirrored regions `mirrorOf`** — every region is described with its own nodes by hand.
+* **The `k8s-cluster` pod ceiling** is diagnosed by a finding but not enforced on the computation.
+* **The V2 catalogue wave** — 20 blocks from [docs/01-components.md](docs/01-components.md) §15.
+* The `custom` predicate and the diff against a reference solution, the Incident, Golf and
+  Interview modes, the challenge editor and leaderboards — those are phase 4.
+* The whole scheme is always recomputed; there is no incremental recomputation by subgraph.
+
+## Demo schemes
+
+Both open from the dropdown in the header and double as an acceptance test
 (`tests/engine/demo-schemes.test.ts`).
 
-**«Видеоплатформа»** — 1 млрд DAU, CDN поверх S3, отдельная ветка API: балансировщик, сервис,
-Redis, Postgres, Kafka и 2000 воркеров-транскодеров. Тест закрепляет: 80–130 ПБ/сут исходящего
-трафика и 8–30 Тбит/с полосы; до origin доходит меньше 15% запросов, остальное снимает CDN;
-у каждого нагруженного узла есть названный ограничитель; полный расчёт на 20 000 сэмплов
-укладывается в 100 мс.
+**"Video platform"** — 1 B DAU, a CDN on top of S3 and a separate API branch: load balancer,
+service, Redis, Postgres, Kafka and 2000 transcoding workers. The test pins down: 80–130 PB/day of
+egress and 8–30 Tbit/s of bandwidth; under 15% of requests reach the origin, the CDN absorbs the
+rest; every loaded node has a named limiter; a full 20 000-sample run fits into 100 ms.
 
-**«Платежи в двух регионах»** — 5 млн DAU, глобальный балансировщик, два региона (`eu-west-1` и
-`us-east-1`), в каждом сервис и Postgres, политика мультирегиона `active-active` с двусторонней
-репликацией и разрешением конфликтов `lww`. Тест закрепляет: частота конфликтов записи ненулевая,
-потери записи при LWW равны половине конфликтов, переключение на `single-writer-per-key` обнуляет
-и то и другое; трафик раскладывается по двум регионам, RPO и RTO считаются; сценарий
-`region-failure` гасит узлы одного региона, второй продолжает обслуживать.
+**"Payments in two regions"** — 5 M DAU, a global load balancer, two regions (`eu-west-1` and
+`us-east-1`), each with a service and Postgres, an `active-active` multi-region policy with
+bidirectional replication and `lww` conflict resolution. The test pins down: the write conflict
+rate is non-zero, LWW write loss equals half the conflicts, switching to `single-writer-per-key`
+zeroes both; traffic splits across the two regions, RPO and RTO are computed; the `region-failure`
+scenario takes down one region's nodes while the other keeps serving.
 
-## Запуск
+## Running it
 
 ```bash
 npm install
 npm run dev        # http://localhost:5173/sd-flow/
 ```
 
-| Команда | Что делает |
+| Command | What it does |
 |---|---|
-| `npm run dev` | Дев-сервер с горячей перезагрузкой |
-| `npm run build` | Проверка типов и продакшн-сборка в `dist/` |
-| `npm run preview` | Локальный просмотр собранного бандла |
+| `npm run dev` | Dev server with hot reload |
+| `npm run build` | Type check and production build into `dist/` |
+| `npm run preview` | Local preview of the built bundle |
 | `npm run lint` | ESLint 9 (flat config) |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Vitest: 67 тестов в 9 файлах — реестр, каталог, порты, стор, сериализация, движок, сверка модели с теорией очередей, демо-схемы |
+| `npm test` | Vitest: 331 tests in 22 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, locales, demo schemes |
 
-Деплой — GitHub Actions по пушу в `main`: lint → typecheck → тесты → сборка → GitHub Pages.
+Deployment is GitHub Actions on a push to `main`: lint → typecheck → tests → build → GitHub Pages.
+The app installs as a PWA and runs offline; a scheme can be shared as a link, the canvas exported
+to PNG and the computed result to Markdown.
 
-## Документы
+## Documents
 
-| Документ | О чём |
+The documentation is written in Russian; this README is the English entry point.
+
+| Document | About |
 |---|---|
-| **[PRD.md](PRD.md)** | Главный документ: цели, аудитория, режимы, функциональные требования, UX, дорожная карта |
-| [docs/01-components.md](docs/01-components.md) | Каталог строительных блоков: 14 групп, 129 типов (44 в MVP), параметры каждого |
-| [docs/02-simulation.md](docs/02-simulation.md) | Модель симуляции: ёмкость, очереди, latency, кэш, мультирегион, аномалии согласованности, хранилище, стоимость, доступность, константы; §15 — что из неё реализовано в фазе 1 |
-| [docs/03-connections.md](docs/03-connections.md) | Связи: read/write/mixed, sync/async, визуализация трафика |
-| [docs/04-challenges.md](docs/04-challenges.md) | Режим заданий и алгоритм приёмки, каталог из 26 задач, разбор «YouTube» |
-| [docs/05-architecture.md](docs/05-architecture.md) | Техническая архитектура, структура репозитория, план переиспользования кода, ADR |
+| **[PRD.md](PRD.md)** | The main document: goals, audience, modes, functional requirements, UX, roadmap |
+| [docs/01-components.md](docs/01-components.md) | Catalogue of building blocks: 14 groups, 129 types (109 in the registry), parameters of each |
+| [docs/02-simulation.md](docs/02-simulation.md) | Simulation model: capacity, queues, latency, cache, multi-region, consistency anomalies, storage, cost, availability, constants; §15 — what of it is implemented |
+| [docs/03-connections.md](docs/03-connections.md) | Connections: read/write/mixed, sync/async, traffic visualisation |
+| [docs/04-challenges.md](docs/04-challenges.md) | Challenges mode and the acceptance algorithm, a catalogue of 28 tasks (21 implemented), the "YouTube" walkthrough |
+| [docs/05-architecture.md](docs/05-architecture.md) | Technical architecture, repository structure, code reuse plan, ADRs |
 
-**Принятые решения (2026-08-14):**
+**Decisions taken (2026-08-14):**
 
-* **D1** — мультирегион входит в MVP: группы Region/AZ, зеркальные регионы, гео-маршрутизация,
-  межрегиональная репликация, RPO/RTO.
-* **D2** — глубина модели согласованности вынесена в настройку `выкл / атрибут / симуляция аномалий`,
-  **по умолчанию — симуляция аномалий** (устаревшие чтения, read-your-writes, потерянные обновления,
-  конфликты мульти-мастера, дубликаты).
+* **D1** — multi-region belongs in the MVP: Region/AZ groups, mirrored regions, geo routing,
+  cross-region replication, RPO/RTO.
+* **D2** — the depth of the consistency model is a setting, `off / attribute / anomaly simulation`,
+  **defaulting to anomaly simulation** (stale reads, read-your-writes, lost updates, multi-master
+  conflicts, duplicates).
 
-## Основа
+## Origin
 
-Визуал, флоу, палитра блоков, drag & drop, плагинная архитектура и стек наследуются от
-[**dsp-flow**](https://github.com/Alexxtn105/dsp-flow) — визуального редактора графов цифровой
-обработки сигналов. Что именно перенесено и что переписано — таблица в
+The visuals, the flow, the block palette, drag & drop, the plugin architecture and the stack are
+inherited from [**dsp-flow**](https://github.com/Alexxtn105/dsp-flow), a visual editor for digital
+signal processing graphs. What exactly was carried over and what was rewritten — the table in
 [docs/05-architecture.md §12](docs/05-architecture.md).
 
-Стек: React 19 + `@xyflow/react` + TypeScript strict + Vite + Zustand + Immer + i18next + Vitest,
-статический деплой на GitHub Pages.
+Stack: React 19 + `@xyflow/react` + TypeScript strict + Vite + Zustand + Immer + i18next + Vitest,
+deployed statically to GitHub Pages.
