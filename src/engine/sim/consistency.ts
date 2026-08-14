@@ -225,9 +225,8 @@ export function analyseConsistency(
         if (!flow || !consumer || flow.total <= 0) continue;
         if (consumer.definition.group === 'messaging') continue;
 
-        const semantics = String(consumer.params.deliverySemantics ?? 'at-least-once');
         const idempotent = edge.policy.idempotent || consumer.params.idempotent === true;
-        if (idempotent || semantics === 'at-most-once') continue;
+        if (idempotent) continue;
 
         const consumerRuntime = runtimes.get(consumer.id);
         const redeliveryRate =
