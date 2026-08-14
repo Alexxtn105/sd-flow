@@ -1,5 +1,7 @@
 .dash {
+    position: relative;
     height: 230px;
+    max-height: 62vh;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;

@@ -1,6 +1,8 @@
 .pal {
+    position: relative;
     height: 100%;
     width: 240px;
+    max-width: 35vw;
     background: var(--panel-bg-alt);
     border-right: 1px solid var(--panel-border);
     z-index: 10;

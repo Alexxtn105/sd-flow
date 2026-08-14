@@ -74,7 +74,12 @@
         "calls": "Call profiles",
         "policy": "Policy",
         "noParams": "This block has no editable parameters",
-        "modelPending": "The load model is wired up in phase 1"
+        "noModel": "This block has no load model and stays out of the calculation"
+    },
+    "resize": {
+        "palette": "Palette width — drag to resize, double-click to reset",
+        "inspector": "Inspector width — drag to resize, double-click to reset",
+        "dashboard": "Dashboard height — drag to resize, double-click to reset"
     },
     "section": {
         "scale": "Scale",

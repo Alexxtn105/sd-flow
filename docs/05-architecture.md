@@ -67,17 +67,17 @@ sd-flow/
 │   │   ├── panels/                    ← Palette, Inspector, Dashboard
 │   │   ├── dialogs/                   ← Save, Load, Confirm
 │   │   ├── layout/                    ← Header, Footer
-│   │   └── common/                    ← Dialog, ErrorBoundary, Icon, SdIcons
+│   │   └── common/                    ← Dialog, ErrorBoundary, Icon, SdIcons, ResizeHandle
 │   ├── hooks/                         ← useSimulation, useAutoSave, useDialogManager, useTheme
 │   ├── contexts/                      ← ThemeContext, TouchContext
 │   ├── data/demoSchemes.ts            ← демо-схемы, они же приёмка Definition of Done
 │   ├── locales/                       ← ru/en × {common, blocks, groups, params}
 │   ├── services/                      ← storage, файлы, сериализация, конструктор схем, воркер
 │   ├── styles/                        ← variables.css, index.css
-│   └── utils/format.ts
+│   └── utils/                         ← format.ts, panelSize.ts (границы размеров панелей)
 ├── tests/
 │   ├── engine/                        ← реестр, каталог, порты, сериализация, модель, демо
-│   ├── store/                         ← graphStore
+│   ├── store/                         ← graphStore, uiStore
 │   └── helpers/                       ← конструктор схем для тестов
 ├── docs/                              ← этот каталог
 └── .github/workflows/deploy.yml

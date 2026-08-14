@@ -1,0 +1,89 @@
+.resize-handle {
+    position: absolute;
+    z-index: 12;
+    background: transparent;
+    touch-action: none;
+    transition: background-color 120ms ease;
+}
+
+.resize-handle::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    border-radius: 2px;
+    background: transparent;
+    transition: background-color 120ms ease;
+}
+
+.resize-handle-right,
+.resize-handle-left {
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    cursor: col-resize;
+}
+
+.resize-handle-right {
+    right: -4px;
+}
+
+.resize-handle-left {
+    left: -4px;
+}
+
+.resize-handle-top {
+    left: 0;
+    right: 0;
+    top: -4px;
+    height: 8px;
+    cursor: row-resize;
+}
+
+.resize-handle-right::after,
+.resize-handle-left::after {
+    width: 2px;
+    height: 40px;
+}
+
+.resize-handle-top::after {
+    width: 40px;
+    height: 2px;
+}
+
+.resize-handle:hover::after,
+.resize-handle:focus-visible::after {
+    background: var(--panel-accent);
+}
+
+.resize-handle:focus-visible {
+    outline: none;
+    background: var(--panel-accent-soft);
+}
+
+body.is-resizing-x .resize-handle::after,
+body.is-resizing-y .resize-handle::after {
+    background: var(--panel-accent);
+}
+
+body.is-resizing-x,
+body.is-resizing-y {
+    user-select: none;
+}
+
+body.is-resizing-x {
+    cursor: col-resize;
+}
+
+body.is-resizing-y {
+    cursor: row-resize;
+}
+
+body.is-resizing-x *,
+body.is-resizing-y * {
+    cursor: inherit !important;
+}
+
+body.is-resizing-x .pal {
+    transition: none;
+}

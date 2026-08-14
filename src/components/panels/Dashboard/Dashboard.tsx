@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import Icon from '../../common/Icons/Icon';
+import ResizeHandle from '../../common/ResizeHandle/ResizeHandle';
 import type { Finding } from '../../../engine/sim/types';
 import { useGraphStore } from '../../../store/graphStore';
 import { useSimStore } from '../../../store/simStore';
@@ -46,6 +47,7 @@ export default function Dashboard() {
 
     const nodes = useGraphStore((state) => state.nodes);
     const setSelection = useUiStore((state) => state.setSelection);
+    const height = useUiStore((state) => state.panels.dashboard);
 
     const labels = useMemo(() => {
         const map = new Map<string, string>();
@@ -89,7 +91,9 @@ export default function Dashboard() {
     const multiRegion = result?.multiRegion ?? null;
 
     return (
-        <section className="dash">
+        <section className="dash" style={{ height }}>
+            <ResizeHandle panel="dashboard" side="top" label={t('resize.dashboard')} />
+
             <div className="dash-header">
                 <span className="dash-title">{t('dashboard.title')}</span>
 

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import Icon from '../../common/Icons/Icon';
+import ResizeHandle from '../../common/ResizeHandle/ResizeHandle';
 import registry from '../../../engine/ComponentRegistry';
 import type { ParamField, ParamSection, ParamValue } from '../../../engine/types/component';
 import type { EdgeKind } from '../../../engine/types/scheme';
@@ -27,6 +28,7 @@ export default function Inspector() {
     const selectedNodeIds = useUiStore((state) => state.selectedNodeIds);
     const selectedEdgeIds = useUiStore((state) => state.selectedEdgeIds);
     const toggleInspector = useUiStore((state) => state.toggleInspector);
+    const width = useUiStore((state) => state.panels.inspector);
 
     const nodes = useGraphStore((state) => state.nodes);
     const edges = useGraphStore((state) => state.edges);
@@ -116,7 +118,9 @@ export default function Inspector() {
     };
 
     return (
-        <aside className="ins">
+        <aside className="ins" style={{ width }}>
+            <ResizeHandle panel="inspector" side="left" label={t('resize.inspector')} />
+
             <div className="ins-header">
                 <span className="ins-title">{t('inspector.title')}</span>
                 <button className="ins-close" onClick={toggleInspector} aria-label={t('dialog.close')}>
@@ -194,7 +198,7 @@ export default function Inspector() {
                             </div>
                         </section>
 
-                        <p className="ins-note">{t('inspector.modelPending')}</p>
+                        {!definition.model && <p className="ins-note">{t('inspector.noModel')}</p>}
                     </>
                 )}
 

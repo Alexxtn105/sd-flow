@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Icon from '../../common/Icons/Icon';
+import ResizeHandle from '../../common/ResizeHandle/ResizeHandle';
 import registry from '../../../engine/ComponentRegistry';
 import type { ComponentDefinition } from '../../../engine/types/component';
 import { useTouchContext } from '../../../contexts/TouchContext';
@@ -14,6 +15,7 @@ export default function Palette() {
     const { t, i18n } = useTranslation();
     const isTouch = useTouchContext();
     const collapsed = useUiStore((state) => state.paletteCollapsed);
+    const width = useUiStore((state) => state.panels.palette);
     const togglePalette = useUiStore((state) => state.togglePalette);
     const requestAdd = useUiStore((state) => state.requestAdd);
 
@@ -107,7 +109,9 @@ export default function Palette() {
     };
 
     return (
-        <div className={`pal ${collapsed ? 'pal-collapsed' : ''}`}>
+        <div className={`pal ${collapsed ? 'pal-collapsed' : ''}`} style={collapsed ? undefined : { width }}>
+            {!collapsed && <ResizeHandle panel="palette" side="right" label={t('resize.palette')} />}
+
             <div className="pal-header">
                 {!collapsed && (
                     <div className="pal-header-info">
