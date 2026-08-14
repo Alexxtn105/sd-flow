@@ -56,7 +56,7 @@ function queueAndWorkers(): SchemeV1 {
             {
                 id: 'resizer',
                 type: 'worker',
-                params: { instances: 16, concurrency: 16, cpuCores: 8, processingTimeMs: 2500 },
+                params: { instances: 40, concurrency: 16, cpuCores: 8, processingTimeMs: 2500 },
                 position: { x: 1080, y: 340 },
             },
         ],
@@ -71,10 +71,10 @@ function queueAndWorkers(): SchemeV1 {
     });
 }
 
-function serverlessResize(): SchemeV1 {
+function logAndWorkers(): SchemeV1 {
     return buildScheme({
-        id: 'image-resize-serverless',
-        name: 'Очередь и функции по требованию',
+        id: 'image-resize-log',
+        name: 'Журнал событий и пул обработчиков',
         nodes: [
             { id: UPLOADERS, type: 'client-web', params: uploaderParams, position: { x: 0, y: 200 } },
             { id: 'gateway', type: 'api-gateway', params: { payloadLimitMb: 25 }, position: { x: 260, y: 200 } },
@@ -90,11 +90,16 @@ function serverlessResize(): SchemeV1 {
                 params: { avgObjectSizeMb: 0.8, objectCount: 400000000, prefixCount: 24 },
                 position: { x: 800, y: 80 },
             },
-            { id: 'jobs', type: 'sqs', params: { messageSizeKb: 2 }, position: { x: 800, y: 340 } },
+            {
+                id: 'jobs',
+                type: 'kafka',
+                params: { messageSizeKb: 2, partitions: 24, retentionHours: 720 },
+                position: { x: 800, y: 340 },
+            },
             {
                 id: 'resizer',
-                type: 'serverless',
-                params: { memoryMb: 2048, serviceTimeMs: 2500, maxConcurrency: 400, coldStartShare: 0.05 },
+                type: 'worker',
+                params: { instances: 160, concurrency: 8, processingTimeMs: 2500 },
                 position: { x: 1080, y: 340 },
             },
         ],
@@ -174,8 +179,8 @@ export const imageResize: Challenge = {
         {
             id: 'R5',
             kind: 'budget',
-            desc: { ru: 'Стоимость не выше $30 000 в месяц', en: 'Monthly cost stays under $30,000' },
-            maxMonthlyCostUsd: 30000,
+            desc: { ru: 'Стоимость не выше $35 000 в месяц', en: 'Monthly cost stays under $35,000' },
+            maxMonthlyCostUsd: 35000,
         },
     ],
     bonusObjectives: [
@@ -242,13 +247,13 @@ export const imageResize: Challenge = {
             build: queueAndWorkers,
         },
         {
-            id: 'serverless-resize',
-            name: { ru: 'Очередь и функции по требованию', en: 'Queue and on-demand functions' },
+            id: 'log-and-workers',
+            name: { ru: 'Журнал событий и пул обработчиков', en: 'Event log and a worker pool' },
             tradeoff: {
-                ru: 'Платим ровно за секунды работы и не думаем про ёмкость, зато холодные старты добавляют задержку, а на плотном трафике счёт растёт быстрее, чем у своих машин.',
-                en: 'You pay for exactly the seconds you use and never size the fleet, but cold starts add latency and at dense traffic the bill outgrows your own machines.',
+                ru: 'Журнал хранит задания месяц, поэтому все миниатюры можно перегенерировать заново — но платить приходится за брокеры и за диски под историю.',
+                en: 'The log keeps jobs for a month, so every thumbnail can be regenerated from scratch — at the price of brokers and disks for the history.',
             },
-            build: serverlessResize,
+            build: logAndWorkers,
         },
     ],
 };
