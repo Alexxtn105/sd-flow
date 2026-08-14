@@ -561,6 +561,7 @@ const dynamodb = defineComponent({
     },
     model: dynamodbModel,
     helpId: 'dynamodb',
+    managed: true,
 });
 
 export const nosqlComponents: ComponentDefinition[] = [

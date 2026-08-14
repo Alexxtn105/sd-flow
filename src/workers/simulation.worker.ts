@@ -1,25 +1,54 @@
+import { challengeById } from '../data/challenges';
+import { acceptChallenge } from '../engine/challenges/accept';
 import initComponents from '../engine/initComponents';
 import { simulate } from '../engine/sim/simulate';
 import type { SchemeV1 } from '../engine/types/scheme';
 
 interface SimulationRequestMessage {
     id: number;
+    kind: 'simulate';
     scheme: SchemeV1;
     scenario: string;
     sampleCount: number;
 }
 
+interface AcceptanceRequestMessage {
+    id: number;
+    kind: 'accept';
+    challengeId: string;
+    scheme: SchemeV1;
+    attempt: number;
+    hintsUsed: number[];
+}
+
+type RequestMessage = SimulationRequestMessage | AcceptanceRequestMessage;
+
 initComponents();
 
-self.onmessage = (event: MessageEvent<SimulationRequestMessage>) => {
-    const { id, scheme, scenario, sampleCount } = event.data;
+self.onmessage = (event: MessageEvent<RequestMessage>) => {
+    const request = event.data;
     const started = performance.now();
 
     try {
-        const result = simulate(scheme, { scenario, sampleCount });
+        if (request.kind === 'accept') {
+            const challenge = challengeById(request.challengeId);
+            if (!challenge) throw new Error(`unknown challenge ${request.challengeId}`);
+
+            const verdict = acceptChallenge({
+                challenge,
+                scheme: request.scheme,
+                attempt: request.attempt,
+                hintsUsed: request.hintsUsed,
+            });
+
+            self.postMessage({ id: request.id, payload: verdict });
+            return;
+        }
+
+        const result = simulate(request.scheme, { scenario: request.scenario, sampleCount: request.sampleCount });
         result.computeMs = performance.now() - started;
-        self.postMessage({ id, result });
+        self.postMessage({ id: request.id, payload: result });
     } catch (error) {
-        self.postMessage({ id, error: error instanceof Error ? error.message : String(error) });
+        self.postMessage({ id: request.id, error: error instanceof Error ? error.message : String(error) });
     }
 };

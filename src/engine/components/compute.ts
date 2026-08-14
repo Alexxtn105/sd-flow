@@ -253,6 +253,7 @@ const serverless = defineComponent({
     },
     model: serverlessModel,
     helpId: 'serverless',
+    managed: true,
 });
 
 const workerDefaults = {

@@ -158,6 +158,7 @@ const s3 = defineComponent({
     },
     model: s3Model,
     helpId: 's3',
+    managed: true,
 });
 
 const minioDefaults = {

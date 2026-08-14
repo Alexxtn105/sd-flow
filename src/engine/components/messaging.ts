@@ -375,6 +375,7 @@ const sqs = defineComponent({
     },
     model: sqsModel,
     helpId: 'sqs',
+    managed: true,
 });
 
 const dlqDefaults = {

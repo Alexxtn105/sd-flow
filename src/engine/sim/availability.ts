@@ -97,6 +97,7 @@ export function computeAvailability(
 
     for (const node of topology.nodes) {
         if (node.definition.shape !== 'node') continue;
+        if (node.definition.managed) continue;
         if (topology.entryNodes.includes(node.id)) continue;
 
         const runtime = runtimes.get(node.id);

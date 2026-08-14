@@ -186,6 +186,7 @@ export interface ComponentDefinition<P extends ComponentParams = ComponentParams
     defaultParams: P;
     paramSchema: ParamSchema<P>;
     helpId: string;
+    managed?: boolean;
     model?: ComponentModel<P>;
 }
 

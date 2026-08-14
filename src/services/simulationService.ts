@@ -1,3 +1,4 @@
+import type { ChallengeVerdict } from '../engine/challenges/types';
 import type { SimResult } from '../engine/sim/types';
 import type { SchemeV1 } from '../engine/types/scheme';
 
@@ -7,14 +8,23 @@ export interface SimulationRequest {
     sampleCount: number;
 }
 
+export interface AcceptanceRequest {
+    challengeId: string;
+    scheme: SchemeV1;
+    attempt: number;
+    hintsUsed: number[];
+}
+
+type WorkerPayload = SimResult | ChallengeVerdict;
+
 interface WorkerResponse {
     id: number;
-    result?: SimResult;
+    payload?: WorkerPayload;
     error?: string;
 }
 
 interface PendingRequest {
-    resolve: (result: SimResult) => void;
+    resolve: (payload: WorkerPayload) => void;
     reject: (error: Error) => void;
 }
 
@@ -33,13 +43,13 @@ function createWorker(): Worker | null {
         });
 
         created.onmessage = (event: MessageEvent<WorkerResponse>) => {
-            const { id, result, error } = event.data;
+            const { id, payload, error } = event.data;
             const request = pending.get(id);
             if (!request) return;
 
             pending.delete(id);
-            if (result) request.resolve(result);
-            else request.reject(new Error(error ?? 'unknown simulation error'));
+            if (payload) request.resolve(payload);
+            else request.reject(new Error(error ?? 'unknown worker error'));
         };
 
         created.onerror = () => {
@@ -56,7 +66,20 @@ function createWorker(): Worker | null {
     }
 }
 
-async function runInline(request: SimulationRequest): Promise<SimResult> {
+function send(message: Record<string, unknown>): Promise<WorkerPayload> {
+    if (!worker) worker = createWorker();
+    if (!worker) return Promise.reject(new Error('worker unavailable'));
+
+    const id = nextRequestId;
+    nextRequestId += 1;
+
+    return new Promise<WorkerPayload>((resolve, reject) => {
+        pending.set(id, { resolve, reject });
+        worker?.postMessage({ id, ...message });
+    });
+}
+
+async function simulateInline(request: SimulationRequest): Promise<SimResult> {
     const { simulate } = await import('../engine/sim/simulate');
     const started = performance.now();
     const result = simulate(request.scheme, {
@@ -68,15 +91,35 @@ async function runInline(request: SimulationRequest): Promise<SimResult> {
     return result;
 }
 
-export function runSimulation(request: SimulationRequest): Promise<SimResult> {
-    if (!worker) worker = createWorker();
-    if (!worker) return runInline(request);
+async function acceptInline(request: AcceptanceRequest): Promise<ChallengeVerdict> {
+    const [{ acceptChallenge }, { challengeById }] = await Promise.all([
+        import('../engine/challenges/accept'),
+        import('../data/challenges'),
+    ]);
 
-    const id = nextRequestId;
-    nextRequestId += 1;
+    const challenge = challengeById(request.challengeId);
+    if (!challenge) throw new Error(`unknown challenge ${request.challengeId}`);
 
-    return new Promise<SimResult>((resolve, reject) => {
-        pending.set(id, { resolve, reject });
-        worker?.postMessage({ id, ...request });
+    return acceptChallenge({
+        challenge,
+        scheme: request.scheme,
+        attempt: request.attempt,
+        hintsUsed: request.hintsUsed,
     });
+}
+
+export function runSimulation(request: SimulationRequest): Promise<SimResult> {
+    if (workerUnavailable) return simulateInline(request);
+
+    return send({ kind: 'simulate', ...request })
+        .then((payload) => payload as SimResult)
+        .catch(() => simulateInline(request));
+}
+
+export function runAcceptance(request: AcceptanceRequest): Promise<ChallengeVerdict> {
+    if (workerUnavailable) return acceptInline(request);
+
+    return send({ kind: 'accept', ...request })
+        .then((payload) => payload as ChallengeVerdict)
+        .catch(() => acceptInline(request));
 }

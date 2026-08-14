@@ -106,6 +106,7 @@ const dns = defineComponent({
     },
     model: dnsModel,
     helpId: 'dns',
+    managed: true,
 });
 
 const cdnDefaults = {
@@ -175,6 +176,7 @@ const cdn = defineComponent({
         costPerMillionRequests: num('cost', { unitKey: 'usd', min: 0, max: 100, step: 0.01 }),
     },
     model: cdnModel,
+    managed: true,
     helpId: 'cdn',
 });
 
@@ -228,6 +230,7 @@ const glb = defineComponent({
         availability: num('reliability', { min: 0.99, max: 0.999999, step: 0.0001 }),
         costPerMillionRequests: num('cost', { unitKey: 'usd', min: 0, max: 100, step: 0.01 }),
     },
+    managed: true,
     model: glbModel,
     helpId: 'glb',
 });
