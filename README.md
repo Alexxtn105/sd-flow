@@ -9,11 +9,13 @@ a year and what all of it costs.
 
 **[Open the editor →](https://alexxtn105.github.io/sd-flow/)**
 
-## Status: phase 3 done (v1.0)
+## Status: phase 3 done (v1.1)
 
 Behind us are the scheme editor (phase 0), the steady-state load model (phase 1) and the
 Challenges mode (phase 2). Phase 3 added the passage of time, probes, the second catalogue wave
-and ten new challenges.
+and ten new challenges. Version 1.1 closed the catalogue, taught the probes to draw, and added
+three more consistency anomalies, a pod ceiling for the cluster and a metric diff against the
+reference solutions.
 
 * **Catalogue — 127 blocks in 14 groups: the whole planned catalogue**, MVP (44) plus V1 (65)
   plus V2 (18). A capacity model is filled in for 101 blocks — every block that carries traffic;
@@ -53,9 +55,11 @@ and ten new challenges.
 * **Network perimeter** — the `vpc` and `k8s-cluster` groups: the inter-network hop and the NAT
   egress land in latency, the control plane lands in cost, and NAT saturation or an exceeded pod
   ceiling arrive as findings.
-* **Consistency anomaly simulation** — six kinds: stale read, read-your-writes violation, lost
-  update, multi-master write conflict, silent write loss under last-write-wins, duplicate
-  processing under at-least-once.
+* **Consistency anomaly simulation** — eleven kinds: stale read, read-your-writes violation,
+  non-monotonic read, lost update, multi-master write conflict, silent write loss under
+  last-write-wins, duplicate processing under at-least-once, ordering violation, and the three
+  SQL isolation anomalies derived from `isolationLevel` — dirty read, non-repeatable read and
+  phantom read.
 * **16 scenarios** — steady-state `baseline`, `peak`, `az-failure`, `region-failure`, `stale-read`,
   `write-conflict`, and transient `spike`, `growth`, `black-friday`, `db-failover`, `cache-flush`,
   `thundering-herd`, `hot-key`, `slow-dependency`, `retry-storm`, `poison-message`.
@@ -147,7 +151,7 @@ npm run dev        # http://localhost:5173/sd-flow/
 | `npm run preview` | Local preview of the built bundle |
 | `npm run lint` | ESLint 9 (flat config) |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Vitest: 331 tests in 22 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, locales, demo schemes |
+| `npm test` | Vitest: 588 tests in 31 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, locales, demo schemes |
 
 Deployment is GitHub Actions on a push to `main`: lint → typecheck → tests → build → GitHub Pages.
 The app installs as a PWA and runs offline; a scheme can be shared as a link, the canvas exported
