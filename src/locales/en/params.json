@@ -510,6 +510,8 @@
     "samplesPerSec": "Samples per second",
     "samplingRate": "Sampling rate",
     "scale": "Scale",
+    "scaleDownLagSec": "Scale-down lag",
+    "scaleUpLagSec": "Scale-up lag",
     "scanThroughputMbsPerCore": "Scan throughput per core, MB/s",
     "scheduleCron": "Schedule (cron)",
     "schedulingLagSec": "Scheduling lag",

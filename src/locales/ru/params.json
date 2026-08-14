@@ -510,6 +510,8 @@
     "samplesPerSec": "Сэмплов в секунду",
     "samplingRate": "Доля семплирования",
     "scale": "Шкала",
+    "scaleDownLagSec": "Лаг уменьшения масштаба",
+    "scaleUpLagSec": "Лаг увеличения масштаба",
     "scanThroughputMbsPerCore": "Скорость скана на ядро, МБ/с",
     "scheduleCron": "Расписание (cron)",
     "schedulingLagSec": "Лаг планировщика",
