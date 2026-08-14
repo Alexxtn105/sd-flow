@@ -22,7 +22,7 @@
 
 ## 2. Структура репозитория
 
-Ниже — фактическое дерево после фазы 1. Каталоги, помеченные *(фаза 2+)*, ещё не созданы.
+Ниже — фактическое дерево после фазы 3.
 
 ```
 sd-flow/
@@ -32,12 +32,13 @@ sd-flow/
 │   │   ├── ports.ts                   ← совместимость портов по протоколам
 │   │   ├── edgeDefaults.ts            ← профили вызова по умолчанию + посев payload
 │   │   ├── ids.ts                     ← счётчик идентификаторов без Math.random
-│   │   ├── initComponents.ts          ← регистрация групп и всех блоков
+│   │   ├── initComponents.ts          ← регистрация 14 групп и 109 блоков
 │   │   ├── types/
 │   │   │   ├── component.ts           ← ComponentDefinition, ComponentModel, контексты
-│   │   │   └── scheme.ts              ← SchemeV1, CallProfile, EdgePolicy, настройки
-│   │   ├── sim/                       ← шаги 1–7 модели симуляции
-│   │   │   ├── types.ts               ← SimResult: узлы, рёбра, потоки, итоги, находки
+│   │   │   ├── scheme.ts              ← SchemeV1, CallProfile, EdgePolicy, настройки
+│   │   │   └── index.ts               ← реэкспорт публичных типов ядра
+│   │   ├── sim/                       ← шаги 1–8 модели симуляции
+│   │   │   ├── types.ts               ← SimResult: узлы, рёбра, потоки, ряды, находки
 │   │   │   ├── rng.ts                 ← xoshiro128** + хэш схемы
 │   │   │   ├── constants.ts           ← RTT-матрица гео-зон, профили цен, календарь
 │   │   │   ├── resources.ts           ← билдеры ограничителей ёмкости + defineModel
@@ -52,40 +53,58 @@ sd-flow/
 │   │   │   ├── cost.ts                ← [6б] стоимость по профилям цен
 │   │   │   ├── availability.ts        ← девятки с резервированием, SPOF
 │   │   │   ├── multiRegion.ts         ← доли регионов, репликация, RPO/RTO
-│   │   │   ├── scenarios.ts           ← 7 сценариев фазы 1
+│   │   │   ├── transient.ts           ← [8] ход времени: лаг скейлера, очереди, прогрев
+│   │   │   ├── probes.ts              ← показания 11 проб, водопад задержки по потоку
+│   │   │   ├── scenarios.ts           ← 16 сценариев, из них 10 transient
 │   │   │   ├── findings.ts            ← [7] RuleEngine
 │   │   │   └── simulate.ts            ← оркестратор, отдаёт SimResult
+│   │   ├── challenges/                ← приёмка заданий, тоже без React и i18n
+│   │   │   ├── types.ts               ← Challenge, Requirement, ChallengeVerdict
+│   │   │   ├── predicates.ts          ← DSL требований, 13 видов предикатов
+│   │   │   ├── realism.ts             ← Realism Gate, 8 проверок «честности» схемы
+│   │   │   ├── lint.ts                ← положительные правила и антипаттерны
+│   │   │   ├── rubric.ts              ← 7 осей рубрики, звёзды, цена подсказок
+│   │   │   └── accept.ts              ← конвейер приёмки, батарея сценариев
 │   │   └── components/                ← ОПРЕДЕЛЕНИЯ БЛОКОВ, один модуль на группу
 │   │       ├── _shared/params.ts      ← хелперы num/bool/choice/text/defineComponent
 │   │       ├── clients.ts  edge.ts  compute.ts  sql.ts  nosql.ts  search.ts
 │   │       ├── olap.ts  cache.ts  messaging.ts  storage.ts  platform.ts
 │   │       └── observability.ts  topology.ts  probes.ts
-│   ├── workers/simulation.worker.ts   ← расчёт вне главного потока
-│   ├── store/                         ← Zustand: graphStore, schemeStore, uiStore, simStore
+│   ├── workers/simulation.worker.ts   ← расчёт схемы и приёмка задания вне главного потока
+│   ├── store/                         ← Zustand: graphStore, schemeStore, uiStore, simStore, challengeStore
 │   ├── components/
-│   │   ├── canvas/                    ← SdEditor, SdNode, GroupNode, ProbeNode, TrafficEdge
-│   │   ├── panels/                    ← Palette, Inspector, Dashboard
+│   │   ├── canvas/                    ← SdEditor, SdNode, GroupNode, ProbeNode, ProbeWindows, TrafficEdge
+│   │   ├── panels/                    ← Palette, Inspector, Dashboard (+ Timeline), Challenges
+│   │   ├── tutorial/                  ← Tutorial + tutorialSteps.ts (чистый редьюсер шагов)
 │   │   ├── dialogs/                   ← Save, Load, Confirm
 │   │   ├── layout/                    ← Header, Footer
-│   │   └── common/                    ← Dialog, ErrorBoundary, Icon, SdIcons, ResizeHandle
+│   │   └── common/                    ← Dialog, ErrorBoundary, Icon, SdIcons, ResizeHandle, Waterfall
 │   ├── hooks/                         ← useSimulation, useAutoSave, useDialogManager, useTheme
 │   ├── contexts/                      ← ThemeContext, TouchContext
-│   ├── data/demoSchemes.ts            ← демо-схемы, они же приёмка Definition of Done
+│   ├── data/
+│   │   ├── demoSchemes.ts             ← демо-схемы, они же приёмка Definition of Done
+│   │   └── challenges/                ← 21 задание, один модуль на задачу + index.ts
 │   ├── locales/                       ← ru/en × {common, blocks, groups, params}
-│   ├── services/                      ← storage, файлы, сериализация, конструктор схем, воркер
+│   ├── services/                      ← storage, файлы, сериализация, конструктор схем, воркеры,
+│   │                                    share-link, экспорт PNG и Markdown, service worker
 │   ├── styles/                        ← variables.css, index.css
-│   └── utils/                         ← format.ts, panelSize.ts (границы размеров панелей)
+│   └── utils/                         ← format.ts, panelSize.ts, waterfall.ts (раскладка водопада)
+├── public/                            ← иконки, manifest.webmanifest, sw.js (PWA)
 ├── tests/
-│   ├── engine/                        ← реестр, каталог, порты, сериализация, модель, демо
+│   ├── engine/                        ← реестр, каталог, порты, сериализация, модель, transient, пробы, демо
+│   ├── challenges/                    ← приёмка каталога заданий и локали формулировок
+│   ├── components/                    ← туториал, окна проб, покрытие ключей локалей
+│   ├── services/                      ← share-link, экспорт отчёта
 │   ├── store/                         ← graphStore, uiStore
+│   ├── utils/                         ← раскладка водопада
 │   └── helpers/                       ← конструктор схем для тестов
 ├── docs/                              ← этот каталог
 └── .github/workflows/deploy.yml
 ```
 
-**Чего пока нет** *(фаза 2+)*: `engine/challenges/`, `data/challenges/` (YAML-задания),
-`data/defaults/*.json` (константы живут в `sim/constants.ts` и в дефолтах блоков),
-`components/probes/` (окна измерителей), `tests/golden/`, `scripts/`.
+**Чего пока нет:** `data/defaults/*.json` (константы живут в `sim/constants.ts` и в дефолтах
+блоков), авторского YAML-формата заданий (решение **D3**: задания — TypeScript-модули),
+`tests/golden/`, `scripts/`.
 
 ---
 
@@ -363,7 +382,7 @@ install → lint → typecheck → test → compile-challenges (YAML→JSON) →
 |---|---|---|
 | `vite.config`, `eslint.config`, `tsconfig`, `deploy.yml` | те же, `base: '/sd-flow/'`, всё на TypeScript | каркас |
 | `styles/variables.css` | + токены трафика (`--traffic-read/write/replication/event/stream/batch`), утилизации и групп | расширен |
-| `Dialog`, `ErrorBoundary`, `Icon` | те же, `DspIcons` → `SdIcons` (43 родовые иконки, без вендорских логотипов, ADR-10) | почти как есть |
+| `Dialog`, `ErrorBoundary`, `Icon` | те же, `DspIcons` → `SdIcons` (98 родовых иконок, без вендорских логотипов, ADR-10) | почти как есть |
 | `ThemeContext`, `TouchContext`, `useTheme` | как есть, переписаны на TS | как есть |
 | `locales/i18n.js` + неймспейсы | `i18n.ts`, языки ru/en, неймспейсы `common`/`blocks`/`groups`/`params` | как есть |
 | `storageService` | ключи `sd-*`, типизированный `SaveResult`, guard на отсутствие `localStorage` (нужен для тестов в Node) | переписан |
@@ -399,14 +418,41 @@ install → lint → typecheck → test → compile-challenges (YAML→JSON) →
 толщину. Формула оставлена абсолютной намеренно: только так легенда «толщина ↔ RPS» осмысленна и
 сравнима между схемами.
 
-### 12.2. Что осталось на следующие фазы
+### 12.2. Что добавила фаза 2
 
-* Пробы (`probe-*`) ставятся на схему и хранятся, но окон измерителей ещё нет.
-* Transient-режим, оставшиеся сценарии и аномалии A3/A7/A8 — см.
-  [02-simulation.md](02-simulation.md) §15.3, там же полный перечень нереализованного.
+| Появилось | Где | Суть |
+|---|---|---|
+| Контракт задания | `engine/challenges/types.ts` | `Challenge` = брифинг, требования-предикаты, батарея сценариев, рубрика, подсказки с ценой, эталонные решения. Задания — TypeScript-модули (решение **D3**), а не данные |
+| Движок приёмки | `engine/challenges/{predicates,realism,lint,rubric,accept}.ts` | 13 видов предикатов, Realism Gate против «схем-обманок», линтер положительных правил и антипаттернов, рубрика по 7 осям, звёзды, вердикт с трассировкой до конкретного требования |
+| Каталог заданий | `data/challenges/` | Один модуль на задачу, стартовая схема собирается `services/schemeBuilder.ts` |
+| Приёмка вне UI | `workers/simulation.worker.ts` (запрос `accept`), `store/challengeStore.ts` | Прогон батареи сценариев в том же воркере, что и расчёт схемы; прогресс и потраченные подсказки в `localStorage` |
+| Панель заданий | `components/panels/Challenges` | Требования в реальном времени, отчёт со звёздами, эталонные решения после сдачи |
+
+### 12.3. Что добавила фаза 3
+
+| Появилось | Где | Суть |
+|---|---|---|
+| Волна V1 каталога | `engine/components/*` | 44 → 109 блоков в 14 группах; модель ёмкости у 83 блоков, несущих трафик; 98 родовых иконок |
+| Ход времени | `sim/transient.ts` | Прогон по шагам: лаг автоскейлера, очереди с памятью между шагами, прогрев кэша; ряд `timeline` в `SimResult`, 16 сценариев (10 transient) |
+| Группы `vpc` и `k8s-cluster` | `engine/components/topology.ts`, `sim/{compile,findings}.ts` | Межсетевой хоп и выход через NAT в задержке, стоимость control plane, находки `k8s-pods-exceeded` и `nat-saturated` |
+| Показания проб | `sim/probes.ts` | 11 измерителей считают значение, единицу, статус и `explain`; расчёт схемы от них не меняется — пробы вырезаются из топологии |
+| Окна измерителей и водопад | `canvas/ProbeWindows.tsx`, `common/Waterfall`, `utils/waterfall.ts` | Показание на самом блоке пробы, окно по двойному клику, водопад задержки в дашборде и в окне `probe-waterfall`; раскладка вынесена в чистую функцию и покрыта тестом |
+| Таймлайн | `panels/Dashboard/Timeline.tsx` | Ряды transient-прогона: нагрузка, утилизация, p99, backlog, ошибки, инстансы; полосы нарушения SLO |
+| Туториал | `components/tutorial/` | 8 шагов на живой схеме; шаги — чистый редьюсер `tutorialSteps.ts`, поэтому проверяются тестом без DOM |
+| Шаринг и экспорт | `services/{shareLink,imageExport,reportExport}.ts` | Схема в ссылке, PNG канваса, Markdown-отчёт по результату расчёта |
+| PWA | `public/manifest.webmanifest`, `public/sw.js`, `services/serviceWorker.ts` | Установка и офлайн-запуск статики |
+
+### 12.4. Что осталось на следующие фазы
+
+* Аномалии A3/A7/A8 и сценарий `split-brain` — см. [02-simulation.md](02-simulation.md) §15.3,
+  там же полный перечень нереализованного.
 * Зеркальные регионы `mirrorOf` (ADR-13): регионы пока описываются явно.
 * Инкрементальный пересчёт по хэшу подграфа; сейчас схема считается целиком.
-* Режим заданий целиком (фаза 2).
+* Волна V2 каталога — 20 блоков из [01-components.md](01-components.md) §15.
+* `custom`-предикат и дифф с эталонным решением — [04-challenges.md](04-challenges.md) §11.3.
+* Режимы «Инцидент», «Гольф», «Интервью», конструктор заданий, лидерборды, LLM-ревьюер (фаза 4).
+* Графическая часть проб: `probe-rps` без тайм-серии, `probe-latency` без гистограммы,
+  `probe-heatmap` без оверлея на схеме — сейчас эти измерители отдают число, а не картинку.
 
 Поведение undo/redo не менялось: в историю пишутся только структурные правки, перетаскивание и
 ресайз оформляются транзакцией (`beginTransaction`/`commitTransaction`), а служебные изменения

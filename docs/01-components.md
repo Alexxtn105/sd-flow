@@ -5,7 +5,7 @@
 
 **Обозначения:**
 * **M** — блок входит в первую волну (MVP, фаза 1).
-* **V1** — фаза 3 (v1.0). **V2** — позже.
+* **V1** — волна v1.0, зарегистрирована в фазе 3. **V2** — позже, в реестре этих блоков ещё нет.
 * *Ограничитель* — какой ресурс, как правило, связывает ёмкость этого блока первым.
 
 ---
@@ -293,17 +293,19 @@ S = (serviceTimeMs + coldStartMs × coldStartShare) / 1000
 | Консистентность | `isolationLevel`, `readYourWrites`, `readFromReplica` (доля чтений с реплик) | Предикаты заданий проверяют это |
 | Надёжность | `backupSchedule`, `pitrDays`, `multiAz` | Хранилище бэкапов идёт в стоимость |
 
-**Что из этой таблицы считает фаза 1.** У `postgres` и `mysql` задан 31 параметр. В расчёт идут
+**Что из этой таблицы считает движок.** У `postgres` и `mysql` задан 31 параметр. В расчёт идут
 `readReplicas`, `shardCount`, `maxConnections`, `connectionPooler`, `connectionsPerQuery`,
 `cpuCores`, `provisionedIops`, `iopsPerRead` / `iopsPerWrite`, `readServiceMs` / `writeServiceMs`,
 `rowSizeBytes`, `rowCount`, `indexOverhead`, `readFromReplica`, `replicationMode`,
 `consistencyModel`, `replicaLagMs` / `replicaLagSigma`, `concurrencyControl`, `failoverSec`,
-`availability` и обе статьи стоимости. Параметры `bufferPoolGb`, `workingSetGb`, `queryProfile`,
-`storageGb`, `multiAz`, `isolationLevel` пока только хранятся; `conflictResolution` у самого блока
-не читается — конфликты мульти-мастера разрешаются значением из `multi-region-policy` (§13.1).
-Строки `role`, `instanceClass`, `sharding.*`, `storageType`, `indexCount`, `transactionsPerWrite`,
-`lockContention`, `backupSchedule`, `pitrDays`, `retentionDays`, `compressionRatio` — задел на V1,
-а `readYourWrites` задаётся не на блоке, а на ребре (§0.3).
+`multiAz` (признак наличия реплик, когда репликация не нарисована ребром: с ним синхронная запись
+платит RTT между AZ), `availability` и обе статьи стоимости. Параметры `bufferPoolGb`,
+`workingSetGb`, `queryProfile`, `storageGb`, `isolationLevel` пока только хранятся;
+`conflictResolution` у самого блока не читается — конфликты мульти-мастера разрешаются значением
+из `multi-region-policy` (§13.1). Строки `role`, `instanceClass`, `sharding.*`, `storageType`,
+`indexCount`, `transactionsPerWrite`, `lockContention`, `backupSchedule`, `pitrDays`,
+`retentionDays`, `compressionRatio` волна V1 в блок не добавила, а `readYourWrites` задаётся
+не на блоке, а на ребре (§0.3).
 
 **Модель ёмкости `postgres` и `mysql` (так считает движок):**
 ```
@@ -588,26 +590,27 @@ H(n, α)       = Σ_{k=1..n} k^(−α)
 
 | Группа | Блоков всего | В коде\* |
 |---|---|---|
-| clients | 7 | 2 |
-| edge | 12 | 6 |
-| compute | 13 | 4 |
-| sql | 8 | 2 |
-| nosql | 13 | 3 |
-| search | 5 | 1 |
-| olap | 7 | 1 |
-| cache | 5 | 2 |
-| messaging | 12 | 4 |
-| storage | 7 | 2 |
-| platform | 15 | 2 |
-| observability | 6 | 2 |
+| clients | 7 | 7 |
+| edge | 12 | 11 |
+| compute | 13 | 11 |
+| sql | 8 | 5 |
+| nosql | 13 | 10 |
+| search | 5 | 4 |
+| olap | 7 | 5 |
+| cache | 5 | 3 |
+| messaging | 12 | 11 |
+| storage | 7 | 5 |
+| platform | 15 | 13 |
+| observability | 6 | 5 |
 | topology | 8 | 8 |
-| probes | 11 | 7 |
-| **Итого** | **129** | **сверяется тестом** |
+| probes | 11 | 11 |
+| **Итого** | **129** | **109** |
 
-\* До фазы 3 столбец «в коде» совпадал с MVP-волной (44 блока). В фазе 3 в реестр добавляются
-блоки волны **V1** — в `topology` это `vpc` и `k8s-cluster`, — поэтому «в коде» больше не равно
-«в MVP»: сама MVP-волна не изменилась, а число зарегистрированных блоков растёт. Фактические
-значения по группам и итог сверяет `tests/engine/catalog.test.ts` — он и есть источник истины.
+\* «В коде» — блоки, зарегистрированные в `ComponentRegistry`: волны **M** и **V1**. До фазы 3
+столбец совпадал с MVP-волной (44 блока); фаза 3 добавила волну V1 целиком — ещё 65 блоков,
+в `topology` это `vpc` и `k8s-cluster`. Сама MVP-волна при этом не изменилась, а блоков волны
+**V2** в реестре нет. Значения по группам, итог и порядок групп сверяет
+`tests/engine/catalog.test.ts` — он и есть источник истины.
 
 Прирост первой волны с 39 до 44 блоков — следствие решения **D1** (мультирегион в MVP):
 в неё добавлены `region`, `link-cross-region`, `multi-region-policy`, `dns` и `glb`.

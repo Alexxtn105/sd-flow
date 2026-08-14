@@ -438,7 +438,7 @@
             "parallel": "parallel"
         },
         "residualLabel": "Unaccounted",
-        "hidden": "{{count}} more hops"
+        "hidden": "{{value}} more hops"
     },
     "scenario": {
         "baseline": "Baseline",
@@ -578,8 +578,9 @@
         "nodes": "blocks",
         "edges": "edges",
         "groups": "groups",
-        "phase": "Phase 1 — steady-state load model",
-        "storage": "used in storage"
+        "phase": "Phase 3 — transient, probes, challenges",
+        "storage": "used in storage",
+        "version": "App version"
     },
     "dialog": {
         "cancel": "Cancel",
