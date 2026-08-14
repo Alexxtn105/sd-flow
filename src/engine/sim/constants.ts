@@ -102,6 +102,7 @@ export const ARRIVAL_VARIABILITY: Record<string, number> = {
     'region-failure': 2,
     'stale-read': 1,
     'write-conflict': 1,
+    'black-friday': 3,
 };
 
 export const PRICING_PROFILES: Record<string, PricingProfile> = {

@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import registry from '../../src/engine/ComponentRegistry';
 import initComponents from '../../src/engine/initComponents';
 import type { Wave } from '../../src/engine/types/component';
+import SD_ICONS from '../../src/components/common/Icons/SdIcons';
 import ruBlocks from '../../src/locales/ru/blocks.json';
 import enBlocks from '../../src/locales/en/blocks.json';
 import ruGroups from '../../src/locales/ru/groups.json';
@@ -34,8 +35,8 @@ beforeAll(() => {
     initComponents();
 });
 
-describe('каталог блоков', () => {
-    it('содержит ровно 109 блоков волн MVP и V1', () => {
+describe('каталог блоков v1.0', () => {
+    it('содержит все блоки волн MVP и V1', () => {
         expect(registry.size()).toBe(EXPECTED_SHIPPED_COUNT);
         expect(registry.list().every((component) => SHIPPED_WAVES.has(component.wave))).toBe(true);
     });
@@ -54,6 +55,7 @@ describe('каталог блоков', () => {
     it('каждый блок описан консистентно', () => {
         for (const component of registry.list()) {
             expect(component.icon.startsWith('sd-'), `${component.id}: иконка ${component.icon}`).toBe(true);
+            expect(SD_ICONS[component.icon], `${component.id}: иконка ${component.icon} зарегистрирована`).toBeDefined();
             expect(component.helpId, `${component.id}: helpId`).toBe(component.id);
             expect(Object.keys(component.defaultParams).length, `${component.id}: параметры`).toBeGreaterThan(0);
             expect(Object.keys(component.paramSchema).sort()).toEqual(Object.keys(component.defaultParams).sort());
@@ -113,5 +115,18 @@ describe('локализация каталога', () => {
 
         expect(missingRu).toEqual([]);
         expect(missingEn).toEqual([]);
+    });
+
+    it('все варианты перечислимых параметров переведены на оба языка', () => {
+        const options = [
+            ...new Set(
+                registry.list().flatMap((component) =>
+                    Object.values(component.paramSchema).flatMap((field) => field.kind === 'enum' ? field.options : []),
+                ),
+            ),
+        ];
+
+        expect(options.filter((option) => !(option in ruParams.enum))).toEqual([]);
+        expect(options.filter((option) => !(option in enParams.enum))).toEqual([]);
     });
 });

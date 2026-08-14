@@ -389,6 +389,8 @@
         "explain": "How the number is derived",
         "noData": "no data",
         "openWaterfall": "Open the latency waterfall",
+        "openWindow": "Open the probe window with a double click",
+        "closeWindow": "Close probe window",
         "attachHint": "Connect the probe to the block it watches",
         "status": {
             "ok": "within limits",
@@ -424,6 +426,7 @@
         "legend": "Bar width is the hop’s own contribution, its position is the accumulated time",
         "covered": "{{covered}} of {{total}} ms accounted for",
         "residual": "residual {{value}} ms",
+        "residualLabel": "Unattributed remainder",
         "contribution": "{{value}} ms",
         "shareOfRequests": "on the path of {{value}}% of requests",
         "cacheMiss": "cache misses {{value}}%",
@@ -441,7 +444,22 @@
         "region-failure": "Region failure",
         "cache-flush": "Cache flush",
         "stale-read": "Replica lag",
-        "write-conflict": "Write conflict"
+        "write-conflict": "Write conflict",
+        "black-friday": "Black Friday spike"
+    },
+    "transient": {
+        "title": "Transient response",
+        "pattern": "Scenario: {{pattern}}",
+        "scrubber": "Point on the timeline",
+        "offered": "offered load",
+        "throughput": "processed load",
+        "load": "Load",
+        "queue": "Queue",
+        "p99": "p99",
+        "instances": "Active instances",
+        "cacheWarmth": "Cache warmth",
+        "bottleneck": "Bottleneck",
+        "errors": "errors {{value}}%"
     },
     "findings": {
         "overloaded": "Overloaded: {{nodeNames}} runs at {{utilizationPct}}% and is bound by {{boundBy}} at a capacity of {{capacity}} req/s; {{dropped}} req/s are dropped. Add instances, shard it, or cut the traffic.",
@@ -482,29 +500,22 @@
     "bound": {
         "authoritative-qps": "authoritative server limit",
         "broker-network": "broker network",
-        "cardinality": "cardinality",
         "concurrency": "concurrency",
         "connections": "connection count",
-        "counter-store": "counter store",
         "cpu": "CPU",
-        "credits": "warehouse credits",
         "daily-quota": "daily quota",
         "db-pool": "database connection pool",
         "depth": "queue depth",
         "disabled": "being disabled",
         "disk-scan": "disk scan rate",
-        "fanout": "subscriber fan-out",
         "gateway-rps": "gateway limit",
         "global-rps": "global RPS ceiling",
-        "gpu": "GPU",
         "hot-key": "hot key",
         "hot-partition": "hot partition",
         "indexing": "indexing",
         "inflight": "in-flight requests",
         "ingest-bandwidth": "ingest bandwidth",
         "iops": "disk IOPS",
-        "job-window": "job window",
-        "lock-serialization": "lock serialization",
         "memory": "memory",
         "network": "network",
         "new-connections": "new connections",
@@ -512,7 +523,6 @@
         "nodes": "node count",
         "ops": "operation count",
         "partitions": "partition count",
-        "poll-batch": "poll batch",
         "pop-network": "edge location network",
         "pop-rps": "edge location limit",
         "prefix-requests": "prefix requests",
@@ -521,30 +531,38 @@
         "query-slots": "query slots",
         "queues": "queues",
         "quotaRps": "the RPS quota",
-        "raft-quorum": "Raft quorum",
         "rate-limit": "rate limit",
-        "retrieval": "archive retrieval",
         "rps-ceiling": "RPS ceiling",
         "sample-ingest": "metric ingest",
         "search-threads": "search threads",
-        "shard-cpu": "shard CPU",
-        "shard-records": "shard record limit",
         "source": "traffic source",
-        "span-ingest": "span ingest",
-        "state-transitions": "state transitions",
         "throughput": "throughput",
         "unbounded": "nothing",
         "unmodelled": "an unmodelled limit",
         "vendor-units": "billing units",
-        "vtgate": "vtgate limit",
         "workers": "worker count",
+        "cardinality": "cardinality",
+        "counter-store": "counter store",
+        "credits": "compute credits",
+        "fanout": "delivery fanout",
+        "gpu": "GPU",
+        "job-window": "job window",
+        "lock-serialization": "lock serialization",
+        "poll-batch": "poll batch size",
+        "raft-quorum": "Raft quorum",
+        "retrieval": "retrieval throughput",
+        "shard-cpu": "shard CPU",
+        "shard-records": "records per shard",
+        "span-ingest": "span ingest",
+        "state-transitions": "state transitions",
+        "vtgate": "VTGate throughput",
         "write-quorum": "write quorum"
     },
     "footer": {
         "nodes": "blocks",
         "edges": "edges",
         "groups": "groups",
-        "phase": "Phase 1 — steady-state load model",
+        "phase": "v1.0 — phase 3 complete",
         "storage": "used in storage"
     },
     "dialog": {
@@ -681,5 +699,46 @@
             "findings": "No problems found."
         },
         "assumptions": "The calculation is steady-state: load is averaged and transients are not modelled. Capacity of every block is the minimum over its list of limiters, latency is sampled with Monte-Carlo over the call tree, and cost follows the pricing profile from the scheme settings. The numbers are an order-of-magnitude estimate, not a load test. Formulas, constants and limits of applicability — docs/02-simulation.md."
+    },
+    "tutorial": {
+        "action": "Take the tutorial",
+        "title": "How SysDesign Flow works",
+        "progress": "Step {{current}} of {{total}}",
+        "skip": "Close",
+        "back": "Back",
+        "next": "Next",
+        "finish": "Start designing",
+        "steps": {
+            "0": {
+                "icon": "widgets",
+                "title": "Build an architecture from blocks",
+                "body": "The palette on the left contains clients, edge components, services, stores, queues and infrastructure. Drag a block onto the canvas or click it to add it in the centre.",
+                "tip": "Start with a client: it defines the flow and its source load. A scheme without a client cannot be simulated."
+            },
+            "1": {
+                "icon": "account_tree",
+                "title": "Connect the flow",
+                "body": "Draw an edge from an output port to an input port. An edge carries sync semantics, operations, fanout, payload, timeouts and retries.",
+                "tip": "A queue makes the rest of the path asynchronous: the user no longer waits for work behind it."
+            },
+            "2": {
+                "icon": "tune",
+                "title": "Set realistic parameters",
+                "body": "Select a block and edit its parameters on the right. The engine recalculates RPS, capacity, utilization, latency, cost and storage after every change.",
+                "tip": "Turn on X-ray in the header: nodes show RPS and their capacity limiter while edge width shows traffic."
+            },
+            "3": {
+                "icon": "monitoring",
+                "title": "Break the system with scenarios",
+                "body": "Switch between peak, AZ or region loss, cache flush and Black Friday. The dashboard shows findings, the latency waterfall and the transient timeline.",
+                "tip": "Put a probe on the canvas, connect it to a block and open its window with a double click."
+            },
+            "4": {
+                "icon": "task_alt",
+                "title": "Test yourself with challenges",
+                "body": "Challenge mode gives you a brief, locks the givens and accepts different architectures by observable metrics, scenarios and engineering quality.",
+                "tip": "Pass the hard gates first, then improve headroom, cost and resilience to earn three stars."
+            }
+        }
     }
 }

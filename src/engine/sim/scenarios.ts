@@ -10,7 +10,8 @@ export type ScenarioId =
     | 'region-failure'
     | 'cache-flush'
     | 'stale-read'
-    | 'write-conflict';
+    | 'write-conflict'
+    | 'black-friday';
 
 export const SCENARIOS: ScenarioId[] = [
     'baseline',
@@ -20,6 +21,7 @@ export const SCENARIOS: ScenarioId[] = [
     'cache-flush',
     'stale-read',
     'write-conflict',
+    'black-friday',
 ];
 
 export interface ScenarioSetup {

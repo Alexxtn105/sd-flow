@@ -15,6 +15,7 @@ import { collectProbes, readProbes, withoutProbes } from './probes';
 import { createRng, hashString } from './rng';
 import { solveFlows } from './solver';
 import { emptyCost } from './resources';
+import { simulateTransient } from './transient';
 import type { EdgeResult, NodeResult, SimResult, Totals } from './types';
 
 export const DEFAULT_SAMPLE_COUNT = 20000;
@@ -183,7 +184,7 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
         totals,
     });
 
-    return {
+    const result: SimResult = {
         modelVersion: MODEL_VERSION,
         scenario: setup.id,
         seed,
@@ -195,10 +196,14 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
         flows: flowResults,
         waterfalls: rollup.waterfalls,
         probes,
+        transient: null,
         totals,
         consistency,
         multiRegion,
         findings,
         issues: topology.issues,
     };
+
+    result.transient = simulateTransient(measured, result, scenarioId);
+    return result;
 }

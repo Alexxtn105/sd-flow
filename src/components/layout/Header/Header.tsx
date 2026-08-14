@@ -50,6 +50,7 @@ export default function Header({
     const setMode = useUiStore((state) => state.setMode);
     const xray = useUiStore((state) => state.xray);
     const toggleXray = useUiStore((state) => state.toggleXray);
+    const openTutorial = useUiStore((state) => state.openTutorial);
     const undo = useGraphStore((state) => state.undo);
     const redo = useGraphStore((state) => state.redo);
     const canUndo = useGraphStore((state) => state.past.length > 0);
@@ -196,6 +197,9 @@ export default function Header({
                     <Icon name="redo" size="small" />
                 </button>
                 <span className="hdr-divider" />
+                <button className="hdr-btn" onClick={openTutorial} title={t('tutorial.action')}>
+                    <Icon name="school" size="small" />
+                </button>
                 <a
                     className="hdr-btn"
                     href="https://github.com/Alexxtn105/sd-flow"

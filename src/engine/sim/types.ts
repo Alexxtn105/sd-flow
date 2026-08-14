@@ -192,6 +192,37 @@ export interface Totals {
     errorBudgetMinutes: number;
 }
 
+export interface TransientNodePoint {
+    nodeId: string;
+    activeInstances: number;
+    targetInstances: number;
+    capacity: number;
+    offeredRps: number;
+    queueDepth: number;
+    utilization: number;
+}
+
+export interface TransientPoint {
+    timeSec: number;
+    multiplier: number;
+    offeredRps: number;
+    throughputRps: number;
+    errorRate: number;
+    p99Ms: number;
+    queueDepth: number;
+    activeInstances: number;
+    cacheWarmth: number;
+    bottleneckNodeId: string | null;
+    nodes: TransientNodePoint[];
+}
+
+export interface TransientResult {
+    pattern: string;
+    durationSec: number;
+    stepSec: number;
+    points: TransientPoint[];
+}
+
 export interface SimResult {
     modelVersion: string;
     scenario: string;
@@ -204,6 +235,7 @@ export interface SimResult {
     flows: FlowResult[];
     waterfalls: FlowWaterfall[];
     probes: Record<string, ProbeReading>;
+    transient: TransientResult | null;
     totals: Totals;
     consistency: ConsistencyResult;
     multiRegion: MultiRegionResult | null;

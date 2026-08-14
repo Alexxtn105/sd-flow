@@ -10,6 +10,7 @@ import { staticSite } from './staticSite';
 import { twitterFeed } from './twitterFeed';
 import { urlShortener } from './urlShortener';
 import { videoHosting } from './videoHosting';
+import { advancedChallenges } from './advanced';
 
 export const CHALLENGES: Challenge[] = [
     staticSite,
@@ -23,6 +24,7 @@ export const CHALLENGES: Challenge[] = [
     videoHosting,
     flashSale,
     multiRegion,
+    ...advancedChallenges,
 ];
 
 export function challengeById(id: string): Challenge | undefined {

@@ -13,6 +13,7 @@ import ErrorBoundary from './components/common/ErrorBoundary/ErrorBoundary';
 import SaveDialog from './components/dialogs/SaveDialog';
 import LoadDialog from './components/dialogs/LoadDialog';
 import ConfirmDialog from './components/dialogs/ConfirmDialog';
+import TutorialDialog from './components/dialogs/TutorialDialog';
 import Icon from './components/common/Icons/Icon';
 import Toast from './components/common/Toast/Toast';
 import type { ToastTone } from './components/common/Toast/Toast';
@@ -62,6 +63,7 @@ export default function App() {
     const isDirty = useIsDirty();
     const replaceGraph = useGraphStore((state) => state.replaceGraph);
     const mode = useUiStore((state) => state.mode);
+    const tutorialOpen = useUiStore((state) => state.tutorialOpen);
     const inspectorOpen = useUiStore((state) => state.inspectorOpen);
     const toggleInspector = useUiStore((state) => state.toggleInspector);
     const dashboardOpen = useSimStore((state) => state.dashboardOpen);
@@ -324,6 +326,8 @@ export default function App() {
                         }}
                     />
                 )}
+
+                {tutorialOpen && <TutorialDialog />}
             </div>
         </ReactFlowProvider>
     );

@@ -1,0 +1,105 @@
+.tutorial-progress {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 5px;
+    margin-bottom: 22px;
+}
+
+.tutorial-progress span {
+    height: 3px;
+    border-radius: 2px;
+    background: var(--panel-border);
+}
+
+.tutorial-progress span.active {
+    background: var(--panel-accent);
+}
+
+.tutorial-step-icon {
+    width: 54px;
+    height: 54px;
+    display: grid;
+    place-items: center;
+    margin: 0 auto 12px;
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--panel-accent) 12%, transparent);
+    color: var(--panel-accent);
+}
+
+.tutorial-kicker {
+    margin: 0 0 5px;
+    text-align: center;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+    color: var(--panel-text-5);
+}
+
+.tutorial-step-title {
+    margin: 0 0 10px;
+    text-align: center;
+    font-size: 17px;
+    color: var(--panel-text-1);
+}
+
+.tutorial-step-body {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.65;
+    color: var(--panel-text-3);
+}
+
+.tutorial-tip {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    margin-top: 16px;
+    padding: 9px 10px;
+    border: 1px solid var(--panel-border);
+    border-radius: 5px;
+    background: var(--panel-subtle-bg);
+    color: var(--panel-text-4);
+    font-size: 10px;
+    line-height: 1.45;
+}
+
+.tutorial-tip .sd-icon,
+.tutorial-tip .material-icons-outlined {
+    color: var(--util-warn);
+    flex-shrink: 0;
+}
+
+.tutorial-actions {
+    width: 100%;
+    display: flex;
+    gap: 7px;
+}
+
+.tutorial-spacer {
+    flex: 1;
+}
+
+.tutorial-actions button {
+    padding: 7px 13px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.tutorial-actions button:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.tutorial-secondary {
+    border: 1px solid var(--panel-border);
+    background: var(--panel-bg);
+    color: var(--panel-text-3);
+}
+
+.tutorial-primary {
+    border: 1px solid var(--panel-accent);
+    background: var(--panel-accent);
+    color: white;
+}

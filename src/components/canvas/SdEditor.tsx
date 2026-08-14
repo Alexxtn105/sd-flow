@@ -7,6 +7,7 @@ import '@xyflow/react/dist/style.css';
 import SdNode from './SdNode';
 import GroupNode from './GroupNode';
 import ProbeNode from './ProbeNode';
+import ProbeWindows from './ProbeWindows';
 import TrafficEdge from './TrafficEdge';
 import NodeContextMenu from './NodeContextMenu';
 import type { ContextMenuTarget } from './NodeContextMenu';
@@ -243,6 +244,8 @@ export default function SdEditor() {
                     className="sd-minimap"
                 />
             </ReactFlow>
+
+            <ProbeWindows />
 
             {isEmpty && (
                 <div className="sd-editor-empty">

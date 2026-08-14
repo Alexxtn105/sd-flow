@@ -22,6 +22,7 @@ describe('clampPanelSize', () => {
 describe('панели uiStore', () => {
     beforeEach(() => {
         for (const key of PANEL_KEYS) useUiStore.getState().resetPanelSize(key);
+        useUiStore.setState({ probeWindowIds: [], tutorialOpen: false, tutorialStep: 0 });
         localStorage.clear();
     });
 
@@ -59,5 +60,32 @@ describe('панели uiStore', () => {
         useUiStore.getState().persistPanels();
         const stored = StorageService.load<{ panels?: Record<string, number> }>(STORAGE_KEYS.PREFERENCES);
         expect(stored?.panels?.dashboard).toBe(300);
+    });
+
+    it('открывает и закрывает независимые окна проб', () => {
+        const store = useUiStore.getState();
+        store.toggleProbeWindow('probe-a');
+        store.toggleProbeWindow('probe-b');
+        expect(useUiStore.getState().probeWindowIds).toEqual(['probe-a', 'probe-b']);
+
+        useUiStore.getState().toggleProbeWindow('probe-a');
+        expect(useUiStore.getState().probeWindowIds).toEqual(['probe-b']);
+
+        useUiStore.getState().closeProbeWindow('probe-b');
+        expect(useUiStore.getState().probeWindowIds).toEqual([]);
+    });
+
+    it('ведёт туториал по пяти шагам и ограничивает индекс', () => {
+        useUiStore.getState().openTutorial();
+        expect(useUiStore.getState()).toMatchObject({ tutorialOpen: true, tutorialStep: 0 });
+
+        useUiStore.getState().setTutorialStep(99);
+        expect(useUiStore.getState().tutorialStep).toBe(4);
+
+        useUiStore.getState().setTutorialStep(-10);
+        expect(useUiStore.getState().tutorialStep).toBe(0);
+
+        useUiStore.getState().closeTutorial();
+        expect(useUiStore.getState().tutorialOpen).toBe(false);
     });
 });

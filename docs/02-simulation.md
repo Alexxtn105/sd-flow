@@ -703,7 +703,9 @@ Error budget:               (1 − A_flow) · 43 200 мин/мес
 | [6] Производные | `derived.ts`, `cost.ts`, `availability.ts` | Хранилище, логи, egress, стоимость по профилям цен, стоимость контейнеров (ноды и control plane кластера, обработка ГБ на NAT), доступность с резервированием, SPOF |
 | Мультирегион | `multiRegion.ts` | Доли трафика по регионам, трафик и стоимость репликации, RPO/RTO против целевых |
 | [7] RuleEngine | `findings.ts` | 12 правил + аномалии как находки |
-| Сценарии | `scenarios.ts` | `baseline`, `peak`, `az-failure`, `region-failure`, `cache-flush`, `stale-read`, `write-conflict` |
+| Сценарии | `scenarios.ts` | `baseline`, `peak`, `az-failure`, `region-failure`, `cache-flush`, `stale-read`, `write-conflict`, `black-friday` |
+| Transient | `transient.ts` | Временная шкала `peak`, `cache-flush`, `black-friday`: лаг scale-up/down, рост и дренаж очереди, прогрев кэша, throughput, errors и p99 |
+| Пробы и waterfall | `probes.ts`, `latency.ts` | 11 измерителей с объяснениями; раскладка p50/p95/p99 по хопам, сети, ожиданию и ретраям |
 | Детерминизм | `rng.ts` | `xoshiro128**`, seed = хэш(схема + сценарий + версия модели) ⊕ `settings.seed` |
 
 ### 15.2. Расхождения с планом — принятые решения
@@ -754,9 +756,9 @@ CDN. Так нарисованный origin не считается дважды
 
 ### 15.3. Не реализовано
 
-* **Transient-режим.** Всё считается в стационаре. Сценарии `spike`, `growth`, `db-failover`,
-  `hot-key`, `slow-dependency`, `thundering-herd`, `retry-storm`, `poison-message`, `split-brain`,
-  `black-friday` из §12 не реализованы — им нужен ход времени и `scaleUpLagSec`.
+* **Полный transient-каталог.** Временной ход реализован для `peak`, `cache-flush` и
+  `black-friday`; отдельные профили `growth`, `db-failover`, `hot-key`, `slow-dependency`,
+  `thundering-herd`, `retry-storm`, `poison-message` и `split-brain` из §12 ещё не выделены.
 * **Аномалии A3 (монотонность чтений), A7 (порядок), A8 (изоляция SQL)** из §7а.2.
 * **`deliverySemantics` на async-ребре** (`at-most-once` / `at-least-once` / `effectively-once`):
   поля в `EdgePolicy` нет, дубликаты A6 всегда считаются по семантике `at-least-once`, а гасит их
@@ -765,7 +767,6 @@ CDN. Так нарисованный origin не считается дважды
 * **Инкрементальный пересчёт** по хэшу подграфа (§13): пересчитывается вся схема целиком.
   На демо-схемах это 40–60 мс, поэтому пока не мешает.
 * **Автоскейлинг** реализован только у `service` — у остальных блоков число инстансов задаётся руками.
-* **Окна проб** (`probe-*`): блоки ставятся и хранятся, но измерителей ещё нет.
 
 ### 15.4. Как проверяется модель
 

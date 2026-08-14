@@ -16,7 +16,10 @@ export interface UiState {
     panels: PanelSizes;
     selectedNodeIds: string[];
     selectedEdgeIds: string[];
+    probeWindowIds: string[];
     pendingAdd: string | null;
+    tutorialOpen: boolean;
+    tutorialStep: number;
     setMode: (mode: AppMode) => void;
     togglePalette: () => void;
     toggleChallengePanel: () => void;
@@ -26,8 +29,13 @@ export interface UiState {
     resetPanelSize: (key: PanelKey) => void;
     persistPanels: () => void;
     setSelection: (nodeIds: string[], edgeIds: string[]) => void;
+    toggleProbeWindow: (probeId: string) => void;
+    closeProbeWindow: (probeId: string) => void;
     requestAdd: (componentType: string) => void;
     clearPendingAdd: () => void;
+    openTutorial: () => void;
+    closeTutorial: () => void;
+    setTutorialStep: (step: number) => void;
 }
 
 interface StoredPreferences {
@@ -76,7 +84,10 @@ export const useUiStore = create<UiState>((set, get) => ({
     panels: loadPanels(),
     selectedNodeIds: [],
     selectedEdgeIds: [],
+    probeWindowIds: [],
     pendingAdd: null,
+    tutorialOpen: false,
+    tutorialStep: 0,
 
     setMode: (mode) => set({ mode }),
     togglePalette: () => set((state) => ({ paletteCollapsed: !state.paletteCollapsed })),
@@ -103,6 +114,17 @@ export const useUiStore = create<UiState>((set, get) => ({
         if (sameIds(selectedNodeIds, nodeIds) && sameIds(selectedEdgeIds, edgeIds)) return;
         set({ selectedNodeIds: nodeIds, selectedEdgeIds: edgeIds });
     },
+    toggleProbeWindow: (probeId) =>
+        set((state) => ({
+            probeWindowIds: state.probeWindowIds.includes(probeId)
+                ? state.probeWindowIds.filter((id) => id !== probeId)
+                : [...state.probeWindowIds, probeId],
+        })),
+    closeProbeWindow: (probeId) =>
+        set((state) => ({ probeWindowIds: state.probeWindowIds.filter((id) => id !== probeId) })),
     requestAdd: (componentType) => set({ pendingAdd: componentType }),
     clearPendingAdd: () => set({ pendingAdd: null }),
+    openTutorial: () => set({ tutorialOpen: true, tutorialStep: 0 }),
+    closeTutorial: () => set({ tutorialOpen: false }),
+    setTutorialStep: (step) => set({ tutorialStep: Math.max(0, Math.min(4, step)) }),
 }));

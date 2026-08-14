@@ -44,10 +44,30 @@
     white-space: nowrap;
 }
 
-.sd-probe-pending {
+.sd-probe-reading {
     font-size: 9px;
     color: var(--text-tertiary);
     white-space: nowrap;
+}
+
+.sd-probe-warn {
+    border-color: var(--util-warn);
+}
+
+.sd-probe-breach {
+    border-color: var(--util-hot);
+}
+
+.sd-probe-ok .sd-probe-reading {
+    color: var(--util-cool);
+}
+
+.sd-probe-warn .sd-probe-reading {
+    color: var(--util-warn);
+}
+
+.sd-probe-breach .sd-probe-reading {
+    color: var(--util-hot);
 }
 
 .dark-theme .sd-probe {

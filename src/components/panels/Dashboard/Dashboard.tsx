@@ -1,12 +1,13 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Icon from '../../common/Icons/Icon';
 import ResizeHandle from '../../common/ResizeHandle/ResizeHandle';
-import type { Finding } from '../../../engine/sim/types';
+import type { Finding, FlowWaterfall } from '../../../engine/sim/types';
 import { useGraphStore } from '../../../store/graphStore';
 import { useSimStore } from '../../../store/simStore';
 import { useUiStore } from '../../../store/uiStore';
 import { formatNumber } from '../../../utils/format';
+import TransientTimeline from './TransientTimeline';
 import './Dashboard.css';
 
 type MetricTone = 'default' | 'accent' | 'warn' | 'hot';
@@ -37,6 +38,101 @@ function percent(value: number, digits: number): string {
     return (value * 100).toFixed(digits);
 }
 
+type WaterfallPercentile = 'p50' | 'p95' | 'p99';
+
+interface WaterfallViewProps {
+    waterfall: FlowWaterfall;
+    all: FlowWaterfall[];
+    labelOf: (nodeId: string) => string;
+    onSelect: (flowId: string) => void;
+}
+
+function WaterfallView({ waterfall, all, labelOf, onSelect }: WaterfallViewProps) {
+    const { t } = useTranslation('common');
+    const [percentile, setPercentile] = useState<WaterfallPercentile>('p99');
+    const total = waterfall.total[percentile];
+    const covered = waterfall.covered[percentile];
+
+    return (
+        <section className="dash-section dash-section-wide dash-waterfall">
+            <div className="dash-waterfall-heading">
+                <h3 className="dash-section-title">{t('waterfall.title')}</h3>
+                <label>
+                    <span>{t('waterfall.flow')}</span>
+                    <select value={waterfall.flowId} onChange={(event) => onSelect(event.target.value)}>
+                        {all.map((item) => (
+                            <option key={item.flowId} value={item.flowId}>
+                                {labelOf(item.entryNodeId)}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+                <label>
+                    <span>{t('waterfall.percentile')}</span>
+                    <select
+                        value={percentile}
+                        onChange={(event) => setPercentile(event.target.value as WaterfallPercentile)}
+                    >
+                        <option value="p50">p50</option>
+                        <option value="p95">p95</option>
+                        <option value="p99">p99</option>
+                    </select>
+                </label>
+                <span className="dash-waterfall-covered">
+                    {t('waterfall.covered', {
+                        covered: formatNumber(covered),
+                        total: formatNumber(total),
+                    })}
+                </span>
+            </div>
+            <p className="dash-waterfall-legend">{t('waterfall.legend')}</p>
+            <div className="dash-waterfall-list">
+                {waterfall.hops.map((hop, index) => {
+                    const contribution = hop[`${percentile}Ms`];
+                    const elapsed = waterfall.hops
+                        .slice(0, index)
+                        .reduce((sum, previous) => sum + previous[`${percentile}Ms`], 0);
+                    const left = total > 0 ? Math.min(100, (elapsed / total) * 100) : 0;
+                    const width = total > 0 ? Math.max(0.75, Math.min(100 - left, (contribution / total) * 100)) : 0;
+
+                    return (
+                        <div key={`${hop.edgeId}-${hop.nodeId}-${index}`} className="dash-waterfall-hop">
+                            <span className="dash-waterfall-name" title={labelOf(hop.nodeId)}>
+                                {labelOf(hop.nodeId)}
+                            </span>
+                            <span className="dash-waterfall-track">
+                                <span
+                                    className={`dash-waterfall-bar dash-waterfall-${hop.arm}`}
+                                    style={{ left: `${left}%`, width: `${width}%` }}
+                                    title={t('waterfall.contribution', { value: formatNumber(contribution) })}
+                                />
+                            </span>
+                            <span className="dash-waterfall-value">{formatNumber(contribution)} мс</span>
+                        </div>
+                    );
+                })}
+                {total > covered && (
+                    <div className="dash-waterfall-hop dash-waterfall-residual">
+                        <span className="dash-waterfall-name">{t('waterfall.residualLabel')}</span>
+                        <span className="dash-waterfall-track">
+                            <span
+                                className="dash-waterfall-bar"
+                                style={{
+                                    left: `${Math.min(100, (covered / total) * 100)}%`,
+                                    width: `${Math.max(0, ((total - covered) / total) * 100)}%`,
+                                }}
+                            />
+                        </span>
+                        <span className="dash-waterfall-value">
+                            {t('waterfall.residual', { value: formatNumber(total - covered) })}
+                        </span>
+                    </div>
+                )}
+            </div>
+        </section>
+    );
+}
+
 export default function Dashboard() {
     const { t } = useTranslation(['common', 'blocks', 'params']);
 
@@ -44,6 +140,8 @@ export default function Dashboard() {
     const status = useSimStore((state) => state.status);
     const error = useSimStore((state) => state.error);
     const toggleDashboard = useSimStore((state) => state.toggleDashboard);
+    const waterfallFlowId = useSimStore((state) => state.waterfallFlowId);
+    const focusWaterfall = useSimStore((state) => state.focusWaterfall);
 
     const nodes = useGraphStore((state) => state.nodes);
     const setSelection = useUiStore((state) => state.setSelection);
@@ -89,6 +187,9 @@ export default function Dashboard() {
     const totals = result?.totals ?? null;
     const anomalies = result && result.consistency.mode === 'anomalies' ? result.consistency.anomalies : [];
     const multiRegion = result?.multiRegion ?? null;
+    const selectedWaterfall = result?.waterfalls.find((item) => item.flowId === waterfallFlowId)
+        ?? result?.waterfalls[0]
+        ?? null;
 
     return (
         <section className="dash" style={{ height }}>
@@ -183,6 +284,10 @@ export default function Dashboard() {
                             </div>
                         </section>
 
+                        {result.transient && (
+                            <TransientTimeline key={result.transient.pattern} result={result.transient} labelOf={labelOf} />
+                        )}
+
                         <section className="dash-section dash-section-flows">
                             <h3 className="dash-section-title">{t('dashboard.section.flows')}</h3>
                             {result.flows.length === 0 ? (
@@ -218,6 +323,15 @@ export default function Dashboard() {
                                 </div>
                             )}
                         </section>
+
+                        {selectedWaterfall && (
+                            <WaterfallView
+                                waterfall={selectedWaterfall}
+                                all={result.waterfalls}
+                                labelOf={labelOf}
+                                onSelect={focusWaterfall}
+                            />
+                        )}
 
                         <section className="dash-section dash-section-findings">
                             <h3 className="dash-section-title">{t('dashboard.section.findings')}</h3>
