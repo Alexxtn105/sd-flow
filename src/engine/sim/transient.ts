@@ -1,3 +1,4 @@
+import { planClusterPods } from './clusters';
 import type { CompiledNode, CompiledTopology } from './compile';
 import type { Flow } from './flows';
 import { createRng } from './rng';
@@ -442,9 +443,14 @@ function runStep(input: StepInput): StepOutcome {
         state.instances.set(node.id, approach(current, desired, lagSec, stepSec));
     }
 
+    const placement = planClusterPods(topology, state.instances);
+    const scheduled = placement.clamped
+        ? new Map([...state.instances, ...placement.instanceOverride])
+        : state.instances;
+
     const solved = solveFlows(topology, flows, {
         ...options,
-        instanceOverride: state.instances,
+        instanceOverride: scheduled,
         warmStart: demand.nodes,
     });
 

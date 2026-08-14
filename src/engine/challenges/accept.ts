@@ -14,18 +14,31 @@ import type { ReferencePoint } from './rubric';
 import type {
     Challenge,
     ChallengeVerdict,
+    ComparisonDirection,
+    ComparisonMetric,
+    ComparisonMetrics,
+    ComparisonOutcome,
     Penalty,
     Requirement,
     RequirementEvaluation,
     ScenarioRelaxation,
     ScenarioRun,
+    SolutionComparison,
 } from './types';
 
-const REFERENCE_SAMPLE_COUNT = 1000;
 const THREE_STARS_SCORE = 80;
 const ATTEMPT_PENALTY = 3;
 const OVERRIDE_PENALTY = 5;
 const SCENARIO_KINDS = new Set(['slo', 'capacity']);
+const COMPARISON_TOLERANCE = 1e-9;
+
+const COMPARISON_METRICS: { metric: ComparisonMetric; unit: string; better: ComparisonDirection }[] = [
+    { metric: 'latencyP99', unit: 'ms', better: 'lower' },
+    { metric: 'costMonth', unit: '$', better: 'lower' },
+    { metric: 'availability', unit: 'nines', better: 'higher' },
+    { metric: 'nodeCount', unit: '', better: 'lower' },
+    { metric: 'peakUtilization', unit: 'ratio', better: 'lower' },
+];
 
 const FAVOURABLE_DIRECTION: Record<string, 'higher' | 'lower'> = {
     cacheHitRatio: 'higher',
@@ -82,20 +95,96 @@ function overridePenalties(topology: CompiledTopology): Penalty[] {
     return penalties;
 }
 
-function referencePoint(challenge: Challenge): ReferencePoint | null {
-    const points = challenge.referenceSolutions.map((solution) => {
+interface ReferenceRun {
+    solutionId: string;
+    costMonth: number;
+    nodeCount: number;
+    metrics: ComparisonMetrics;
+}
+
+function worstFlowP99(result: SimResult): number {
+    return result.flows.reduce((worst, flow) => Math.max(worst, flow.latency.p99), 0);
+}
+
+function peakUtilization(result: SimResult): number {
+    return Object.values(result.nodes).reduce(
+        (peak, node) =>
+            node.lambdaOffered > 0 && Number.isFinite(node.utilization) ? Math.max(peak, node.utilization) : peak,
+        0,
+    );
+}
+
+function comparisonMetrics(result: SimResult): ComparisonMetrics {
+    return {
+        latencyP99: worstFlowP99(result),
+        costMonth: result.totals.costMonth,
+        availability: result.totals.availability,
+        nodeCount: Object.keys(result.nodes).length,
+        peakUtilization: peakUtilization(result),
+    };
+}
+
+function runReferences(challenge: Challenge, sampleCount: number): ReferenceRun[] {
+    return challenge.referenceSolutions.map((solution) => {
         const scheme = solution.build();
-        const result = simulate(scheme, { sampleCount: REFERENCE_SAMPLE_COUNT, scenario: 'baseline' });
+        const result = simulate(scheme, { sampleCount, scenario: 'baseline' });
 
         return {
+            solutionId: solution.id,
             costMonth: result.totals.costMonth,
             nodeCount: scheme.nodes.filter((node) => node.type !== 'region' && node.type !== 'az').length,
+            metrics: comparisonMetrics(result),
         };
     });
+}
 
-    if (points.length === 0) return null;
+function referencePoint(runs: ReferenceRun[]): ReferencePoint | null {
+    if (runs.length === 0) return null;
 
-    return points.reduce((left, right) => (right.costMonth < left.costMonth ? right : left));
+    const cheapest = runs.reduce((left, right) => (right.costMonth < left.costMonth ? right : left));
+
+    return { costMonth: cheapest.costMonth, nodeCount: cheapest.nodeCount };
+}
+
+function comparisonOutcome(delta: number, better: ComparisonDirection): ComparisonOutcome {
+    if (Math.abs(delta) <= COMPARISON_TOLERANCE) return 'equal';
+
+    return (delta < 0) === (better === 'lower') ? 'better' : 'worse';
+}
+
+function compareWithReferences(
+    mine: ComparisonMetrics,
+    runs: ReferenceRun[],
+    comparable: boolean,
+): SolutionComparison | null {
+    if (runs.length === 0) return null;
+
+    return {
+        comparable,
+        solutionIds: runs.map((run) => run.solutionId),
+        rows: COMPARISON_METRICS.map((row) => ({
+            metric: row.metric,
+            unit: row.unit,
+            better: row.better,
+            mine: mine[row.metric],
+            references: runs.map((run) => {
+                const value = run.metrics[row.metric];
+                const delta = mine[row.metric] - value;
+                const measured = comparisonOutcome(delta, row.better);
+                const outcome = comparable || measured === 'equal' ? measured : 'incomparable';
+
+                return { solutionId: run.solutionId, value, delta, outcome };
+            }),
+        })),
+    };
+}
+
+function servesTheTask(requirements: RequirementEvaluation[], mine: ComparisonMetrics): boolean {
+    const capabilitiesMet = requirements
+        .filter((evaluation) => evaluation.kind === 'capability')
+        .every((evaluation) => evaluation.status === 'met');
+
+    return capabilitiesMet && mine.peakUtilization > 0;
 }
 
 function emptyVerdict(challenge: Challenge, attempt: number): ChallengeVerdict {
@@ -109,6 +198,7 @@ function emptyVerdict(challenge: Challenge, attempt: number): ChallengeVerdict {
         scenarioRuns: [],
         lint: { positives: [], antipatterns: [], practiceScore: 0, penalty: 0 },
         rubric: { axes: [], penalties: [], total: 0 },
+        comparison: null,
         attempt,
     };
 }
@@ -185,6 +275,8 @@ export function acceptChallenge(input: AcceptInput): ChallengeVerdict {
         ...(attempt > 1 ? [{ code: 'retry', points: (attempt - 1) * ATTEMPT_PENALTY }] : []),
     ];
 
+    const references = runReferences(challenge, sampleCount);
+
     const rubric = scoreRubric({
         challenge,
         topology,
@@ -193,10 +285,11 @@ export function acceptChallenge(input: AcceptInput): ChallengeVerdict {
         bonusObjectives,
         scenarioRuns,
         lint,
-        reference: referencePoint(challenge),
+        reference: referencePoint(references),
         penalties,
     });
 
+    const mine = comparisonMetrics(baseline);
     const hardGatesPassed = realism.length === 0 && requirements.every((evaluation) => evaluation.status === 'met');
     const requiredPassed = scenarioRuns.filter((run) => run.required).every((run) => run.passed);
 
@@ -221,6 +314,7 @@ export function acceptChallenge(input: AcceptInput): ChallengeVerdict {
         scenarioRuns,
         lint,
         rubric,
+        comparison: compareWithReferences(mine, references, servesTheTask(requirements, mine)),
         attempt,
     };
 }

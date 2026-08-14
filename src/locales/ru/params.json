@@ -568,6 +568,7 @@
     "stepsPerWorkflow": "Шагов в workflow",
     "stickiness": "Липкость сессий",
     "stickyRegion": "Липкий регион",
+    "stickyReadShare": "Доля чтений, закреплённых за одной репликой",
     "storageClass": "Класс хранения",
     "storageGb": "Хранилище",
     "storageGbPerNode": "Хранилище на ноду",

@@ -322,6 +322,11 @@ export default function Dashboard() {
                                         <div key={`${item.code}-${index}`} className="dash-row">
                                             <span className="dash-cell-name">
                                                 {t(`anomaly.${item.code}`, { defaultValue: item.code })}
+                                                {item.upperBound && (
+                                                    <span className="dash-cell-sub">
+                                                        {t('anomaly.upperBound')}
+                                                    </span>
+                                                )}
                                             </span>
                                             <span>
                                                 {formatNumber(item.ratePerSec)} {t('dashboard.unit.opsSec')}

@@ -1,5 +1,6 @@
 import type { ComponentParams, CostBreakdown, CostContext, PricingProfile } from '../types/component';
 import { DAYS_PER_MONTH, HOURS_PER_MONTH, SECONDS_PER_DAY } from './constants';
+import type { ClusterPodPlan } from './clusters';
 import type { CompiledNode, CompiledTopology } from './compile';
 import type { DerivedNode } from './derived';
 import { emptyCost, totalCost } from './resources';
@@ -43,19 +44,28 @@ function natGbMonthByVpc(
     return byVpc;
 }
 
+export function clusterNodesCostMonth(
+    cluster: CompiledNode,
+    topology: CompiledTopology,
+    nodeCount: number,
+): number {
+    const perHour = Number(cluster.params.nodeCostPerHour ?? 0);
+
+    return nodeCount * perHour * HOURS_PER_MONTH * regionMultiplierOf(cluster.regionId, topology);
+}
+
 function containerCost(
     node: CompiledNode,
     topology: CompiledTopology,
     natGbMonth: number,
+    clusterNodes: ReadonlyMap<string, number>,
 ): CostBreakdown | null {
     if (node.type === 'k8s-cluster') {
-        const nodeCount = Number(node.params.nodes ?? 0);
-        const perHour = Number(node.params.nodeCostPerHour ?? 0);
+        const nodeCount = clusterNodes.get(node.id) ?? Number(node.params.nodes ?? 0);
         const controlPlane = Number(node.params.controlPlaneCostMonth ?? 0);
-        const multiplier = regionMultiplierOf(node.regionId, topology);
 
         return totalCost({
-            compute: nodeCount * perHour * HOURS_PER_MONTH * multiplier + controlPlane,
+            compute: clusterNodesCostMonth(node, topology, nodeCount) + controlPlane,
             storage: 0,
             network: 0,
             requests: 0,
@@ -90,8 +100,10 @@ export function computeCost(
     derived: Map<string, DerivedNode>,
     edgeFlows: Map<string, OperationFlow>,
     pricing: PricingProfile,
+    clusters: readonly ClusterPodPlan[],
 ): CostResult {
     const byNode = new Map<string, CostBreakdown>();
+    const clusterNodes = new Map(clusters.map((plan) => [plan.clusterId, plan.effectiveNodes]));
     let total = emptyCost();
 
     for (const node of topology.nodes) {
@@ -130,7 +142,7 @@ export function computeCost(
     for (const node of topology.nodes) {
         if (node.definition.shape !== 'container') continue;
 
-        const cost = containerCost(node, topology, natGbMonth.get(node.id) ?? 0);
+        const cost = containerCost(node, topology, natGbMonth.get(node.id) ?? 0, clusterNodes);
         if (!cost) continue;
 
         byNode.set(node.id, cost);

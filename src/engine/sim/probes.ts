@@ -4,11 +4,16 @@ import type { SchemeV1 } from '../types/scheme';
 import { redundancyOfNode } from './availability';
 import type { CompiledNode, CompiledTopology } from './compile';
 import { DAYS_PER_MONTH, HOURS_PER_MONTH } from './constants';
+import { buildLatencyHistogram, DEFAULT_HISTOGRAM_BUCKETS } from './latency';
+import type { LatencySamples } from './latency';
 import type {
     EdgeResult,
     FlowResult,
     FlowWaterfall,
+    HeatmapCell,
+    LatencyHistogram,
     NodeResult,
+    ProbeHeatmap,
     ProbeNoDataReason,
     ProbeReading,
     ProbeStatus,
@@ -52,6 +57,7 @@ export interface ProbeContext {
     edges: Record<string, EdgeResult>;
     flows: FlowResult[];
     waterfalls: FlowWaterfall[];
+    latencySamples: LatencySamples;
     totals: Totals;
 }
 
@@ -255,6 +261,16 @@ const rpsProbe: ProbeCalculator = (spec, node, metrics, context) => {
     );
 };
 
+function histogramFor(spec: ProbeSpec, context: ProbeContext, flowId: string): LatencyHistogram | null {
+    const series = context.latencySamples.seriesFor(flowId, spec.targetNodeId as string);
+    if (!series) return null;
+
+    return buildLatencyHistogram(series, {
+        buckets: numeric(spec.params, 'buckets', DEFAULT_HISTOGRAM_BUCKETS),
+        scale: option(spec.params, 'scale', 'log') === 'linear' ? 'linear' : 'log',
+    });
+}
+
 const latencyProbe: ProbeCalculator = (spec, node, metrics, context) => {
     void node;
     const flow = flowCovering(context, spec.targetNodeId as string);
@@ -262,45 +278,45 @@ const latencyProbe: ProbeCalculator = (spec, node, metrics, context) => {
 
     const waterfall = waterfallOf(context, flow.id);
     const hop = waterfall?.hops.find((item) => item.nodeId === spec.targetNodeId) ?? null;
+    const histogram = histogramFor(spec, context, flow.id);
 
-    if (!hop) {
-        const own = (metrics.serviceSec + metrics.waitSec) * 1000;
-        return reading(
-            spec,
-            'ok',
-            own,
-            'ms',
-            explain(
-                'ownLatency = (S + W_q) × 1000',
-                { S: metrics.serviceSec, W_q: metrics.waitSec },
-                own,
-                'ms',
-            ),
-            flow.id,
-        );
-    }
+    const base = hop
+        ? reading(
+              spec,
+              'ok',
+              hop.p99Ms,
+              'ms',
+              explain(
+                  'вклад точки в задержку потока по квантилям Monte-Carlo',
+                  {
+                      p50: hop.p50Ms,
+                      p95: hop.p95Ms,
+                      p99: hop.p99Ms,
+                      service: hop.serviceMs,
+                      queueWait: hop.waitMs,
+                      network: hop.networkMs,
+                      ...paramSnapshot(spec.params, ['buckets', 'scale', 'showQueueWait']),
+                  },
+                  hop.p99Ms,
+                  'ms',
+              ),
+              flow.id,
+          )
+        : reading(
+              spec,
+              'ok',
+              (metrics.serviceSec + metrics.waitSec) * 1000,
+              'ms',
+              explain(
+                  'ownLatency = (S + W_q) × 1000',
+                  { S: metrics.serviceSec, W_q: metrics.waitSec },
+                  (metrics.serviceSec + metrics.waitSec) * 1000,
+                  'ms',
+              ),
+              flow.id,
+          );
 
-    return reading(
-        spec,
-        'ok',
-        hop.p99Ms,
-        'ms',
-        explain(
-            'вклад точки в задержку потока по квантилям Monte-Carlo',
-            {
-                p50: hop.p50Ms,
-                p95: hop.p95Ms,
-                p99: hop.p99Ms,
-                service: hop.serviceMs,
-                queueWait: hop.waitMs,
-                network: hop.networkMs,
-                ...paramSnapshot(spec.params, ['buckets', 'scale', 'showQueueWait']),
-            },
-            hop.p99Ms,
-            'ms',
-        ),
-        flow.id,
-    );
+    return histogram ? { ...base, histogram } : base;
 };
 
 const utilizationProbe: ProbeCalculator = (spec, node, metrics, context) => {
@@ -601,11 +617,11 @@ const heatmapProbe: ProbeCalculator = (spec, node, metrics, context) => {
 
     const covered = scope === 'subtree' ? subtreeOf(context.topology, node.id) : Object.keys(context.nodes);
 
+    const cells: HeatmapCell[] = [];
     let peak = 0;
     let hottestId = node.id;
     let warmCount = 0;
     let hotCount = 0;
-    let measured = 0;
 
     for (const nodeId of covered) {
         const result = context.nodes[nodeId];
@@ -613,7 +629,7 @@ const heatmapProbe: ProbeCalculator = (spec, node, metrics, context) => {
         if (metric === 'utilization' && !Number.isFinite(result.capacity)) continue;
 
         const value = metric === 'errors' ? result.errorRate : result.utilization;
-        measured += 1;
+        cells.push({ nodeId, value });
 
         if (value >= alarm) hotCount += 1;
         else if (value >= warn) warmCount += 1;
@@ -624,29 +640,44 @@ const heatmapProbe: ProbeCalculator = (spec, node, metrics, context) => {
         }
     }
 
-    if (measured === 0) return noData(spec, 'unsupported-target');
+    if (cells.length === 0) return noData(spec, 'unsupported-target');
 
-    return reading(
-        spec,
-        thresholdStatus(peak, warn, alarm),
-        peak * 100,
-        'percent',
-        explain(
-            'peak = max ' + metric + ' по блокам области',
-            {
-                scope,
-                metric,
-                blocks: measured,
-                hottestNode: hottestId,
-                overWarn: warmCount,
-                overAlarm: hotCount,
-                warnThreshold: warn,
-                alarmThreshold: alarm,
-            },
+    cells.sort((left, right) => right.value - left.value);
+
+    const heatmap: ProbeHeatmap = {
+        metric,
+        scope,
+        warn,
+        alarm,
+        peak,
+        hottestNodeId: hottestId,
+        cells,
+    };
+
+    return {
+        ...reading(
+            spec,
+            thresholdStatus(peak, warn, alarm),
             peak * 100,
             'percent',
+            explain(
+                'peak = max ' + metric + ' по блокам области',
+                {
+                    scope,
+                    metric,
+                    blocks: cells.length,
+                    hottestNode: hottestId,
+                    overWarn: warmCount,
+                    overAlarm: hotCount,
+                    warnThreshold: warn,
+                    alarmThreshold: alarm,
+                },
+                peak * 100,
+                'percent',
+            ),
         ),
-    );
+        heatmap,
+    };
 };
 
 const waterfallProbe: ProbeCalculator = (spec, node, metrics, context) => {

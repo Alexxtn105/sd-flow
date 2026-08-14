@@ -86,6 +86,35 @@ export type ProbeNoDataReason =
     | 'no-traffic'
     | 'no-flow';
 
+export type HistogramScale = 'linear' | 'log';
+
+export interface LatencyHistogram {
+    scale: HistogramScale;
+    edges: number[];
+    counts: number[];
+    total: number;
+    zeroCount: number;
+    meanMs: number;
+    p50Ms: number;
+    p95Ms: number;
+    p99Ms: number;
+}
+
+export interface HeatmapCell {
+    nodeId: string;
+    value: number;
+}
+
+export interface ProbeHeatmap {
+    metric: string;
+    scope: string;
+    warn: number;
+    alarm: number;
+    peak: number;
+    hottestNodeId: string;
+    cells: HeatmapCell[];
+}
+
 export interface ProbeReading {
     probeId: string;
     componentType: string;
@@ -96,6 +125,8 @@ export interface ProbeReading {
     value: number;
     unit: string;
     explain: Explain;
+    histogram?: LatencyHistogram;
+    heatmap?: ProbeHeatmap;
 }
 
 export interface NodeResult {
@@ -147,6 +178,7 @@ export interface AnomalyRate {
     shareOfOperations: number;
     nodeIds: string[];
     explain: Explain;
+    upperBound?: boolean;
 }
 
 export interface ConsistencyResult {

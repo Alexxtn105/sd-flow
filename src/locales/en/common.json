@@ -64,7 +64,24 @@
             "practices": "Engineering practices",
             "rubric": "Rubric",
             "penalties": "Penalties",
+            "comparison": "Diff against references",
             "solutions": "Reference solutions"
+        },
+        "comparison": {
+            "caption": "Every row is one axis; the delta under a reference value is “yours minus the reference”, so green means your scheme wins on that axis.",
+            "incomparable": "Your scheme does not yet do what the task asks, so there is nothing to compare it against: the numbers are shown for reference but do not count as a win. An empty scheme is always cheaper than a working one.",
+            "mine": "Yours",
+            "metric": {
+                "latencyP99": "p99 of the worst flow",
+                "costMonth": "Cost",
+                "availability": "Availability",
+                "nodeCount": "Blocks",
+                "peakUtilization": "Peak utilization"
+            },
+            "direction": {
+                "lower": "lower is better",
+                "higher": "higher is better"
+            }
         },
         "constraint": {
             "maxNodes": "Max blocks",
@@ -418,7 +435,28 @@
             "none": ""
         },
         "openWindow": "Double-click to open the probe window",
-        "closeWindow": "Close the window"
+        "closeWindow": "Close the window",
+        "history": "History",
+        "noHistory": "History exists only in scenarios that run over time",
+        "distribution": "Latency distribution",
+        "noDistribution": "The histogram shows up once requests pass through the point",
+        "samples": "samples: {{value}}",
+        "zeroSamples": "zero: {{value}}",
+        "axis": {
+            "linear": "linear scale",
+            "log": "logarithmic scale"
+        },
+        "heatmapLegend": "Heatmap scale",
+        "heatmapHottest": "Hottest blocks",
+        "heatmapProject": "Paint the scheme",
+        "heatmapStop": "Clear the paint",
+        "heatmapActive": "This probe is painting the scheme",
+        "heatLevel": {
+            "idle": "no load",
+            "ok": "healthy",
+            "warn": "close to the threshold",
+            "hot": "threshold exceeded"
+        }
     },
     "waterfall": {
         "title": "Latency waterfall",
@@ -485,6 +523,7 @@
         "spof": "Single point of failure: {{nodeNames}} has no standby — losing it breaks the whole request path. Add a second replica or a second zone.",
         "hot-key": "Hot key: {{nodeNames}} takes {{hotKeyRps}} req/s on a single shard whose capacity is {{perShardCapacity}} req/s. Spread the key out or put a local cache in front.",
         "k8s-pods-exceeded": "More pods than the cluster holds: {{requested}} requested against a ceiling of {{ceiling}} ({{nodes}} nodes × {{podsPerNode}} pods per node). The extra pods stay Pending — add nodes or pack the deployments tighter.",
+        "k8s-nodes-scaled": "The cluster grew on its own: {{pods}} pods do not fit into the declared {{nodes}} nodes × {{podsPerNode}} pods per node, so the autoscaler took it to {{effectiveNodes}} nodes. The bill grew by {{extraCostMonth}} $/mo — declare the real size or pack the deployments tighter.",
         "nat-saturated": "NAT gateway saturated: {{bytesPerSec}} B/s leave the VPC against a capacity of {{capacityBytesPerSec}} B/s ({{natGatewayCount}} gateways). Add NAT gateways or move the traffic to VPC endpoints.",
         "client-direct-to-store": "The client talks to the store directly ({{nodeNames}}). Put a service or a gateway in between — otherwise there is no authorization, no limits and no cache.",
         "retry-without-idempotency": "Retries without idempotency: {{retries}} retries are configured, but the operation is not idempotent ({{nodeNames}}). A retry creates a duplicate — add an idempotency key.",
@@ -498,6 +537,11 @@
         "anomaly-write-conflict": "Write conflicts: {{ratePerSec}} ops/s ({{sharePct}}%) edit the same key from different regions ({{nodeNames}}). Pin the key to one region or switch to CRDTs.",
         "anomaly-lost-write-lww": "Writes are lost to last-write-wins: {{ratePerSec}} ops/s ({{sharePct}}%) are silently discarded as losers ({{nodeNames}}). Change the conflict resolution strategy.",
         "anomaly-duplicate-processing": "Duplicate processing: {{ratePerSec}} ops/s ({{sharePct}}%) are handled twice ({{nodeNames}}). At-least-once without idempotency causes double effects.",
+        "anomaly-monotonic-read": "The value moves back in time: {{ratePerSec}} ops/s ({{sharePct}}% of reads) land on a replica further behind than the previous read ({{nodeNames}}). Pin the session to a single replica.",
+        "anomaly-ordering-violation": "Ordering violation: {{ratePerSec}} msg/s ({{sharePct}}%) of the same key are processed in parallel ({{nodeNames}}). Turn on per-key or per-partition ordering.",
+        "anomaly-dirty-read": "Dirty read: up to {{ratePerSec}} ops/s ({{sharePct}}% of reads) see uncommitted data ({{nodeNames}}). Read-uncommitted protects against nothing — raise the isolation level.",
+        "anomaly-non-repeatable-read": "Non-repeatable read: up to {{ratePerSec}} ops/s ({{sharePct}}% of reads) get different values for the same row inside one transaction ({{nodeNames}}). Use repeatable-read or a snapshot.",
+        "anomaly-phantom-read": "Phantom read: up to {{ratePerSec}} ops/s ({{sharePct}}% of reads) see rows that appeared inside the transaction ({{nodeNames}}). Snapshot and serializable remove phantoms.",
         "unknown-component": "Unknown block \"{{type}}\": it is not in the catalog and is excluded from the estimate.",
         "dangling-edge": "Dangling edge: one of its ends points at a block that does not exist.",
         "no-entry-point": "No entry point: add a client — without one there is no load to simulate.",
@@ -511,7 +555,13 @@
         "lost-update": "Lost update",
         "write-conflict": "Write conflict",
         "lost-write-lww": "Write lost to LWW",
-        "duplicate-processing": "Duplicate processing"
+        "duplicate-processing": "Duplicate processing",
+        "monotonic-read": "Monotonic reads broken",
+        "ordering-violation": "Ordering violation",
+        "dirty-read": "Dirty read",
+        "non-repeatable-read": "Non-repeatable read",
+        "phantom-read": "Phantom read",
+        "upperBound": "upper-bound estimate"
     },
     "bound": {
         "authoritative-qps": "authoritative server limit",

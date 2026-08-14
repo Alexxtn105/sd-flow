@@ -1,0 +1,110 @@
+.sd-histogram {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.sd-histogram-chart {
+    width: 100%;
+    height: 72px;
+    background: var(--panel-subtle-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 4px;
+    overflow: visible;
+}
+
+.sd-histogram-bar {
+    fill: var(--panel-accent);
+    opacity: 0.75;
+}
+
+.sd-histogram-bar-tail {
+    fill: var(--util-hot);
+    opacity: 0.85;
+}
+
+.sd-histogram-tail {
+    fill: var(--util-hot);
+    opacity: 0.07;
+}
+
+.sd-histogram-marker {
+    stroke-width: 1;
+    stroke-dasharray: 3 2;
+}
+
+.sd-histogram-marker-p50 {
+    stroke: var(--util-ok);
+}
+
+.sd-histogram-marker-p95 {
+    stroke: var(--util-warn);
+}
+
+.sd-histogram-marker-p99 {
+    stroke: var(--util-hot);
+}
+
+.sd-histogram-axis {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 4px;
+    font-size: 8.5px;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    color: var(--panel-text-6);
+}
+
+.sd-histogram-tick {
+    white-space: nowrap;
+}
+
+.sd-histogram-unit {
+    color: var(--panel-text-5);
+    white-space: nowrap;
+}
+
+.sd-histogram-markers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    font-size: 8.5px;
+    font-family: 'SF Mono', 'Consolas', monospace;
+}
+
+.sd-histogram-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    white-space: nowrap;
+}
+
+.sd-histogram-tag::before {
+    content: '';
+    width: 7px;
+    height: 2px;
+    border-radius: 1px;
+    background: currentColor;
+}
+
+.sd-histogram-tag-p50 {
+    color: var(--util-ok);
+}
+
+.sd-histogram-tag-p95 {
+    color: var(--util-warn);
+}
+
+.sd-histogram-tag-p99 {
+    color: var(--util-hot);
+}
+
+.sd-histogram-compact .sd-histogram-chart {
+    height: 52px;
+}
+
+.sd-histogram-compact .sd-histogram-axis,
+.sd-histogram-compact .sd-histogram-markers {
+    font-size: 8px;
+}

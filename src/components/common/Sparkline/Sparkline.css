@@ -1,0 +1,86 @@
+.sd-sparkline {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.sd-sparkline-chart {
+    width: 100%;
+    height: 60px;
+    background: var(--panel-subtle-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 4px;
+    overflow: visible;
+}
+
+.sd-sparkline-area {
+    fill: var(--panel-accent-soft);
+}
+
+.sd-sparkline-line {
+    fill: none;
+    stroke: var(--panel-accent);
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+}
+
+.sd-sparkline-line-warn {
+    stroke: var(--util-warn);
+}
+
+.sd-sparkline-line-alarm {
+    stroke: var(--util-hot);
+}
+
+.sd-sparkline-threshold {
+    stroke-width: 1;
+    stroke-dasharray: 4 3;
+}
+
+.sd-sparkline-threshold-warn {
+    stroke: var(--util-warn);
+}
+
+.sd-sparkline-threshold-alarm {
+    stroke: var(--util-hot);
+}
+
+.sd-sparkline-span-warn {
+    fill: var(--util-warn);
+    opacity: 0.1;
+}
+
+.sd-sparkline-span-alarm {
+    fill: var(--util-hot);
+    opacity: 0.14;
+}
+
+.sd-sparkline-scale {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 8.5px;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    color: var(--panel-text-6);
+}
+
+.sd-sparkline-top {
+    color: var(--panel-text-5);
+    white-space: nowrap;
+}
+
+.sd-sparkline-unit {
+    margin-left: 3px;
+    color: var(--panel-text-6);
+}
+
+.sd-sparkline-compact .sd-sparkline-chart {
+    height: 38px;
+}
+
+.sd-sparkline-compact .sd-sparkline-scale {
+    font-size: 8px;
+}

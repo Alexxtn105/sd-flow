@@ -568,6 +568,7 @@
     "stepsPerWorkflow": "Steps per workflow",
     "stickiness": "Stickiness",
     "stickyRegion": "Sticky region",
+    "stickyReadShare": "Reads pinned to one replica",
     "storageClass": "Storage class",
     "storageGb": "Storage",
     "storageGbPerNode": "Storage per node",

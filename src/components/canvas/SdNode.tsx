@@ -7,8 +7,10 @@ import registry from '../../engine/ComponentRegistry';
 import type { ParamField, ParamValue, PortDefinition } from '../../engine/types/component';
 import { useGraphStore } from '../../store/graphStore';
 import type { SdNode as SdNodeType } from '../../store/graphStore';
-import { useNodeResult } from '../../store/simStore';
+import { useNodeResult, useSimStore } from '../../store/simStore';
+import { useUiStore } from '../../store/uiStore';
 import { formatParamValue, formatPercent, formatRps, utilizationLevel } from '../../utils/format';
+import { heatLevel, heatValueOf } from '../../utils/heatmap';
 import './SdNode.css';
 
 const MAX_VISIBLE_PARAMS = 3;
@@ -34,6 +36,10 @@ function SdNodeView({ id, data, selected }: NodeProps<SdNodeType>) {
     const { t } = useTranslation(['params', 'blocks', 'groups', 'common']);
     const updateNodeParam = useGraphStore((state) => state.updateNodeParam);
     const metrics = useNodeResult(id);
+    const heatmapProbeId = useUiStore((state) => state.heatmapProbeId);
+    const heatmap = useSimStore((state) =>
+        heatmapProbeId ? (state.result?.probes[heatmapProbeId]?.heatmap ?? null) : null,
+    );
     const [editing, setEditing] = useState<string | null>(null);
     const [draft, setDraft] = useState('');
 
@@ -119,11 +125,14 @@ function SdNodeView({ id, data, selected }: NodeProps<SdNodeType>) {
 
     const showMetrics = metrics !== null && metrics.lambdaOffered > 0;
     const bounded = showMetrics && Number.isFinite(metrics.capacity);
-    const level = bounded ? utilizationLevel(metrics.utilization) : 'idle';
+    const loadLevel = bounded ? utilizationLevel(metrics.utilization) : 'idle';
+    const projected = heatmap ? heatValueOf(heatmap, id) : null;
+    const level = heatmap && projected !== null ? heatLevel(projected, heatmap) : loadLevel;
+    const tinted = projected !== null || showMetrics;
 
     return (
         <div
-            className={`sd-node sd-node-${definition.group} ${selected ? 'selected' : ''} ${showMetrics ? `sd-node-load-${level}` : ''}`}
+            className={`sd-node sd-node-${definition.group} ${selected ? 'selected' : ''} ${tinted ? `sd-node-load-${level}` : ''} ${projected !== null ? 'sd-node-heat' : ''}`}
         >
             {renderHandles(definition.ports.in, Position.Left, 'target')}
 
@@ -152,7 +161,7 @@ function SdNodeView({ id, data, selected }: NodeProps<SdNodeType>) {
             )}
 
             {showMetrics && (
-                <div className={`sd-node-metrics sd-metrics-${level}`}>
+                <div className={`sd-node-metrics sd-metrics-${loadLevel}`}>
                     {bounded && (
                         <div className="sd-util-track">
                             <div

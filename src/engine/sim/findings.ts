@@ -1,5 +1,7 @@
 import type { CostBreakdown } from '../types/component';
+import type { ClusterPodPlan } from './clusters';
 import type { CompiledTopology } from './compile';
+import { clusterNodesCostMonth } from './cost';
 import type { NodeRuntime, OperationFlow } from './solver';
 import type { AvailabilityResult } from './availability';
 import type { ConsistencyResult, Finding, Severity } from './types';
@@ -17,13 +19,14 @@ interface FindingInput {
     availability: AvailabilityResult;
     consistency: ConsistencyResult;
     cost: { byNode: Map<string, CostBreakdown>; total: CostBreakdown };
+    clusters: readonly ClusterPodPlan[];
     converged: boolean;
 }
 
 const SEVERITY_ORDER: Record<Severity, number> = { error: 0, warning: 1, info: 2 };
 
 export function buildFindings(input: FindingInput): Finding[] {
-    const { topology, runtimes, edgeFlows, availability, consistency, cost, converged } = input;
+    const { topology, runtimes, edgeFlows, availability, consistency, cost, clusters, converged } = input;
     const findings: Finding[] = [];
 
     const push = (
@@ -88,26 +91,28 @@ export function buildFindings(input: FindingInput): Finding[] {
         push('spof', 'warning', [nodeId], [], {});
     }
 
-    for (const cluster of topology.nodes) {
-        if (cluster.type !== 'k8s-cluster') continue;
-
-        const requested = topology.nodes.reduce((sum, node) => {
-            if (node.clusterId !== cluster.id) return sum;
-            return sum + (runtimes.get(node.id)?.instances ?? 0);
-        }, 0);
-
-        const nodeCount = Number(cluster.params.nodes ?? 0);
-        const podsPerNode = Number(cluster.params.podsPerNode ?? 0);
-        const ceiling = nodeCount * podsPerNode;
-
-        if (requested > ceiling) {
-            push('k8s-pods-exceeded', 'error', [cluster.id], [], {
-                requested,
-                ceiling,
-                nodes: nodeCount,
-                podsPerNode,
+    for (const plan of clusters) {
+        if (plan.clamped) {
+            push('k8s-pods-exceeded', 'error', [plan.clusterId], [], {
+                requested: plan.requested,
+                granted: plan.granted,
+                ceiling: plan.ceiling,
+                nodes: plan.nodes,
+                podsPerNode: plan.podsPerNode,
             });
+            continue;
         }
+
+        const cluster = topology.nodeById.get(plan.clusterId);
+        if (!cluster || plan.effectiveNodes <= plan.nodes) continue;
+
+        push('k8s-nodes-scaled', 'info', [plan.clusterId], [], {
+            nodes: plan.nodes,
+            effectiveNodes: plan.effectiveNodes,
+            pods: plan.requested,
+            podsPerNode: plan.podsPerNode,
+            extraCostMonth: clusterNodesCostMonth(cluster, topology, plan.effectiveNodes - plan.nodes),
+        });
     }
 
     const natBytesPerSec = new Map<string, number>();

@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { Fragment, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import Icon from '../../common/Icons/Icon';
 import ResizeHandle from '../../common/ResizeHandle/ResizeHandle';
@@ -8,6 +8,7 @@ import { compileTopology } from '../../../engine/sim/compile';
 import type {
     AxisScore,
     Challenge,
+    ComparisonRow,
     LintHit,
     LocalizedText,
     Penalty,
@@ -16,6 +17,7 @@ import type {
     RequirementEvaluation,
     RequirementStatus,
     ScenarioRun,
+    SolutionComparison,
 } from '../../../engine/challenges/types';
 import { toScheme } from '../../../services/schemeSerializer';
 import { useChallengeStore } from '../../../store/challengeStore';
@@ -36,8 +38,23 @@ const STAR_SLOTS = [0, 1, 2];
 
 const MAX_AXIS_SCORE = 100;
 
+const AVAILABILITY_DIGITS = 4;
+
+const LETTER_ALPHABET_SIZE = 26;
+
+const DIRECTION_ARROW: Record<ComparisonRow['better'], string> = {
+    lower: '↓',
+    higher: '↑',
+};
+
 function pickLanguage(code: string): keyof LocalizedText {
     return code.startsWith('en') ? 'en' : 'ru';
+}
+
+function solutionLetter(index: number): string {
+    if (index >= LETTER_ALPHABET_SIZE) return String(index + 1);
+
+    return String.fromCharCode('A'.charCodeAt(0) + index);
 }
 
 function Stars({ value }: { value: number }) {
@@ -116,6 +133,21 @@ export default function ChallengePanel() {
             return `${formatNumber(value)} ${t(`challenge.unit.${unit}`, { defaultValue: unit })}`;
         },
         [t],
+    );
+
+    const measureComparison = useCallback(
+        (value: number, unit: string): string =>
+            unit === 'nines' ? `${(value * 100).toFixed(AVAILABILITY_DIGITS)} %` : measure(value, unit),
+        [measure],
+    );
+
+    const comparisonDelta = useCallback(
+        (delta: number, unit: string): string => {
+            const sign = delta > 0 ? '+' : delta < 0 ? '−' : '±';
+
+            return `${sign}${measureComparison(Math.abs(delta), unit)}`;
+        },
+        [measureComparison],
     );
 
     const decorate = useCallback(
@@ -314,9 +346,10 @@ export default function ChallengePanel() {
         </div>
     );
 
-    const renderSolution = (solution: ReferenceSolution) => (
+    const renderSolution = (solution: ReferenceSolution, index: number) => (
         <article key={solution.id} className="chl-solution">
             <div className="chl-solution-head">
+                <span className="chl-solution-letter">{solutionLetter(index)}</span>
                 <span className="chl-solution-name">{localized(solution.name)}</span>
                 <button type="button" className="chl-btn" onClick={() => loadSolution(solution)}>
                     {t('challenge.loadSolution')}
@@ -325,6 +358,67 @@ export default function ChallengePanel() {
             <p className="chl-solution-tradeoff">{localized(solution.tradeoff)}</p>
         </article>
     );
+
+    const renderComparisonRow = (row: ComparisonRow) => (
+        <Fragment key={row.metric}>
+            <span className="chl-diff-metric">
+                <span className="chl-diff-metric-name">
+                    {t(`challenge.comparison.metric.${row.metric}`, { defaultValue: row.metric })}
+                </span>
+                <span
+                    className="chl-diff-direction"
+                    title={t(`challenge.comparison.direction.${row.better}`, { defaultValue: row.better })}
+                    aria-label={t(`challenge.comparison.direction.${row.better}`, { defaultValue: row.better })}
+                >
+                    {DIRECTION_ARROW[row.better]}
+                </span>
+            </span>
+            <span className="chl-diff-cell chl-diff-own">
+                <span className="chl-diff-value">{measureComparison(row.mine, row.unit)}</span>
+            </span>
+            {row.references.map((cell) => (
+                <span key={cell.solutionId} className={`chl-diff-cell chl-diff-${cell.outcome}`}>
+                    <span className="chl-diff-value">{measureComparison(cell.value, row.unit)}</span>
+                    <span className="chl-diff-delta">{comparisonDelta(cell.delta, row.unit)}</span>
+                </span>
+            ))}
+        </Fragment>
+    );
+
+    const renderComparison = (item: Challenge, comparison: SolutionComparison) => {
+        const solutionName = (id: string) =>
+            item.referenceSolutions.find((solution) => solution.id === id)?.name ?? null;
+
+        return (
+            <section className="chl-section">
+                <h3 className="chl-section-title">{t('challenge.section.comparison')}</h3>
+                <p className="chl-diff-caption">
+                    {comparison.comparable
+                        ? t('challenge.comparison.caption')
+                        : t('challenge.comparison.incomparable')}
+                </p>
+                <div
+                    className="chl-diff"
+                    style={{
+                        gridTemplateColumns: `minmax(0, 1.3fr) repeat(${comparison.solutionIds.length + 1}, minmax(0, 1fr))`,
+                    }}
+                >
+                    <span className="chl-diff-corner" />
+                    <span className="chl-diff-column">{t('challenge.comparison.mine')}</span>
+                    {comparison.solutionIds.map((id, index) => {
+                        const name = solutionName(id);
+
+                        return (
+                            <span key={id} className="chl-diff-column" title={name ? localized(name) : id}>
+                                {solutionLetter(index)}
+                            </span>
+                        );
+                    })}
+                    {comparison.rows.map(renderComparisonRow)}
+                </div>
+            </section>
+        );
+    };
 
     const renderCatalog = () => (
         <div className="chl-body">
@@ -566,6 +660,8 @@ export default function ChallengePanel() {
                         ))}
                     </section>
                 )}
+
+                {verdict.comparison !== null && renderComparison(item, verdict.comparison)}
 
                 {item.referenceSolutions.length > 0 && (
                     <section className="chl-section">

@@ -258,6 +258,35 @@ export interface RubricResult {
     total: number;
 }
 
+export type ComparisonMetric = 'latencyP99' | 'costMonth' | 'availability' | 'nodeCount' | 'peakUtilization';
+
+export type ComparisonDirection = 'lower' | 'higher';
+
+export type ComparisonOutcome = 'better' | 'worse' | 'equal' | 'incomparable';
+
+export type ComparisonMetrics = Record<ComparisonMetric, number>;
+
+export interface ComparisonCell {
+    solutionId: string;
+    value: number;
+    delta: number;
+    outcome: ComparisonOutcome;
+}
+
+export interface ComparisonRow {
+    metric: ComparisonMetric;
+    unit: string;
+    better: ComparisonDirection;
+    mine: number;
+    references: ComparisonCell[];
+}
+
+export interface SolutionComparison {
+    comparable: boolean;
+    solutionIds: string[];
+    rows: ComparisonRow[];
+}
+
 export type VerdictStage = 'realism' | 'compile' | 'hard-gates' | 'scenarios' | 'passed';
 
 export interface ScenarioRun {
@@ -277,6 +306,7 @@ export interface ChallengeVerdict {
     scenarioRuns: ScenarioRun[];
     lint: LintResult;
     rubric: RubricResult;
+    comparison: SolutionComparison | null;
     attempt: number;
 }
 

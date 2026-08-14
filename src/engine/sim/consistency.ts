@@ -6,9 +6,24 @@ import type { AnomalyRate, ConsistencyResult } from './types';
 
 const READ_AFTER_WRITE_SHARE = 0.5;
 const READ_AFTER_WRITE_GAP_SEC = 1;
+const MONOTONIC_READ_GAP_SEC = 1;
 const REBALANCE_REDELIVERY_RATE = 0.01;
 const KEY_COUNT_PARAMS = ['rowCount', 'uniqueKeys', 'documentCount', 'itemCount', 'keyCount'];
+const REPLICA_COUNT_PARAMS = ['readReplicas', 'replicas', 'replicasPerShard'];
+const REPLICA_SET_PARAMS = ['replicationFactor', 'replicaSetSize'];
+const ORDERING_PARAMS = ['orderingScope', 'queueType'];
+const ORDERED_DELIVERY = new Set(['per-key', 'per-partition', 'global', 'fifo']);
+const PARTITION_PARAMS = ['partitions', 'shards'];
+const CONSUMER_SLOT_PARAMS = ['concurrencyPerInstance', 'concurrency'];
 const STORE_GROUPS = new Set(['sql', 'nosql', 'cache', 'search', 'olap']);
+
+const ISOLATION_ANOMALIES: Record<string, string[]> = {
+    'read-uncommitted': ['dirty-read', 'non-repeatable-read', 'phantom-read'],
+    'read-committed': ['non-repeatable-read', 'phantom-read'],
+    'repeatable-read': ['phantom-read'],
+    snapshot: [],
+    serializable: [],
+};
 
 function erf(value: number): number {
     const sign = value < 0 ? -1 : 1;
@@ -38,6 +53,54 @@ function effectiveKeys(params: ComponentParams): number {
     }
 
     return 1e6;
+}
+
+function numericParam(params: ComponentParams, names: string[], minimum: number): number {
+    for (const name of names) {
+        const value = params[name];
+        if (typeof value === 'number' && value >= minimum) return value;
+    }
+
+    return 0;
+}
+
+function replicaPoolSize(node: CompiledNode): number {
+    const counted = numericParam(node.params, REPLICA_COUNT_PARAMS, 1);
+    if (counted > 0) return 1 + counted;
+
+    const declaredSet = numericParam(node.params, REPLICA_SET_PARAMS, 2);
+    if (declaredSet > 0) return declaredSet;
+
+    return 1;
+}
+
+function stickyReadShare(node: CompiledNode): number {
+    const share = node.params.stickyReadShare;
+    if (typeof share !== 'number') return 0;
+
+    return Math.min(Math.max(share, 0), 1);
+}
+
+function preservesOrder(node: CompiledNode): boolean {
+    for (const name of ORDERING_PARAMS) {
+        const value = node.params[name];
+        if (typeof value === 'string' && value.length > 0) return ORDERED_DELIVERY.has(value);
+    }
+
+    return false;
+}
+
+function consumerSlots(consumer: CompiledNode, runtime: NodeRuntime | undefined): number {
+    const instances = runtime?.instances ?? numericParam(consumer.params, ['instances'], 1);
+    const slots = numericParam(consumer.params, CONSUMER_SLOT_PARAMS, 1);
+
+    return Math.max(1, Math.max(1, instances) * Math.max(1, slots));
+}
+
+function parallelLanes(broker: CompiledNode, consumers: number): number {
+    const partitions = numericParam(broker.params, PARTITION_PARAMS, 1);
+
+    return partitions > 0 ? Math.min(partitions, consumers) : consumers;
 }
 
 function replicaLagSec(node: CompiledNode, runtime: NodeRuntime): number {
@@ -148,6 +211,37 @@ export function analyseConsistency(
                     ),
                 });
             }
+
+            const replicaPool = replicaPoolSize(node);
+            const sticky = stickyReadShare(node);
+            const pairSigma = sigma * Math.SQRT2;
+            const divergenceProbability = logNormalTail(MONOTONIC_READ_GAP_SEC, lagSec, pairSigma);
+            const monotonicRate =
+                rate * (1 - sticky) * (1 - 1 / replicaPool) * divergenceProbability;
+
+            if (monotonicRate > 0) {
+                anomalies.push({
+                    code: 'monotonic-read',
+                    ratePerSec: monotonicRate,
+                    shareOfOperations: monotonicRate / runtime.read,
+                    nodeIds: [node.id],
+                    explain: explain(
+                        'λ_read × replicaShare × (1 − e^(−λ_write,key × E[L])) × (1 − stickyReadShare) × (1 − 1/nReplicas) × P(|L₁ − L₂| > Δt)',
+                        {
+                            lambdaRead: runtime.read,
+                            replicaShare,
+                            lambdaWriteKey: writePerKey,
+                            expectedLagSec: meanLagSec,
+                            stickyReadShare: sticky,
+                            nReplicas: replicaPool,
+                            deltaSec: MONOTONIC_READ_GAP_SEC,
+                            pairSigma,
+                        },
+                        monotonicRate,
+                        'op/s',
+                    ),
+                });
+            }
         }
 
         const control = String(node.params.concurrencyControl ?? 'none');
@@ -165,6 +259,36 @@ export function analyseConsistency(
                     explain: explain(
                         'λ_write × (1 − e^(−λ_write,key × W_rmw))',
                         { lambdaWrite: runtime.write, lambdaWriteKey: writePerKey, windowSec },
+                        rate,
+                        'op/s',
+                    ),
+                });
+            }
+        }
+
+        const isolationLevel = String(node.params.isolationLevel ?? '');
+        const isolationCodes = ISOLATION_ANOMALIES[isolationLevel] ?? [];
+
+        if (isolationCodes.length > 0 && runtime.read > 0 && runtime.write > 0) {
+            const windowSec = runtime.serviceSec * 2;
+            const overlapProbability = 1 - Math.exp(-writePerKey * windowSec);
+            const rate = runtime.read * overlapProbability;
+
+            for (const code of rate > 0 ? isolationCodes : []) {
+                anomalies.push({
+                    code,
+                    ratePerSec: rate,
+                    shareOfOperations: rate / runtime.read,
+                    nodeIds: [node.id],
+                    upperBound: true,
+                    explain: explain(
+                        '≤ λ_read × (1 − e^(−λ_write,key × W_tx))',
+                        {
+                            isolationLevel,
+                            lambdaRead: runtime.read,
+                            lambdaWriteKey: writePerKey,
+                            windowSec,
+                        },
                         rate,
                         'op/s',
                     ),
@@ -226,23 +350,63 @@ export function analyseConsistency(
         if (consumer.definition.group === 'messaging') continue;
 
         const idempotent = edge.policy.idempotent || consumer.params.idempotent === true;
-        if (idempotent) continue;
-
         const consumerRuntime = runtimes.get(consumer.id);
-        const redeliveryRate =
-            (consumerRuntime?.queue.failureProbability ?? 0) + REBALANCE_REDELIVERY_RATE;
-        const rate = flow.total * redeliveryRate;
 
-        if (rate > 0) {
+        if (!idempotent) {
+            const redeliveryRate =
+                (consumerRuntime?.queue.failureProbability ?? 0) + REBALANCE_REDELIVERY_RATE;
+            const rate = flow.total * redeliveryRate;
+
+            if (rate > 0) {
+                anomalies.push({
+                    code: 'duplicate-processing',
+                    ratePerSec: rate,
+                    shareOfOperations: rate / flow.total,
+                    nodeIds: [consumer.id],
+                    explain: explain(
+                        'λ_async × (p_fail_consumer + rebalanceRate)',
+                        { lambdaAsync: flow.total, redeliveryRate },
+                        rate,
+                        'op/s',
+                    ),
+                });
+            }
+        }
+
+        const broker = topology.nodeById.get(edge.source);
+        if (!broker || preservesOrder(broker)) continue;
+
+        const declaredConsumers = numericParam(broker.params, ['consumersPerGroup'], 1);
+        const consumers =
+            declaredConsumers > 0 ? declaredConsumers : consumerSlots(consumer, consumerRuntime);
+        const lanes = parallelLanes(broker, consumers);
+        const windowSec = consumerRuntime?.serviceSec ?? 0;
+
+        if (lanes <= 1 || windowSec <= 0) continue;
+
+        const keys = effectiveKeys(broker.params);
+        const perKey = flow.total / keys;
+        const overlapProbability = 1 - Math.exp(-perKey * windowSec);
+        const orderingRate = flow.total * overlapProbability * (1 - 1 / lanes);
+
+        if (orderingRate > 0) {
             anomalies.push({
-                code: 'duplicate-processing',
-                ratePerSec: rate,
-                shareOfOperations: rate / flow.total,
-                nodeIds: [consumer.id],
+                code: 'ordering-violation',
+                ratePerSec: orderingRate,
+                shareOfOperations: orderingRate / flow.total,
+                nodeIds: [broker.id, consumer.id],
                 explain: explain(
-                    'λ_async × (p_fail_consumer + rebalanceRate)',
-                    { lambdaAsync: flow.total, redeliveryRate },
-                    rate,
+                    'λ_async × (1 − e^(−λ_async,key × W_processing)) × (1 − 1/lanes), lanes = min(partitions, consumers)',
+                    {
+                        lambdaAsync: flow.total,
+                        orderingGuarantee: 'none',
+                        keys,
+                        lambdaAsyncKey: perKey,
+                        windowSec,
+                        consumers,
+                        lanes,
+                    },
+                    orderingRate,
                     'op/s',
                 ),
             });

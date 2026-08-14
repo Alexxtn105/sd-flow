@@ -617,6 +617,106 @@
     color: var(--panel-text-5);
 }
 
+.chl-diff-caption {
+    margin: 0 0 6px;
+    font-size: 9.5px;
+    line-height: 1.45;
+    color: var(--panel-text-5);
+    user-select: text;
+}
+
+.chl-diff {
+    display: grid;
+    gap: 2px;
+    align-items: stretch;
+    font-size: 9.5px;
+}
+
+.chl-diff-corner {
+    display: block;
+}
+
+.chl-diff-column {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    text-align: right;
+    color: var(--panel-text-5);
+    padding: 2px 4px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chl-diff-metric {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    padding: 4px 2px;
+    color: var(--panel-text-3);
+    min-width: 0;
+}
+
+.chl-diff-metric-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chl-diff-direction {
+    color: var(--panel-text-5);
+    flex-shrink: 0;
+}
+
+.chl-diff-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 1px;
+    padding: 4px;
+    border-radius: 3px;
+    background: var(--panel-subtle-bg);
+    font-family: 'SF Mono', 'Consolas', monospace;
+    color: var(--panel-text-2);
+    min-width: 0;
+    overflow: hidden;
+}
+
+.chl-diff-own {
+    background: var(--panel-accent-soft);
+    color: var(--panel-text-1);
+    font-weight: 700;
+}
+
+.chl-diff-value {
+    white-space: nowrap;
+}
+
+.chl-diff-delta {
+    font-size: 9px;
+    white-space: nowrap;
+}
+
+.chl-diff-better .chl-diff-delta {
+    color: var(--util-ok);
+}
+
+.chl-diff-worse .chl-diff-delta {
+    color: var(--util-hot);
+}
+
+.chl-diff-equal .chl-diff-delta {
+    color: var(--panel-text-5);
+}
+
+.chl-diff-incomparable .chl-diff-value,
+.chl-diff-incomparable .chl-diff-delta {
+    color: var(--panel-text-5);
+}
+
 .chl-solution {
     padding: 7px 8px;
     margin-bottom: 6px;
@@ -632,11 +732,23 @@
     gap: 6px;
 }
 
+.chl-solution-letter {
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--panel-accent);
+    background: var(--panel-accent-soft);
+    border-radius: 3px;
+    padding: 1px 5px;
+    flex-shrink: 0;
+}
+
 .chl-solution-name {
     font-size: 10.5px;
     font-weight: 700;
     color: var(--panel-text-1);
     min-width: 0;
+    margin-right: auto;
 }
 
 .chl-solution-head .chl-btn {

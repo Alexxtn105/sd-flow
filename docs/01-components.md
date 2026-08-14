@@ -290,17 +290,18 @@ S = (serviceTimeMs + coldStartMs × coldStartShare) / 1000
 | Запросы | `queryProfile` | `point-read` (0.2–1 мс) / `range-scan` / `join` / `aggregate` / `full-scan` |
 | | `readServiceMs`, `writeServiceMs` | Дефолты от профиля; ×5–20 при промахе мимо buffer pool |
 | | `transactionsPerWrite`, `lockContention` | Для сценария hot-row |
-| Консистентность | `isolationLevel`, `readYourWrites`, `readFromReplica` (доля чтений с реплик) | Предикаты заданий проверяют это |
+| Консистентность | `isolationLevel`, `readYourWrites`, `readFromReplica` (доля чтений с реплик), `stickyReadShare` (доля чтений, закреплённых за одной репликой) | Предикаты заданий проверяют это |
 | Надёжность | `backupSchedule`, `pitrDays`, `multiAz` | Хранилище бэкапов идёт в стоимость |
 
 **Что из этой таблицы считает движок.** У `postgres` и `mysql` задан 31 параметр. В расчёт идут
 `readReplicas`, `shardCount`, `maxConnections`, `connectionPooler`, `connectionsPerQuery`,
 `cpuCores`, `provisionedIops`, `iopsPerRead` / `iopsPerWrite`, `readServiceMs` / `writeServiceMs`,
-`rowSizeBytes`, `rowCount`, `indexOverhead`, `readFromReplica`, `replicationMode`,
-`consistencyModel`, `replicaLagMs` / `replicaLagSigma`, `concurrencyControl`, `failoverSec`,
+`rowSizeBytes`, `rowCount`, `indexOverhead`, `readFromReplica`, `stickyReadShare`,
+`replicationMode`, `consistencyModel`, `replicaLagMs` / `replicaLagSigma`, `isolationLevel`
+(таблица аномалий изоляции, `docs/02-simulation.md` §7а.2), `concurrencyControl`, `failoverSec`,
 `multiAz` (признак наличия реплик, когда репликация не нарисована ребром: с ним синхронная запись
 платит RTT между AZ), `availability` и обе статьи стоимости. Параметры `bufferPoolGb`,
-`workingSetGb`, `queryProfile`, `storageGb`, `isolationLevel` пока только хранятся;
+`workingSetGb`, `queryProfile`, `storageGb` пока только хранятся;
 `conflictResolution` у самого блока не читается — конфликты мульти-мастера разрешаются значением
 из `multi-region-policy` (§13.1). Строки `role`, `instanceClass`, `sharding.*`, `storageType`,
 `indexCount`, `transactionsPerWrite`, `lockContention`, `backupSchedule`, `pitrDays`,
@@ -537,7 +538,7 @@ H(n, α)       = Σ_{k=1..n} k^(−α)
 
 | ID | Название | Волна | Параметры |
 |---|---|---|---|
-| `region` | Регион | **M** | `code` (`us-east-1`, `eu-west-1`, `ap-southeast-1`…), `geo`, `availability`, `dataResidency` (none/GDPR/local-only), `isPrimary`, `mirrorOf` (id региона-шаблона), `trafficShare` (авто из гео-маршрутизации), `costMultiplier` (регионы стоят по-разному) |
+| `region` | Регион | **M** | `code` (`us-east-1`, `eu-west-1`, `ap-southeast-1`…), `geo`, `availability`, `dataResidency` (none/GDPR/local-only), `isPrimary`, `mirrorOf` (id региона-шаблона), `costMultiplier` (регионы стоят по-разному) |
 | `az` | Availability Zone | **M** | `id`, `intraAzLatencyMs` (0.25), `failureProbability` |
 | `vpc` | VPC / подсеть | V1 | `cidr` (`10.0.0.0/16`), `natRequired`, `natGatewayCount` (1), `natThroughputGbps` (45 — потолок одного NAT-шлюза), `costPerGbProcessed` ($0.045 за ГБ через NAT), `peeringLatencyMs` (0.1), `flowLogsEnabled` |
 | `k8s-cluster` | Kubernetes-кластер | V1 | `nodes` (6), `nodeType` (`general` / `compute` / `memory` / `gpu`), `podsPerNode` (110), `schedulingLagSec` (30), `nodeCostPerHour` ($0.15), `controlPlaneCostMonth` ($73), `autoscaleNodes` |
@@ -597,14 +598,19 @@ H(n, α)       = Σ_{k=1..n} k^(−α)
 | nosql | 13 | 10 |
 | search | 5 | 4 |
 | olap | 7 | 5 |
-| cache | 5 | 3 |
+| cache | 4 | 3 |
 | messaging | 12 | 11 |
 | storage | 7 | 5 |
-| platform | 15 | 13 |
+| platform | 14 | 13 |
 | observability | 6 | 5 |
 | topology | 8 | 8 |
 | probes | 11 | 11 |
-| **Итого** | **129** | **109** |
+| **Итого** | **127** | **109** |
+
+Две поправки к прежней редакции этой таблицы, найденные сверкой с реестром: в `platform` стояло
+15 при четырнадцати строках в §11, а в `cache` пятой строкой посчитан `cdn-cache` — но это не
+блок, а перекрёстная ссылка на `cdn` из §2 (волна `—`, собственных параметров нет). Поэтому в
+каталоге 127 типов, а до полного покрытия не хватает **18** блоков, а не двадцати.
 
 \* «В коде» — блоки, зарегистрированные в `ComponentRegistry`: волны **M** и **V1**. До фазы 3
 столбец совпадал с MVP-волной (44 блока); фаза 3 добавила волну V1 целиком — ещё 65 блоков,

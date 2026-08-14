@@ -59,7 +59,7 @@ and ten new challenges.
 * **16 scenarios** — steady-state `baseline`, `peak`, `az-failure`, `region-failure`, `stale-read`,
   `write-conflict`, and transient `spike`, `growth`, `black-friday`, `db-failover`, `cache-flush`,
   `thundering-herd`, `hot-key`, `slow-dependency`, `retry-storm`, `poison-message`.
-* **Findings** — 14 engine rules (overload, saturation, retry storm, SPOF, hot key, growing
+* **Findings** — 15 engine rules (overload, saturation, retry storm, SPOF, hot key, growing
   backlog, read-heavy without a cache, retries without idempotency, egress eating the bill and
   others), the compiler's structural checks and the consistency anomalies — each with an
   explanation and the numbers substituted in.
@@ -73,6 +73,13 @@ nines, traffic breakdown, heat map, latency waterfall.
 The reading is shown on the probe block itself and coloured by status; a double click opens a
 draggable window with the number, the formula and its inputs. When a probe is attached to nothing,
 or the block cannot yield the measured quantity, the window explains why instead of showing a zero.
+
+Four of them draw rather than count. `probe-latency` opens a **histogram** with p50/p95/p99 marked
+on it, built by bucketing the Monte-Carlo samples the engine already had in memory — the tail a
+single number hides. `probe-rps` and `probe-utilization` show a **time series** over the run,
+and say so plainly when the scenario is a steady-state slice with no history to show.
+`probe-heatmap` **projects onto the scheme**: the canvas takes its node tint from the probe, while
+each node keeps its own utilization bar.
 
 **The latency waterfall** decomposes a flow into hops: bar width is the hop's own contribution,
 its position is the accumulated time, and a separate row shows how much of the percentile the hops
@@ -92,11 +99,11 @@ and always points at the specific requirement that failed.
 
 ### Not there yet
 
-* **The graphical side of some probes**: `probe-rps` has no time series, `probe-latency` no
-  histogram, `probe-heatmap` no overlay on the scheme — these instruments still return a number
-  rather than a picture.
-* **Anomalies A3 (monotonic reads), A7 (ordering violation), A8 (SQL isolation anomalies)** from
-  [docs/02-simulation.md](docs/02-simulation.md) §7а.2.
+* **`splitByFlow` on `probe-rps`**: the timeline sums every flow into a single arrival rate, so
+  there is no per-flow time dimension to split by. The parameter exists and does nothing.
+* **Ordering guarantees are declarable on only two brokers** — `orderingScope` on Kafka and
+  `queueType` on SQS. RabbitMQ, NATS, Kinesis, Redis Streams and SNS count as unordered with no
+  way to say otherwise, so anomaly A7 may overstate them.
 * **The `split-brain` scenario** — it needs a model of replica divergence and merge, not merely a
   shape of the input load.
 * **Mirrored regions `mirrorOf`** — every region is described with its own nodes by hand.

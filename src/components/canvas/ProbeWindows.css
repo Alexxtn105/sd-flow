@@ -124,6 +124,135 @@
     line-height: 1.45;
 }
 
+.probe-window-history {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.probe-window-section {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+
+.probe-window-histogram,
+.probe-window-heatmap {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.probe-window-note {
+    font-size: 9px;
+    color: var(--text-tertiary);
+    line-height: 1.4;
+}
+
+.probe-window-projecting {
+    border-color: var(--accent-primary);
+    box-shadow:
+        0 0 0 2px color-mix(in srgb, var(--accent-primary) 20%, transparent),
+        var(--shadow-md);
+}
+
+.probe-heat-scale,
+.probe-heat-top {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.probe-heat-scale li,
+.probe-heat-top li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 9.5px;
+    color: var(--text-secondary);
+}
+
+.probe-heat-swatch {
+    width: 12px;
+    height: 8px;
+    border-radius: 2px;
+    background: var(--heat-swatch, var(--util-idle));
+    flex-shrink: 0;
+}
+
+.probe-heat-idle {
+    --heat-swatch: var(--util-idle);
+}
+
+.probe-heat-ok {
+    --heat-swatch: var(--util-ok);
+}
+
+.probe-heat-warn {
+    --heat-swatch: var(--util-warn);
+}
+
+.probe-heat-hot {
+    --heat-swatch: var(--util-hot);
+}
+
+.probe-heat-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.probe-heat-range,
+.probe-heat-value {
+    font-family: 'SF Mono', 'Consolas', monospace;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+}
+
+.probe-heat-value {
+    color: var(--heat-swatch, var(--text-tertiary));
+    font-weight: 600;
+}
+
+.probe-heat-node {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.probe-window-project {
+    align-self: flex-start;
+    padding: 4px 9px;
+    border: 1px solid var(--border-primary);
+    border-radius: 5px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-size: 10px;
+    cursor: pointer;
+}
+
+.probe-window-project:hover {
+    border-color: var(--accent-primary);
+    color: var(--text-primary);
+}
+
+.probe-window-project[aria-pressed='true'] {
+    border-color: var(--accent-primary);
+    background: color-mix(in srgb, var(--accent-primary) 16%, var(--bg-tertiary));
+    color: var(--text-primary);
+}
+
 .probe-window-formula {
     margin: 0;
     font-size: 10px;

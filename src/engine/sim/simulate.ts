@@ -2,6 +2,7 @@ import { MODEL_VERSION } from '../types/scheme';
 import type { SchemeV1 } from '../types/scheme';
 import { computeAvailability } from './availability';
 import { compileTopology } from './compile';
+import { planClusterPods } from './clusters';
 import { pricingFor } from './constants';
 import { analyseConsistency } from './consistency';
 import { computeCost } from './cost';
@@ -58,7 +59,7 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
     }
 
     const flows = applyScenarioToFlows(deriveFlows(topology, 1), setup);
-    const solved = solveFlows(topology, flows, {
+    const solveOptions = {
         arrivalVariability: setup.arrivalVariability,
         disabledNodes: setup.disabledNodes,
         cacheEnabled: !setup.cacheDisabled,
@@ -66,11 +67,27 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
         payloadScale: setup.payloadScale,
         capacityScale: setup.capacityScale,
         serviceScale: setup.serviceScale,
-    });
+    };
+
+    const unconstrained = solveFlows(topology, flows, solveOptions);
+    const placement = planClusterPods(
+        topology,
+        new Map([...unconstrained.nodes].map(([nodeId, runtime]) => [nodeId, runtime.desiredInstances])),
+    );
+
+    const solved = placement.clamped
+        ? solveFlows(topology, flows, {
+              ...solveOptions,
+              instanceOverride: placement.instanceOverride,
+              warmStart: unconstrained.nodes,
+          })
+        : unconstrained;
+
+    const converged = unconstrained.converged && solved.converged;
 
     const pricing = pricingFor(scheme.settings.pricingProfile);
     const derived = deriveNodes(topology, solved.nodes, solved.edges);
-    const cost = computeCost(topology, solved.nodes, derived, solved.edges, pricing);
+    const cost = computeCost(topology, solved.nodes, derived, solved.edges, pricing, placement.plans);
     const availability = computeAvailability(topology, solved.nodes);
     const consistency = analyseConsistency(topology, solved.nodes, solved.edges, scheme.settings.consistencyModel);
     const multiRegion = analyseMultiRegion(topology, solved.nodes, solved.edges, pricing, cost.byNode);
@@ -88,7 +105,8 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
         availability,
         consistency,
         cost,
-        converged: solved.converged,
+        clusters: placement.plans,
+        converged,
     });
 
     const nodes: Record<string, NodeResult> = {};
@@ -190,6 +208,7 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
         edges,
         flows: flowResults,
         waterfalls: rollup.waterfalls,
+        latencySamples: rollup.samples,
         totals,
     });
 
@@ -198,8 +217,8 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
         scenario: setup.id,
         seed,
         computeMs: 0,
-        converged: solved.converged,
-        iterations: solved.iterations,
+        converged,
+        iterations: unconstrained.iterations + (placement.clamped ? solved.iterations : 0),
         nodes,
         edges,
         flows: flowResults,

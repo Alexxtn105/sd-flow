@@ -308,3 +308,31 @@
 .sd-node-load-hot .sd-util-track {
     background: color-mix(in srgb, var(--util-hot) 30%, transparent);
 }
+
+.sd-node-heat {
+    --heat-color: var(--util-idle);
+    border-color: var(--heat-color);
+    background-image: linear-gradient(
+        color-mix(in srgb, var(--heat-color) 16%, transparent),
+        color-mix(in srgb, var(--heat-color) 16%, transparent)
+    );
+    box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--heat-color) 45%, transparent),
+        var(--shadow-sm);
+}
+
+.sd-node-heat.sd-node-load-ok {
+    --heat-color: var(--util-ok);
+}
+
+.sd-node-heat.sd-node-load-warn {
+    --heat-color: var(--util-warn);
+}
+
+.sd-node-heat.sd-node-load-hot {
+    --heat-color: var(--util-hot);
+}
+
+.sd-node-heat.selected {
+    border-color: var(--accent-primary);
+}

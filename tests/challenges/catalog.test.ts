@@ -116,6 +116,7 @@ describe('каталог заданий', () => {
 
                 expect(second.stars).toBe(first.stars);
                 expect(second.rubric.total).toBeCloseTo(first.rubric.total, 9);
+                expect(second.comparison).toEqual(first.comparison);
             });
 
             if (challenge.referenceSolutions.length > 1) {

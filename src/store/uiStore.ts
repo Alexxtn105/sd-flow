@@ -18,6 +18,7 @@ export interface UiState {
     selectedEdgeIds: string[];
     pendingAdd: string | null;
     probeWindowIds: string[];
+    heatmapProbeId: string | null;
     tutorialOpen: boolean;
     setMode: (mode: AppMode) => void;
     togglePalette: () => void;
@@ -32,6 +33,7 @@ export interface UiState {
     clearPendingAdd: () => void;
     toggleProbeWindow: (probeId: string) => void;
     closeProbeWindow: (probeId: string) => void;
+    toggleHeatmapProbe: (probeId: string) => void;
     startTutorial: () => void;
     finishTutorial: () => void;
 }
@@ -94,6 +96,7 @@ export const useUiStore = create<UiState>((set, get) => ({
     selectedEdgeIds: [],
     pendingAdd: null,
     probeWindowIds: [],
+    heatmapProbeId: null,
     tutorialOpen: !isTutorialDone(),
 
     setMode: (mode) => set({ mode }),
@@ -125,14 +128,25 @@ export const useUiStore = create<UiState>((set, get) => ({
     clearPendingAdd: () => set({ pendingAdd: null }),
 
     toggleProbeWindow: (probeId) =>
-        set((state) => ({
-            probeWindowIds: state.probeWindowIds.includes(probeId)
-                ? state.probeWindowIds.filter((id) => id !== probeId)
-                : [...state.probeWindowIds, probeId],
-        })),
+        set((state) => {
+            if (!state.probeWindowIds.includes(probeId)) {
+                return { probeWindowIds: [...state.probeWindowIds, probeId] };
+            }
+
+            return {
+                probeWindowIds: state.probeWindowIds.filter((id) => id !== probeId),
+                heatmapProbeId: state.heatmapProbeId === probeId ? null : state.heatmapProbeId,
+            };
+        }),
 
     closeProbeWindow: (probeId) =>
-        set((state) => ({ probeWindowIds: state.probeWindowIds.filter((id) => id !== probeId) })),
+        set((state) => ({
+            probeWindowIds: state.probeWindowIds.filter((id) => id !== probeId),
+            heatmapProbeId: state.heatmapProbeId === probeId ? null : state.heatmapProbeId,
+        })),
+
+    toggleHeatmapProbe: (probeId) =>
+        set((state) => ({ heatmapProbeId: state.heatmapProbeId === probeId ? null : probeId })),
 
     startTutorial: () => set({ tutorialOpen: true }),
     finishTutorial: () => {

@@ -4,7 +4,15 @@ import type { Flow } from './flows';
 import { selfAbsorption } from './solver';
 import type { NodeRuntime } from './solver';
 import type { Rng } from './rng';
-import type { FlowResult, FlowWaterfall, HopArm, HopStat, WaterfallHop } from './types';
+import type {
+    FlowResult,
+    FlowWaterfall,
+    HistogramScale,
+    HopArm,
+    HopStat,
+    LatencyHistogram,
+    WaterfallHop,
+} from './types';
 
 const MAX_WALK_DEPTH = 12;
 const MAX_CALLS_PER_EDGE = 16;
@@ -59,12 +67,27 @@ interface CallPlan {
     replicationAckSec: number;
 }
 
+export interface LatencySamples {
+    sampleCount: number;
+    seriesFor: (flowId: string, nodeId: string) => Float64Array | null;
+}
+
 export interface LatencyRollup {
     flows: FlowResult[];
     waterfalls: FlowWaterfall[];
+    samples: LatencySamples;
 }
 
-function quantile(sorted: number[], probability: number): number {
+export interface HistogramRequest {
+    buckets: number;
+    scale: HistogramScale;
+}
+
+export const DEFAULT_HISTOGRAM_BUCKETS = 40;
+
+export const MAX_HISTOGRAM_BUCKETS = 200;
+
+function quantile(sorted: ArrayLike<number>, probability: number): number {
     if (sorted.length === 0) return 0;
 
     const position = (sorted.length - 1) * probability;
@@ -74,6 +97,80 @@ function quantile(sorted: number[], probability: number): number {
     if (lower === upper) return sorted[lower];
 
     return sorted[lower] + (sorted[upper] - sorted[lower]) * (position - lower);
+}
+
+function bucketCount(requested: number): number {
+    if (!Number.isFinite(requested)) return DEFAULT_HISTOGRAM_BUCKETS;
+
+    return Math.max(1, Math.min(MAX_HISTOGRAM_BUCKETS, Math.round(requested)));
+}
+
+function sortedFinite(series: ArrayLike<number>): Float64Array {
+    const kept = new Float64Array(series.length);
+    let size = 0;
+
+    for (let index = 0; index < series.length; index += 1) {
+        const value = series[index];
+        if (Number.isFinite(value)) {
+            kept[size] = value;
+            size += 1;
+        }
+    }
+
+    const values = kept.subarray(0, size);
+    values.sort();
+
+    return values;
+}
+
+export function buildLatencyHistogram(series: ArrayLike<number>, request: HistogramRequest): LatencyHistogram {
+    const count = bucketCount(request.buckets);
+    const sorted = sortedFinite(series);
+    const total = sorted.length;
+
+    let zeroCount = 0;
+    while (zeroCount < total && sorted[zeroCount] <= 0) zeroCount += 1;
+
+    const scale: HistogramScale = request.scale === 'log' && zeroCount < total ? 'log' : 'linear';
+    const low = scale === 'log' ? sorted[zeroCount] : total > 0 ? sorted[0] : 0;
+    const high = total > 0 ? sorted[total - 1] : 0;
+
+    const lowSpace = scale === 'log' ? Math.log10(low) : low;
+    const highSpace = scale === 'log' ? Math.log10(high) : high;
+    const topSpace = highSpace > lowSpace ? highSpace : lowSpace + 1;
+    const span = topSpace - lowSpace;
+
+    const edges: number[] = [];
+    for (let index = 0; index <= count; index += 1) {
+        const point = lowSpace + (span * index) / count;
+        edges.push(scale === 'log' ? 10 ** point : point);
+    }
+    edges[0] = low;
+    if (highSpace > lowSpace) edges[count] = high;
+
+    const counts = new Array<number>(count).fill(0);
+    let sum = 0;
+
+    for (let index = 0; index < total; index += 1) {
+        const value = sorted[index];
+        sum += value;
+
+        const point = scale === 'log' ? (value > 0 ? Math.log10(value) : lowSpace) : value;
+        const slot = Math.floor(((point - lowSpace) / span) * count);
+        counts[Math.min(count - 1, Math.max(0, slot))] += 1;
+    }
+
+    return {
+        scale,
+        edges,
+        counts,
+        total,
+        zeroCount,
+        meanMs: total > 0 ? sum / total : 0,
+        p50Ms: quantile(sorted, 0.5),
+        p95Ms: quantile(sorted, 0.95),
+        p99Ms: quantile(sorted, 0.99),
+    };
 }
 
 function windowMean(series: Float64Array, order: number[], probability: number): number {
@@ -224,6 +321,7 @@ export function rollUpLatency(
     const flowResults: FlowResult[] = [];
     const waterfalls: FlowWaterfall[] = [];
     const plans = new Map<string, CallPlan>();
+    const sitesByFlow = new Map<string, CallSite[]>();
 
     const planFor = (node: CompiledNode): CallPlan => {
         const known = plans.get(node.id);
@@ -248,6 +346,7 @@ export function rollUpLatency(
         const hops = new Map<string, HopAccumulator>();
         const callSites = new Map<string, CallSite>();
         const callSiteList: CallSite[] = [];
+        sitesByFlow.set(flow.id, callSiteList);
         const logSite: number[] = [];
         const logSec: number[] = [];
         const totals: number[] = [];
@@ -572,7 +671,23 @@ export function rollUpLatency(
         });
     }
 
-    return { flows: flowResults, waterfalls };
+    const samples: LatencySamples = {
+        sampleCount,
+        seriesFor: (flowId, nodeId) => {
+            const sites = (sitesByFlow.get(flowId) ?? []).filter((site) => site.nodeId === nodeId);
+            if (sites.length === 0) return null;
+            if (sites.length === 1) return sites[0].series;
+
+            const summed = new Float64Array(sampleCount);
+            for (const site of sites) {
+                for (let index = 0; index < sampleCount; index += 1) summed[index] += site.series[index];
+            }
+
+            return summed;
+        },
+    };
+
+    return { flows: flowResults, waterfalls, samples };
 }
 
 function shouldFollow(
