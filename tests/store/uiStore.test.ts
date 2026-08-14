@@ -27,7 +27,8 @@ describe('панели uiStore', () => {
 
     it('стартует с размеров по умолчанию', () => {
         for (const key of PANEL_KEYS) {
-            expect(useUiStore.getState().panels[key]).toBe(PANEL_BOUNDS[key].preferred);
+            const viewport = PANEL_BOUNDS[key].axis === 'x' ? window.innerWidth : window.innerHeight;
+            expect(useUiStore.getState().panels[key]).toBe(clampPanelSize(key, PANEL_BOUNDS[key].preferred, viewport));
         }
     });
 
@@ -43,10 +44,12 @@ describe('панели uiStore', () => {
 
     it('сбрасывает размер к значению по умолчанию', () => {
         useUiStore.getState().setPanelSize('inspector', 400);
-        expect(useUiStore.getState().panels.inspector).toBe(400);
+        expect(useUiStore.getState().panels.inspector).toBe(clampPanelSize('inspector', 400, window.innerWidth));
 
         useUiStore.getState().resetPanelSize('inspector');
-        expect(useUiStore.getState().panels.inspector).toBe(PANEL_BOUNDS.inspector.preferred);
+        expect(useUiStore.getState().panels.inspector).toBe(
+            clampPanelSize('inspector', PANEL_BOUNDS.inspector.preferred, window.innerWidth),
+        );
     });
 
     it('сохраняет размеры в localStorage только после отпускания мыши', () => {
