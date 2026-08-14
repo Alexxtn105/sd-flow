@@ -1,10 +1,23 @@
 import type { Challenge } from '../../engine/challenges/types';
 import { imageResize } from './imageResize';
+import { notifications } from './notifications';
 import { pastebin } from './pastebin';
+import { rateLimiter } from './rateLimiter';
+import { shopCatalog } from './shopCatalog';
 import { staticSite } from './staticSite';
+import { twitterFeed } from './twitterFeed';
 import { urlShortener } from './urlShortener';
 
-export const CHALLENGES: Challenge[] = [staticSite, urlShortener, pastebin, imageResize];
+export const CHALLENGES: Challenge[] = [
+    staticSite,
+    urlShortener,
+    pastebin,
+    imageResize,
+    rateLimiter,
+    twitterFeed,
+    notifications,
+    shopCatalog,
+];
 
 export function challengeById(id: string): Challenge | undefined {
     return CHALLENGES.find((challenge) => challenge.id === id);
