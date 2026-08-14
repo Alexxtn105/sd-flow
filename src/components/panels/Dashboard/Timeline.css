@@ -1,0 +1,124 @@
+.dash-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.dash-timeline-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.dash-timeline-select {
+    height: 20px;
+    padding: 0 4px;
+    border: 1px solid var(--panel-border);
+    border-radius: 3px;
+    background: var(--panel-subtle-bg);
+    color: var(--panel-text-2);
+    font-size: 10px;
+    max-width: 140px;
+}
+
+.dash-timeline-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    font-size: 9px;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    color: var(--panel-text-5);
+    white-space: nowrap;
+}
+
+.dash-timeline-chart {
+    width: 100%;
+    height: 120px;
+    background: var(--panel-subtle-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 4px;
+}
+
+.dash-timeline-area {
+    fill: var(--panel-accent-soft);
+}
+
+.dash-timeline-line {
+    fill: none;
+    stroke: var(--panel-accent);
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+}
+
+.dash-timeline-limit {
+    stroke: var(--util-warn);
+    stroke-width: 1;
+    stroke-dasharray: 4 3;
+}
+
+.dash-timeline-axis {
+    stroke: var(--panel-border);
+    stroke-width: 1;
+}
+
+.dash-timeline-breach {
+    fill: var(--util-hot);
+    opacity: 0.12;
+}
+
+.dash-timeline-axis-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 8.5px;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    color: var(--panel-text-6);
+}
+
+.dash-timeline-legend {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 9px;
+    color: var(--panel-text-5);
+    flex-wrap: wrap;
+}
+
+.dash-timeline-legend-line,
+.dash-timeline-legend-limit,
+.dash-timeline-legend-breach {
+    width: 12px;
+    height: 2px;
+    border-radius: 1px;
+    flex-shrink: 0;
+}
+
+.dash-timeline-legend-line {
+    background: var(--panel-accent);
+}
+
+.dash-timeline-legend-limit {
+    margin-left: 6px;
+    background: repeating-linear-gradient(
+        90deg,
+        var(--util-warn) 0,
+        var(--util-warn) 4px,
+        transparent 4px,
+        transparent 7px
+    );
+}
+
+.dash-timeline-legend-breach {
+    margin-left: 6px;
+    height: 8px;
+    background: var(--util-hot);
+    opacity: 0.25;
+}
+
+.dash-timeline-step {
+    margin-left: auto;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    color: var(--panel-text-6);
+}

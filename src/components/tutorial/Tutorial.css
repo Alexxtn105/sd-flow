@@ -1,0 +1,221 @@
+.tut {
+    position: fixed;
+    inset: 0;
+    z-index: 900;
+    pointer-events: none;
+}
+
+.tut-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 18, 26, 0.45);
+    animation: tut-fade 140ms ease-out;
+}
+
+.tut-spotlight {
+    position: fixed;
+    border-radius: var(--radius-lg);
+    outline: 2px solid var(--panel-accent);
+    outline-offset: 0;
+    box-shadow: 0 0 0 9999px rgba(15, 18, 26, 0.45);
+    transition:
+        left 160ms ease,
+        top 160ms ease,
+        width 160ms ease,
+        height 160ms ease;
+}
+
+[data-theme='dark'] .tut-backdrop {
+    background: rgba(0, 0, 0, 0.62);
+}
+
+[data-theme='dark'] .tut-spotlight {
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.62);
+}
+
+.tut-card {
+    position: fixed;
+    width: 320px;
+    max-width: calc(100vw - 24px);
+    display: flex;
+    flex-direction: column;
+    background: var(--panel-dropdown-bg);
+    border: 1px solid var(--panel-dropdown-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-xl);
+    pointer-events: auto;
+    outline: none;
+    animation: tut-rise 140ms ease-out;
+    transition:
+        left 160ms ease,
+        top 160ms ease;
+}
+
+.tut-card-centered {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    animation: tut-fade 140ms ease-out;
+}
+
+.tut-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 10px 9px 12px;
+    border-bottom: 1px solid var(--panel-border);
+}
+
+.tut-counter {
+    flex-shrink: 0;
+    padding: 1px 6px;
+    border: 1px solid var(--panel-accent-line);
+    border-radius: 3px;
+    background: var(--panel-accent-soft);
+    color: var(--panel-accent);
+    font-size: 10px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.tut-title {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: var(--panel-text-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tut-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--panel-text-4);
+    cursor: pointer;
+    transition: all 120ms ease;
+}
+
+.tut-close:hover {
+    background: var(--panel-hover-bg);
+    color: var(--panel-text-2);
+}
+
+.tut-body {
+    padding: 12px;
+}
+
+.tut-text {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--panel-text-2);
+}
+
+.tut-waiting {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 10px 0 0;
+    font-size: 11px;
+    color: var(--panel-accent);
+}
+
+.tut-waiting::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--panel-accent);
+    animation: tut-pulse 1.4s ease-in-out infinite;
+}
+
+.tut-foot {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 10px 12px;
+    border-top: 1px solid var(--panel-border);
+}
+
+.tut-btn {
+    height: 28px;
+    padding: 0 14px;
+    border: 1px solid var(--panel-border);
+    border-radius: 3px;
+    background: var(--panel-subtle-bg);
+    color: var(--panel-text-3);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 120ms ease;
+}
+
+.tut-btn:hover {
+    background: var(--panel-hover-bg);
+    border-color: var(--panel-border-hover);
+    color: var(--panel-text-1);
+}
+
+.tut-btn-primary {
+    background: var(--panel-accent-soft);
+    border-color: var(--panel-accent-line);
+    color: var(--panel-accent);
+}
+
+@keyframes tut-fade {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes tut-rise {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes tut-pulse {
+    0%,
+    100% {
+        opacity: 0.35;
+    }
+    50% {
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tut-backdrop,
+    .tut-card {
+        animation: none;
+    }
+
+    .tut-spotlight,
+    .tut-card {
+        transition: none;
+    }
+
+    .tut-waiting::before {
+        animation: none;
+        opacity: 1;
+    }
+}

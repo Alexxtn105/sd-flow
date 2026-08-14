@@ -102,6 +102,14 @@ export const ARRIVAL_VARIABILITY: Record<string, number> = {
     'region-failure': 2,
     'stale-read': 1,
     'write-conflict': 1,
+    growth: 1.4,
+    'black-friday': 2,
+    'db-failover': 2,
+    'hot-key': 2,
+    'slow-dependency': 1,
+    'thundering-herd': 6,
+    'retry-storm': 4,
+    'poison-message': 1,
 };
 
 export const PRICING_PROFILES: Record<string, PricingProfile> = {

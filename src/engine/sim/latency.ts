@@ -1,3 +1,4 @@
+import { DEFAULT_RTT_MS } from './constants';
 import type { CompiledEdge, CompiledNode, CompiledTopology } from './compile';
 import type { Flow } from './flows';
 import { selfAbsorption } from './solver';
@@ -6,10 +7,14 @@ import type { Rng } from './rng';
 import type { FlowResult, FlowWaterfall, HopArm, HopStat, WaterfallHop } from './types';
 
 const MAX_WALK_DEPTH = 12;
+const MAX_CALLS_PER_EDGE = 16;
 const BACKOFF_BASE_SEC = 0.05;
 const PERCENTILE_WINDOW_SHARE = 0.005;
 const BALANCING_GROUPS = new Set(['edge', 'clients']);
 const ABSORBING_TARGET_GROUPS = new Set(['sql', 'nosql', 'search', 'olap', 'storage']);
+const QUORUM_ACK_SHARE: Record<string, number> = { sync: 1, 'semi-sync': 0.5 };
+const REPLICA_COUNT_PARAMS = ['readReplicas', 'replicas'];
+const REPLICA_SET_PARAMS = ['replicationFactor', 'replicaSetSize'];
 
 interface HopAccumulator {
     nodeId: string;
@@ -45,6 +50,15 @@ interface CallSite {
     series: Float64Array;
 }
 
+interface CallPlan {
+    edges: CompiledEdge[];
+    callsPerRequest: number[];
+    balanced: boolean;
+    liveEdges: CompiledEdge[];
+    parallel: boolean;
+    replicationAckSec: number;
+}
+
 export interface LatencyRollup {
     flows: FlowResult[];
     waterfalls: FlowWaterfall[];
@@ -77,13 +91,16 @@ function windowMean(series: Float64Array, order: number[], probability: number):
     return sum / (to - from + 1);
 }
 
+function routableEdges(node: CompiledNode, topology: CompiledTopology): CompiledEdge[] {
+    return node.outgoing
+        .map((edgeId) => topology.edgeById.get(edgeId))
+        .filter((edge): edge is CompiledEdge => edge !== undefined && !edge.isReplication);
+}
+
 function trafficShareOf(source: CompiledNode, edge: CompiledEdge, topology: CompiledTopology): number {
     if (!BALANCING_GROUPS.has(source.definition.group)) return 1;
 
-    const siblings = source.outgoing
-        .map((edgeId) => topology.edgeById.get(edgeId))
-        .filter((item): item is CompiledEdge => item !== undefined && !item.isReplication);
-
+    const siblings = routableEdges(source, topology);
     const totalWeight = siblings.reduce((sum, item) => sum + Math.max(item.weight, 0), 0);
     if (totalWeight > 0) return Math.max(edge.weight, 0) / totalWeight;
 
@@ -92,6 +109,73 @@ function trafficShareOf(source: CompiledNode, edge: CompiledEdge, topology: Comp
 
 function callsPerRequestOf(edge: CompiledEdge): number {
     return edge.calls.reduce((sum, call) => sum + call.share * Math.max(call.fanout, 0), 0);
+}
+
+function sampleCallCount(callsPerRequest: number, rng: Rng): number {
+    if (callsPerRequest <= 0) return 0;
+
+    const whole = Math.floor(callsPerRequest);
+    const fraction = callsPerRequest - whole;
+
+    return whole + (fraction > 0 && rng.bernoulli(fraction) ? 1 : 0);
+}
+
+function pickBalancedEdge(edges: CompiledEdge[], rng: Rng): CompiledEdge {
+    const totalWeight = edges.reduce((sum, edge) => sum + Math.max(edge.weight, 0), 0);
+    if (totalWeight <= 0) return edges[Math.min(Math.floor(rng.next() * edges.length), edges.length - 1)];
+
+    let ticket = rng.next() * totalWeight;
+
+    for (const edge of edges) {
+        ticket -= Math.max(edge.weight, 0);
+        if (ticket <= 0) return edge;
+    }
+
+    return edges[edges.length - 1];
+}
+
+function replicationRttMs(node: CompiledNode, topology: CompiledTopology): number {
+    let slowest = 0;
+
+    for (const edgeId of node.outgoing) {
+        const edge = topology.edgeById.get(edgeId);
+        if (edge?.isReplication) slowest = Math.max(slowest, edge.networkMs);
+    }
+
+    return slowest;
+}
+
+function hasReplicas(node: CompiledNode): boolean {
+    for (const name of REPLICA_COUNT_PARAMS) {
+        const value = node.params[name];
+        if (typeof value === 'number' && value > 0) return true;
+    }
+
+    for (const name of REPLICA_SET_PARAMS) {
+        const value = node.params[name];
+        if (typeof value === 'number' && value > 1) return true;
+    }
+
+    return node.params.multiAz === true;
+}
+
+function replicationAckSec(node: CompiledNode, topology: CompiledTopology): number {
+    const ackShare = QUORUM_ACK_SHARE[String(node.params.replicationMode ?? '')] ?? 0;
+    if (ackShare <= 0) return 0;
+
+    const drawnRttMs = replicationRttMs(node, topology);
+    if (drawnRttMs > 0) return (ackShare * drawnRttMs) / 1000;
+
+    return hasReplicas(node) ? (ackShare * DEFAULT_RTT_MS['cross-az']) / 1000 : 0;
+}
+
+function sampleQueueWaitSec(runtime: NodeRuntime, rng: Rng): number {
+    const meanWaitSec = runtime.queue.waitSec;
+    if (meanWaitSec <= 0) return 0;
+
+    const queueFull = runtime.queue.queueFullShare ?? 0;
+
+    return meanWaitSec * (queueFull + (1 - queueFull) * rng.exponential(1));
 }
 
 function siblingCacheHitRatio(
@@ -139,6 +223,26 @@ export function rollUpLatency(
 ): LatencyRollup {
     const flowResults: FlowResult[] = [];
     const waterfalls: FlowWaterfall[] = [];
+    const plans = new Map<string, CallPlan>();
+
+    const planFor = (node: CompiledNode): CallPlan => {
+        const known = plans.get(node.id);
+        if (known) return known;
+
+        const edges = routableEdges(node, topology);
+        const live = edges.filter((edge) => runtimes.get(edge.target)?.boundBy !== 'disabled');
+        const plan: CallPlan = {
+            edges,
+            callsPerRequest: edges.map(callsPerRequestOf),
+            balanced: BALANCING_GROUPS.has(node.definition.group),
+            liveEdges: live.length > 0 ? live : edges,
+            parallel: node.params.callMode === 'parallel',
+            replicationAckSec: replicationAckSec(node, topology),
+        };
+
+        plans.set(node.id, plan);
+        return plan;
+    };
 
     for (const flow of flows) {
         const hops = new Map<string, HopAccumulator>();
@@ -198,6 +302,54 @@ export function rollUpLatency(
             for (let index = from; index < to; index += 1) logSec[index] = 0;
         };
 
+        const callChildren = (
+            node: CompiledNode,
+            depth: number,
+            visited: Set<string>,
+        ): { durations: number[]; spans: { from: number; to: number }[]; failed: boolean; timedOut: boolean } => {
+            const plan = planFor(node);
+            const durations: number[] = [];
+            const spans: { from: number; to: number }[] = [];
+            let failed = false;
+            let timedOut = false;
+
+            if (plan.edges.length === 0) return { durations, spans, failed, timedOut };
+
+            const chosen = plan.balanced ? pickBalancedEdge(plan.liveEdges, rng) : null;
+
+            for (let index = 0; index < plan.edges.length; index += 1) {
+                const edge = plan.edges[index];
+                if (chosen !== null && edge !== chosen) continue;
+                if (edge.isAsync) continue;
+
+                const calls = sampleCallCount(plan.callsPerRequest[index], rng);
+                const sampled = Math.min(calls, MAX_CALLS_PER_EDGE);
+                const edgeFrom = logSec.length;
+                const durationsFrom = durations.length;
+
+                for (let call = 0; call < sampled; call += 1) {
+                    if (!shouldFollow(edge, node.id, topology, runtimes, rng)) continue;
+
+                    const from = logSec.length;
+                    const outcome = attempt(edge, depth, visited);
+
+                    durations.push(outcome.seconds);
+                    spans.push({ from, to: logSec.length });
+
+                    if (outcome.failed) failed = true;
+                    if (outcome.timedOut) timedOut = true;
+                }
+
+                if (calls > sampled && !plan.parallel && durations.length > durationsFrom) {
+                    const scale = calls / sampled;
+                    rescale(edgeFrom, scale);
+                    for (let item = durationsFrom; item < durations.length; item += 1) durations[item] *= scale;
+                }
+            }
+
+            return { durations, spans, failed, timedOut };
+        };
+
         const walk = (
             nodeId: string,
             depth: number,
@@ -214,9 +366,15 @@ export function rollUpLatency(
             visited.add(nodeId);
             deepest = Math.max(deepest, depth);
 
+            const plan = planFor(node);
             const sigma = Number(node.params.serviceTimeSigma ?? 0.4);
             const serviceSec = runtime.serviceSec > 0 ? rng.logNormal(runtime.serviceSec, sigma) : 0;
-            const waitSec = runtime.queue.waitSec > 0 ? rng.exponential(runtime.queue.waitSec) : 0;
+            const queueWaitSec = sampleQueueWaitSec(runtime, rng);
+            const ackSec =
+                plan.replicationAckSec > 0 && rng.bernoulli(runtime.writeShare)
+                    ? plan.replicationAckSec
+                    : 0;
+            const waitSec = queueWaitSec + ackSec;
 
             let selfSeconds = serviceSec + waitSec;
             let failed = rng.bernoulli(runtime.queue.overflowProbability);
@@ -228,40 +386,22 @@ export function rollUpLatency(
             site.waitSec += waitSec;
             record(siteIndex, serviceSec + waitSec);
 
-            const childDurations: number[] = [];
-            const childSpans: { from: number; to: number }[] = [];
-            const parallel = node.params.callMode === 'parallel';
+            const children = callChildren(node, depth, visited);
+            if (children.failed) failed = true;
+            if (children.timedOut) timedOut = true;
 
-            for (const edgeId of node.outgoing) {
-                const edge = topology.edgeById.get(edgeId);
-                if (!edge || edge.isAsync || edge.isReplication) continue;
-
-                const target = topology.nodeById.get(edge.target);
-                if (!target) continue;
-
-                if (!shouldFollow(edge, node.id, topology, runtimes, rng)) continue;
-
-                const from = logSec.length;
-                const outcome = attempt(edge, depth, visited);
-                childDurations.push(outcome.seconds);
-                childSpans.push({ from, to: logSec.length });
-
-                if (outcome.failed) failed = true;
-                if (outcome.timedOut) timedOut = true;
-            }
-
-            if (childDurations.length > 0) {
-                if (parallel) {
+            if (children.durations.length > 0) {
+                if (plan.parallel) {
                     let slowest = 0;
-                    for (let index = 1; index < childDurations.length; index += 1) {
-                        if (childDurations[index] > childDurations[slowest]) slowest = index;
+                    for (let index = 1; index < children.durations.length; index += 1) {
+                        if (children.durations[index] > children.durations[slowest]) slowest = index;
                     }
-                    for (let index = 0; index < childSpans.length; index += 1) {
-                        if (index !== slowest) discard(childSpans[index].from, childSpans[index].to);
+                    for (let index = 0; index < children.spans.length; index += 1) {
+                        if (index !== slowest) discard(children.spans[index].from, children.spans[index].to);
                     }
-                    selfSeconds += childDurations[slowest];
+                    selfSeconds += children.durations[slowest];
                 } else {
-                    selfSeconds += childDurations.reduce((sum, value) => sum + value, 0);
+                    selfSeconds += children.durations.reduce((sum, value) => sum + value, 0);
                 }
             }
 
@@ -333,21 +473,18 @@ export function rollUpLatency(
         };
 
         const entry = topology.nodeById.get(flow.entryNodeId);
-        const clientEdges = entry?.outgoing ?? [];
 
         for (let sample = 0; sample < sampleCount; sample += 1) {
             let total = 0;
             let failed = false;
             let timedOut = false;
 
-            for (const edgeId of clientEdges) {
-                const edge = topology.edgeById.get(edgeId);
-                if (!edge || edge.isAsync || edge.isReplication) continue;
+            if (entry) {
+                const children = callChildren(entry, 1, new Set([flow.entryNodeId]));
 
-                const outcome = attempt(edge, 1, new Set([flow.entryNodeId]));
-                total += outcome.seconds;
-                if (outcome.failed) failed = true;
-                if (outcome.timedOut) timedOut = true;
+                total = children.durations.reduce((sum, value) => sum + value, 0);
+                failed = children.failed;
+                timedOut = children.timedOut;
             }
 
             for (let index = 0; index < logSec.length; index += 1) {

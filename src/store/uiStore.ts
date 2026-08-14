@@ -17,6 +17,7 @@ export interface UiState {
     selectedNodeIds: string[];
     selectedEdgeIds: string[];
     pendingAdd: string | null;
+    tutorialOpen: boolean;
     setMode: (mode: AppMode) => void;
     togglePalette: () => void;
     toggleChallengePanel: () => void;
@@ -28,10 +29,13 @@ export interface UiState {
     setSelection: (nodeIds: string[], edgeIds: string[]) => void;
     requestAdd: (componentType: string) => void;
     clearPendingAdd: () => void;
+    startTutorial: () => void;
+    finishTutorial: () => void;
 }
 
 interface StoredPreferences {
     panels?: Partial<PanelSizes>;
+    tutorialDone?: boolean;
 }
 
 const FALLBACK_VIEWPORT: Record<PanelAxis, number> = { x: 1440, y: 900 };
@@ -63,6 +67,15 @@ function savePanels(panels: PanelSizes): void {
     StorageService.save(STORAGE_KEYS.PREFERENCES, { ...stored, panels });
 }
 
+export function isTutorialDone(): boolean {
+    return StorageService.load<StoredPreferences>(STORAGE_KEYS.PREFERENCES)?.tutorialDone === true;
+}
+
+function saveTutorialDone(): void {
+    const stored = StorageService.load<StoredPreferences>(STORAGE_KEYS.PREFERENCES) ?? {};
+    StorageService.save(STORAGE_KEYS.PREFERENCES, { ...stored, tutorialDone: true });
+}
+
 function sameIds(left: string[], right: string[]): boolean {
     return left.length === right.length && left.every((id, index) => id === right[index]);
 }
@@ -77,6 +90,7 @@ export const useUiStore = create<UiState>((set, get) => ({
     selectedNodeIds: [],
     selectedEdgeIds: [],
     pendingAdd: null,
+    tutorialOpen: !isTutorialDone(),
 
     setMode: (mode) => set({ mode }),
     togglePalette: () => set((state) => ({ paletteCollapsed: !state.paletteCollapsed })),
@@ -105,4 +119,10 @@ export const useUiStore = create<UiState>((set, get) => ({
     },
     requestAdd: (componentType) => set({ pendingAdd: componentType }),
     clearPendingAdd: () => set({ pendingAdd: null }),
+
+    startTutorial: () => set({ tutorialOpen: true }),
+    finishTutorial: () => {
+        saveTutorialDone();
+        set({ tutorialOpen: false });
+    },
 }));

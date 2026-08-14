@@ -4,6 +4,8 @@ import type { SchemeV1 } from '../../engine/types/scheme';
 
 const VIEWERS = 'viewers';
 
+const imageCalls = { requestBytes: 1000, responseBytes: 120000 };
+
 const viewerParams = {
     dau: 2000000,
     sessionsPerUserDay: 3,
@@ -35,8 +37,8 @@ function withCdn(): SchemeV1 {
             { id: 'objects', type: 's3', params: { avgObjectSizeMb: 0.12 }, position: { x: 560, y: 120 } },
         ],
         links: [
-            { from: VIEWERS, to: 'cdn', readShare: 0.99 },
-            { from: 'cdn', to: 'objects', readShare: 0.99 },
+            { from: VIEWERS, to: 'cdn', readShare: 0.99, calls: imageCalls },
+            { from: 'cdn', to: 'objects', readShare: 0.99, calls: imageCalls },
         ],
     });
 }
@@ -52,9 +54,9 @@ function originOnly(): SchemeV1 {
             { id: 'objects', type: 's3', params: { avgObjectSizeMb: 0.12 }, position: { x: 780, y: 120 } },
         ],
         links: [
-            { from: VIEWERS, to: 'balancer', readShare: 0.99 },
-            { from: 'balancer', to: 'origin', readShare: 0.99 },
-            { from: 'origin', to: 'objects', readShare: 0.99 },
+            { from: VIEWERS, to: 'balancer', readShare: 0.99, calls: imageCalls },
+            { from: 'balancer', to: 'origin', readShare: 0.99, calls: imageCalls },
+            { from: 'origin', to: 'objects', readShare: 0.99, calls: imageCalls },
         ],
     });
 }

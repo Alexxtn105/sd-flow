@@ -1,14 +1,22 @@
 import type { ComponentParams, StorageContext, StorageResult } from '../types/component';
 import { SECONDS_PER_DAY } from './constants';
-import type { CompiledNode, CompiledTopology } from './compile';
+import type { CompiledEdge, CompiledNode, CompiledTopology } from './compile';
 import type { NodeRuntime, OperationFlow } from './solver';
 
 export const HORIZON_DAYS = 365;
+
+const OFF_PREMISE_CACHE_TYPES = new Set(['cdn']);
+const EXTERNAL_SERVICE_TYPES = new Set(['external-api']);
 
 export interface DerivedNode {
     storage: StorageResult | null;
     logsGbDay: number;
     egressGbDay: number;
+}
+
+interface EgressCharge {
+    nodeId: string;
+    bytesPerSec: number;
 }
 
 function recordBytesOf(node: CompiledNode, runtime: NodeRuntime): number {
@@ -27,6 +35,26 @@ function logsGbDayOf(node: CompiledNode, runtime: NodeRuntime): number {
     return (runtime.throughput * lines * bytes * SECONDS_PER_DAY) / 1e9;
 }
 
+function egressChargeOf(
+    edge: CompiledEdge,
+    flow: OperationFlow,
+    topology: CompiledTopology,
+): EgressCharge | null {
+    const source = topology.nodeById.get(edge.source);
+    const target = topology.nodeById.get(edge.target);
+    if (!source || !target) return null;
+
+    if (edge.scope === 'internet' || OFF_PREMISE_CACHE_TYPES.has(source.type)) {
+        return { nodeId: target.id, bytesPerSec: flow.total * flow.responseBytes };
+    }
+
+    if (EXTERNAL_SERVICE_TYPES.has(target.type)) {
+        return { nodeId: source.id, bytesPerSec: flow.total * flow.requestBytes };
+    }
+
+    return null;
+}
+
 export function deriveNodes(
     topology: CompiledTopology,
     runtimes: Map<string, NodeRuntime>,
@@ -35,13 +63,14 @@ export function deriveNodes(
     const egressByNode = new Map<string, number>();
 
     for (const edge of topology.edges) {
-        if (edge.scope !== 'internet') continue;
-
         const flow = edgeFlows.get(edge.id);
         if (!flow) continue;
 
-        const gbDay = (flow.total * flow.responseBytes * SECONDS_PER_DAY) / 1e9;
-        egressByNode.set(edge.target, (egressByNode.get(edge.target) ?? 0) + gbDay);
+        const charge = egressChargeOf(edge, flow, topology);
+        if (!charge) continue;
+
+        const gbDay = (charge.bytesPerSec * SECONDS_PER_DAY) / 1e9;
+        egressByNode.set(charge.nodeId, (egressByNode.get(charge.nodeId) ?? 0) + gbDay);
     }
 
     const derived = new Map<string, DerivedNode>();

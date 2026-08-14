@@ -330,7 +330,8 @@
             "findings": "Findings",
             "consistency": "Consistency",
             "multiRegion": "Multi-region",
-            "waterfall": "Latency waterfall"
+            "waterfall": "Latency waterfall",
+            "timeline": "Over time — {{scenario}}"
         },
         "metric": {
             "rps": "Load",
@@ -441,7 +442,35 @@
         "region-failure": "Region failure",
         "cache-flush": "Cache flush",
         "stale-read": "Replica lag",
-        "write-conflict": "Write conflict"
+        "write-conflict": "Write conflict",
+        "spike": "Spike ×5",
+        "growth": "Growth ×10 over 2 years",
+        "black-friday": "Black Friday ×20",
+        "db-failover": "Primary database failover",
+        "hot-key": "Hot key",
+        "slow-dependency": "Slow dependency",
+        "thundering-herd": "Thundering herd",
+        "retry-storm": "Retry storm",
+        "poison-message": "Poison message"
+    },
+    "timeline": {
+        "scope": "What to show",
+        "system": "Whole scheme",
+        "limit": "Capacity {{value}}",
+        "breach": "SLO breach",
+        "peak": "peak {{value}}",
+        "breachAt": "SLO breached from {{value}}",
+        "recoveredAt": "recovered by {{value}}",
+        "step": "step {{value}}",
+        "metric": {
+            "label": "Metric",
+            "lambda": "Offered load, req/s",
+            "utilization": "Utilisation",
+            "p99": "p99, ms",
+            "backlog": "Queue, requests",
+            "errors": "Error rate",
+            "instances": "Instances"
+        }
     },
     "findings": {
         "overloaded": "Overloaded: {{nodeNames}} runs at {{utilizationPct}}% and is bound by {{boundBy}} at a capacity of {{capacity}} req/s; {{dropped}} req/s are dropped. Add instances, shard it, or cut the traffic.",
@@ -681,5 +710,50 @@
             "findings": "No problems found."
         },
         "assumptions": "The calculation is steady-state: load is averaged and transients are not modelled. Capacity of every block is the minimum over its list of limiters, latency is sampled with Monte-Carlo over the call tree, and cost follows the pricing profile from the scheme settings. The numbers are an order-of-magnitude estimate, not a load test. Formulas, constants and limits of applicability — docs/02-simulation.md."
+    },
+    "tutorial": {
+        "title": "Tutorial",
+        "restart": "Run the tutorial again",
+        "close": "Close the tutorial",
+        "next": "Next",
+        "skip": "Skip step",
+        "finish": "Done",
+        "challenges": "Open challenges",
+        "progress": "{{current}}/{{total}}",
+        "waiting": "The step closes itself once you do it",
+        "step": {
+            "welcome": {
+                "title": "First scheme",
+                "text": "Let us build a scheme out of two blocks and see how much load it holds and where the bottleneck is. Any step can be skipped, the whole tutorial closed with the cross."
+            },
+            "client": {
+                "title": "Palette",
+                "text": "Drag “Web clients” from the “Clients” group onto the canvas — this block sets the incoming traffic. A group unfolds on a click at its header."
+            },
+            "service": {
+                "title": "Second block",
+                "text": "Now “Service” from the “Compute” group: it will handle the client requests."
+            },
+            "connect": {
+                "title": "Edge",
+                "text": "Drag from the right dot of the client to the left dot of the service — traffic flows along the edge."
+            },
+            "dashboard": {
+                "title": "Dashboard",
+                "text": "The scheme is recalculated after every edit: total RPS, cost, availability."
+            },
+            "boundBy": {
+                "title": "Limiter",
+                "text": "Under the block is its limiter: what runs out first, the connection pool or the memory. Click the block to open its parameters in the inspector."
+            },
+            "findings": {
+                "title": "Findings",
+                "text": "A finding explains the problem: symptom, cause, what to try. Click it to highlight the blocks it is about."
+            },
+            "done": {
+                "title": "Done",
+                "text": "Now change parameters and watch the ceiling move. The tutorial restarts from the button in the header."
+            }
+        }
     }
 }

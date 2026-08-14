@@ -41,6 +41,7 @@ const BUFFER_LIMIT_PARAMS = [
 ];
 const RETRY_CAP_PARAMS = ['retries', 'maxReceiveCount', 'maxRetries'];
 
+const GDPR_GEO = 'europe';
 const READ_HEAVY_SHARE = 0.5;
 const SLOW_OPERATION_SEC = 1;
 const CHATTY_FANOUT = 10;
@@ -527,24 +528,43 @@ function residencyIsDeclared(ctx: LintContext): boolean {
     return ctx.topology.regions.some((region) => (textParam(region, 'dataResidency') ?? 'none') !== 'none');
 }
 
+function geoOfRegion(ctx: LintContext, regionId: string | null): string | null {
+    if (regionId === null) return null;
+
+    const region = nodeOf(ctx, regionId);
+    return region === null ? null : textParam(region, 'geo');
+}
+
+function landsDataInTargetRegion(edge: CompiledEdge): boolean {
+    return edge.isReplication || carriesWrite(edge);
+}
+
+function leavesResidencyZone(ctx: LintContext, edge: CompiledEdge): boolean {
+    const source = sourceOf(ctx, edge);
+    const target = targetOf(ctx, edge);
+    if (!source || !target) return false;
+
+    const residency = residencyOfRegion(ctx, source.regionId);
+    if (residency === 'local-only') return true;
+
+    const sourceGeo = geoOfRegion(ctx, source.regionId);
+    const targetGeo = geoOfRegion(ctx, target.regionId);
+
+    if (residency === 'gdpr' && targetGeo !== GDPR_GEO) return true;
+
+    return policyResidencyIsStrict(ctx) && targetGeo !== sourceGeo;
+}
+
 function residencyViolations(ctx: LintContext): CompiledEdge[] {
     if (!residencyIsDeclared(ctx)) return [];
 
-    return ctx.topology.edges.filter((edge) => {
-        if (edge.scope !== 'cross-region') return false;
-
-        const source = sourceOf(ctx, edge);
-        const target = targetOf(ctx, edge);
-        if (!source || !target) return false;
-
-        const residency = residencyOfRegion(ctx, source.regionId);
-        const strict = policyResidencyIsStrict(ctx) || residency === 'local-only';
-        if (strict) return true;
-        if (residency !== 'gdpr') return false;
-
-        const targetRegion = target.regionId === null ? null : nodeOf(ctx, target.regionId);
-        return targetRegion === null || textParam(targetRegion, 'geo') !== 'europe';
-    });
+    return ctx.topology.edges.filter(
+        (edge) =>
+            edge.scope === 'cross-region' &&
+            landsDataInTargetRegion(edge) &&
+            edgeRpsOf(ctx, edge.id) > 0 &&
+            leavesResidencyZone(ctx, edge),
+    );
 }
 
 function dnsNodes(ctx: LintContext): CompiledNode[] {

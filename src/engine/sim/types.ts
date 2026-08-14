@@ -176,6 +176,45 @@ export interface MultiRegionResult {
     rtoTargetSec: number;
 }
 
+export interface TimelineNodeSample {
+    nodeId: string;
+    lambda: number;
+    throughput: number;
+    capacity: number;
+    utilization: number;
+    instances: number;
+    desiredInstances: number;
+    queueDepth: number;
+    backlog: number;
+    errorRate: number;
+    p99Ms: number;
+    hitRatio: number | null;
+}
+
+export interface TimelineSample {
+    timeSec: number;
+    lambda: number;
+    throughput: number;
+    errorRate: number;
+    peakUtilization: number;
+    worstP99Ms: number;
+    backlog: number;
+    instances: number;
+    breach: boolean;
+    nodes: Record<string, TimelineNodeSample>;
+}
+
+export interface Timeline {
+    stepSec: number;
+    horizonSec: number;
+    samples: TimelineSample[];
+    peakLambda: number;
+    peakBacklog: number;
+    peakP99Ms: number;
+    breachFromSec: number | null;
+    recoveredAtSec: number | null;
+}
+
 export interface Totals {
     rps: number;
     readRps: number;
@@ -207,6 +246,7 @@ export interface SimResult {
     totals: Totals;
     consistency: ConsistencyResult;
     multiRegion: MultiRegionResult | null;
+    timeline: Timeline | null;
     findings: Finding[];
     issues: Issue[];
 }

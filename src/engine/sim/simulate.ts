@@ -14,6 +14,7 @@ import { analyseMultiRegion } from './multiRegion';
 import { collectProbes, readProbes, withoutProbes } from './probes';
 import { createRng, hashString } from './rng';
 import { solveFlows } from './solver';
+import { runTransient } from './transient';
 import { emptyCost } from './resources';
 import type { EdgeResult, NodeResult, SimResult, Totals } from './types';
 
@@ -57,7 +58,15 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
     }
 
     const flows = applyScenarioToFlows(deriveFlows(topology, 1), setup);
-    const solved = solveFlows(topology, flows, setup.arrivalVariability, setup.disabledNodes, !setup.cacheDisabled);
+    const solved = solveFlows(topology, flows, {
+        arrivalVariability: setup.arrivalVariability,
+        disabledNodes: setup.disabledNodes,
+        cacheEnabled: !setup.cacheDisabled,
+        retryBudget: setup.retryBudget,
+        payloadScale: setup.payloadScale,
+        capacityScale: setup.capacityScale,
+        serviceScale: setup.serviceScale,
+    });
 
     const pricing = pricingFor(scheme.settings.pricingProfile);
     const derived = deriveNodes(topology, solved.nodes, solved.edges);
@@ -70,6 +79,7 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
     const rng = createRng(seed);
     const rollup = rollUpLatency(topology, flows, solved.nodes, rng, sampleCount);
     const flowResults = rollup.flows;
+    const timeline = runTransient({ topology, flows: deriveFlows(topology, 1), setup, seed });
 
     const findings = buildFindings({
         topology,
@@ -198,6 +208,7 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
         totals,
         consistency,
         multiRegion,
+        timeline,
         findings,
         issues: topology.issues,
     };

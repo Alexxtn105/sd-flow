@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import Icon from '../../common/Icons/Icon';
 import ResizeHandle from '../../common/ResizeHandle/ResizeHandle';
+import Timeline from './Timeline';
 import type { Finding } from '../../../engine/sim/types';
 import { useGraphStore } from '../../../store/graphStore';
 import { useSimStore } from '../../../store/simStore';
@@ -89,6 +90,7 @@ export default function Dashboard() {
     const totals = result?.totals ?? null;
     const anomalies = result && result.consistency.mode === 'anomalies' ? result.consistency.anomalies : [];
     const multiRegion = result?.multiRegion ?? null;
+    const timeline = result?.timeline ?? null;
 
     return (
         <section className="dash" style={{ height }}>
@@ -182,6 +184,19 @@ export default function Dashboard() {
                                 />
                             </div>
                         </section>
+
+                        {timeline && (
+                            <section className="dash-section dash-section-wide">
+                                <h3 className="dash-section-title">
+                                    {t('dashboard.section.timeline', {
+                                        scenario: t(`scenario.${result.scenario}`, {
+                                            defaultValue: result.scenario,
+                                        }),
+                                    })}
+                                </h3>
+                                <Timeline timeline={timeline} labelOf={labelOf} />
+                            </section>
+                        )}
 
                         <section className="dash-section dash-section-flows">
                             <h3 className="dash-section-title">{t('dashboard.section.flows')}</h3>

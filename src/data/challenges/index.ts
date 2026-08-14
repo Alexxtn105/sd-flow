@@ -1,9 +1,19 @@
 import type { Challenge } from '../../engine/challenges/types';
+import { adClicks } from './adClicks';
 import { flashSale } from './flashSale';
+import { geoMatching } from './geoMatching';
+import { globalFeed } from './globalFeed';
 import { imageResize } from './imageResize';
+import { jobScheduler } from './jobScheduler';
+import { leaderboard } from './leaderboard';
+import { matchingEngine } from './matchingEngine';
+import { liveStreaming } from './liveStreaming';
 import { multiRegion } from './multiRegion';
 import { notifications } from './notifications';
+import { observability } from './observability';
+import { objectStorage } from './objectStorage';
 import { pastebin } from './pastebin';
+import { payments } from './payments';
 import { rateLimiter } from './rateLimiter';
 import { shopCatalog } from './shopCatalog';
 import { staticSite } from './staticSite';
@@ -22,7 +32,17 @@ export const CHALLENGES: Challenge[] = [
     shopCatalog,
     videoHosting,
     flashSale,
+    payments,
+    adClicks,
+    jobScheduler,
+    leaderboard,
+    observability,
+    geoMatching,
     multiRegion,
+    matchingEngine,
+    objectStorage,
+    globalFeed,
+    liveStreaming,
 ];
 
 export function challengeById(id: string): Challenge | undefined {

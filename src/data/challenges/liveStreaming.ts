@@ -1,0 +1,553 @@
+import { buildScheme } from '../../services/schemeBuilder';
+import type { Challenge } from '../../engine/challenges/types';
+import type { SchemeV1 } from '../../engine/types/scheme';
+
+const VIEWERS = 'viewers';
+const BROADCASTERS = 'broadcasters';
+
+const viewerParams = {
+    dau: 20000000,
+    sessionsPerUserDay: 2,
+    requestsPerSession: 30,
+    avgRequestKb: 1,
+    avgResponseKb: 3000,
+    readWriteMix: 0.99,
+    cacheableShare: 0.97,
+    peakFactor: 2.5,
+    diurnalPattern: 'evening',
+    geoDistribution: 'global',
+};
+
+const broadcasterParams = {
+    dau: 120000,
+    sessionsPerUserDay: 1,
+    requestsPerSession: 900,
+    avgRequestKb: 1500,
+    avgResponseKb: 2,
+    readWriteMix: 0.02,
+    cacheableShare: 0,
+    peakFactor: 2.5,
+    diurnalPattern: 'evening',
+    geoDistribution: 'global',
+};
+
+const segmentCalls = { requestBytes: 1000, responseBytes: 3000000 };
+const chunkCalls = { requestBytes: 1500000, responseBytes: 2000 };
+const catalogCalls = { requestBytes: 1000, responseBytes: 12000 };
+
+function starter(): SchemeV1 {
+    return buildScheme({
+        id: 'live-streaming',
+        name: 'Прямые трансляции',
+        nodes: [
+            { id: VIEWERS, type: 'client-web', params: viewerParams, position: { x: 0, y: 140 } },
+            { id: BROADCASTERS, type: 'client-web', params: broadcasterParams, position: { x: 0, y: 640 } },
+        ],
+        links: [],
+    });
+}
+
+function ladderAndDualCdn(): SchemeV1 {
+    return buildScheme({
+        id: 'live-streaming-ladder',
+        name: 'Живой транскодинг в лестницу качеств и два CDN',
+        nodes: [
+            { id: VIEWERS, type: 'client-web', params: viewerParams, position: { x: 0, y: 140 } },
+            { id: BROADCASTERS, type: 'client-web', params: broadcasterParams, position: { x: 0, y: 640 } },
+            {
+                id: 'media-cluster',
+                type: 'k8s-cluster',
+                position: { x: 700, y: 560 },
+                size: { width: 900, height: 400 },
+                params: {
+                    nodes: 420,
+                    nodeType: 'compute',
+                    podsPerNode: 110,
+                    schedulingLagSec: 20,
+                    nodeCostPerHour: 0.4,
+                    controlPlaneCostMonth: 73,
+                    autoscaleNodes: true,
+                },
+            },
+            {
+                id: 'cdn-a',
+                type: 'cdn',
+                params: {
+                    popCount: 1000,
+                    avgObjectKb: 3000,
+                    maxObjectSizeMb: 32,
+                    ttlSec: 12,
+                    cacheHitRatio: 0.98,
+                    staleWhileRevalidateSec: 6,
+                    originShield: true,
+                    edgeLatencyMs: 18,
+                    costPerGbEgress: 0.018,
+                    costPerMillionRequests: 0.6,
+                },
+                position: { x: 320, y: 40 },
+            },
+            {
+                id: 'cdn-b',
+                type: 'cdn',
+                params: {
+                    popCount: 1000,
+                    avgObjectKb: 3000,
+                    maxObjectSizeMb: 32,
+                    ttlSec: 12,
+                    cacheHitRatio: 0.98,
+                    staleWhileRevalidateSec: 6,
+                    originShield: true,
+                    edgeLatencyMs: 18,
+                    costPerGbEgress: 0.018,
+                    costPerMillionRequests: 0.6,
+                },
+                position: { x: 320, y: 220 },
+            },
+            {
+                id: 'renditions',
+                type: 's3',
+                params: {
+                    objectCount: 400000000,
+                    avgObjectSizeMb: 3,
+                    prefixCount: 4000,
+                    storageClass: 'standard',
+                    lifecycleDays: 7,
+                    throughputPerPrefixMbs: 400,
+                },
+                position: { x: 700, y: 140 },
+            },
+            {
+                id: 'ingest-lb',
+                type: 'lb-l4',
+                params: {
+                    instances: 12,
+                    azSpread: 3,
+                    maxConnections: 600000,
+                    newConnPerSec: 20000,
+                    throughputGbps: 100,
+                    algorithm: 'least-conn',
+                    stickiness: 'source-ip',
+                    latencyMs: 0.3,
+                },
+                position: { x: 320, y: 640 },
+            },
+            {
+                id: 'ingest',
+                type: 'service',
+                parentId: 'media-cluster',
+                params: {
+                    runtime: 'go',
+                    serviceTimeMs: 4,
+                    serviceTimeSigma: 0.5,
+                    cpuShare: 0.08,
+                    instances: 40,
+                    autoscale: false,
+                    azSpread: 3,
+                    concurrencyPerInstance: 200,
+                    networkMbps: 40000,
+                    logLinesPerRequest: 0,
+                },
+                position: { x: 40, y: 60 },
+            },
+            {
+                id: 'jobs',
+                type: 'kafka',
+                params: {
+                    brokers: 9,
+                    partitions: 120,
+                    replicationFactor: 3,
+                    minInsync: 2,
+                    messageSizeKb: 2,
+                    batchMs: 5,
+                    compression: 'lz4',
+                    retentionHours: 24,
+                    throughputMbsPerBroker: 400,
+                },
+                position: { x: 320, y: 60 },
+            },
+            {
+                id: 'ladder',
+                type: 'transcoder',
+                parentId: 'media-cluster',
+                params: {
+                    instances: 400,
+                    renditions: 5,
+                    sourceMinutes: 1,
+                    speedFactor: 16,
+                    codec: 'h264',
+                    hardwareAccel: true,
+                    gpuCount: 8,
+                    cpuCores: 32,
+                    queuePriority: 'strict',
+                    maxQueueDepth: 200000,
+                    networkMbps: 20000,
+                    costPerInstanceHour: 0.35,
+                },
+                position: { x: 600, y: 60 },
+            },
+            {
+                id: 'chat',
+                type: 'ws-gateway',
+                params: {
+                    instances: 20,
+                    azSpread: 3,
+                    concurrentConnections: 2000000,
+                    connectionsPerInstance: 120000,
+                    memoryPerConnKb: 70,
+                    memoryGb: 24,
+                    messagesPerConnMin: 8,
+                    messageBytes: 400,
+                    fanoutMode: 'pub-sub',
+                    serviceTimeMs: 0.3,
+                    networkMbps: 20000,
+                },
+                position: { x: 320, y: 400 },
+            },
+            {
+                id: 'catalog',
+                type: 'service',
+                params: {
+                    runtime: 'go',
+                    serviceTimeMs: 5,
+                    serviceTimeSigma: 0.5,
+                    cpuShare: 0.06,
+                    instances: 12,
+                    autoscale: false,
+                    azSpread: 3,
+                    concurrencyPerInstance: 300,
+                },
+                position: { x: 700, y: 400 },
+            },
+            {
+                id: 'stream-meta',
+                type: 'dynamodb',
+                params: {
+                    capacityMode: 'provisioned',
+                    rcu: 200000,
+                    wcu: 60000,
+                    partitionKey: 'streamId',
+                    hotPartitionShare: 0.1,
+                    itemSizeKb: 3,
+                    itemCount: 4000000000,
+                    gsiCount: 2,
+                    ttlEnabled: true,
+                    streams: true,
+                },
+                position: { x: 1000, y: 400 },
+            },
+            {
+                id: 'meta-cache',
+                type: 'redis',
+                params: {
+                    shards: 8,
+                    replicasPerShard: 2,
+                    memoryGb: 24,
+                    uniqueKeys: 3000000,
+                    valueSizeBytes: 12000,
+                    ttlSec: 20,
+                    zipfAlpha: 1.3,
+                    concurrencyControl: 'optimistic',
+                },
+                position: { x: 1000, y: 240 },
+            },
+        ],
+        links: [
+            { from: VIEWERS, to: 'cdn-a', weight: 6, readShare: 1, calls: segmentCalls },
+            { from: VIEWERS, to: 'cdn-b', weight: 6, readShare: 1, calls: segmentCalls },
+            { from: VIEWERS, to: 'chat', weight: 1, readShare: 0.9, calls: catalogCalls },
+            { from: 'cdn-a', to: 'renditions', readShare: 1, calls: segmentCalls },
+            { from: 'cdn-b', to: 'renditions', readShare: 1, calls: segmentCalls },
+            { from: 'chat', to: 'catalog', readShare: 0.9, calls: catalogCalls },
+            { from: 'catalog', to: 'meta-cache', readShare: 0.95 },
+            {
+                from: 'catalog',
+                to: 'stream-meta',
+                readShare: 0.9,
+                policy: { timeoutMs: 400, retries: 2, circuitBreaker: true, idempotent: true },
+            },
+            { from: BROADCASTERS, to: 'ingest-lb', readShare: 0.02, calls: chunkCalls },
+            { from: 'ingest-lb', to: 'ingest', readShare: 0.02, calls: chunkCalls },
+            { from: 'ingest', to: 'jobs', calls: { fanout: 0.05, requestBytes: 2000, responseBytes: 0 } },
+            {
+                from: 'ingest',
+                to: 'stream-meta',
+                readShare: 0,
+                calls: { fanout: 0.02 },
+                policy: { timeoutMs: 400, retries: 2, circuitBreaker: true, idempotent: true },
+            },
+            { from: 'jobs', to: 'ladder', policy: { timeoutMs: 20000, retries: 2, circuitBreaker: true, idempotent: true } },
+            {
+                from: 'ladder',
+                to: 'renditions',
+                readShare: 0,
+                calls: { fanout: 5, requestBytes: 3000000, responseBytes: 200 },
+                policy: { timeoutMs: 20000, retries: 2, circuitBreaker: true, idempotent: true },
+            },
+        ],
+    });
+}
+
+function originOnlyDelivery(): SchemeV1 {
+    return buildScheme({
+        id: 'live-streaming-origin',
+        name: 'Раздача напрямую из хранилища и одно качество',
+        nodes: [
+            { id: VIEWERS, type: 'client-web', params: viewerParams, position: { x: 0, y: 140 } },
+            { id: BROADCASTERS, type: 'client-web', params: broadcasterParams, position: { x: 0, y: 640 } },
+            {
+                id: 'edge',
+                type: 'lb-l7',
+                params: {
+                    instances: 60,
+                    azSpread: 3,
+                    maxRpsPerInstance: 25000,
+                    maxConnections: 400000,
+                    cpuCores: 32,
+                    tlsTerminate: true,
+                    compression: false,
+                    latencyMs: 0.8,
+                },
+                position: { x: 360, y: 340 },
+            },
+            {
+                id: 'media',
+                type: 'service',
+                params: {
+                    runtime: 'go',
+                    serviceTimeMs: 6,
+                    serviceTimeSigma: 0.6,
+                    cpuShare: 0.1,
+                    instances: 80,
+                    autoscale: false,
+                    azSpread: 3,
+                    concurrencyPerInstance: 200,
+                    networkMbps: 40000,
+                },
+                position: { x: 720, y: 340 },
+            },
+            {
+                id: 'renditions',
+                type: 's3',
+                params: {
+                    objectCount: 30000000000,
+                    avgObjectSizeMb: 3,
+                    prefixCount: 4000,
+                    storageClass: 'standard',
+                    lifecycleDays: 7,
+                    throughputPerPrefixMbs: 400,
+                },
+                position: { x: 1080, y: 340 },
+            },
+        ],
+        links: [
+            { from: VIEWERS, to: 'edge', readShare: 1, calls: segmentCalls },
+            { from: BROADCASTERS, to: 'edge', readShare: 0.02, calls: chunkCalls },
+            { from: 'edge', to: 'media', readShare: 0.93, calls: segmentCalls },
+            { from: 'media', to: 'renditions', readShare: 0.93, calls: segmentCalls },
+        ],
+    });
+}
+
+export const liveStreaming: Challenge = {
+    id: 'live-streaming',
+    level: 5,
+    estimatedMinutes: 90,
+    tags: ['media', 'live', 'transcoding', 'cdn', 'egress'],
+    title: { ru: 'Глобальные прямые трансляции', en: 'Global live streaming' },
+    brief: {
+        ru: 'Двадцать миллионов зрителей в сутки смотрят живые эфиры: 13 900 запросов в секунду за четырёхсекундными сегментами по 3 МБ — 42 ГБ/с, 3.6 ПБ в сутки, и всё это должно доехать до зрителя за 3 секунды после того, как произошло в кадре. Одновременно 1 250 чанков в секунду прилетают от 120 000 стримеров, и каждый надо перекодировать в пять качеств быстрее реального времени: опоздал на секунду — зритель увидел заикание. Egress здесь дороже всего остального вместе взятого.',
+        en: 'Twenty million viewers a day watch live broadcasts: 13,900 requests per second for four-second segments of 3 MB — 42 GB/s, 3.6 PB a day, and all of it must reach the viewer within 3 seconds of happening on camera. At the same time 1,250 chunks per second arrive from 120,000 streamers, and every one must be transcoded into five renditions faster than real time: one second late and the viewer sees a stutter. Egress here costs more than everything else put together.',
+    },
+    given: {
+        dau: viewerParams.dau,
+        viewerRps: 13889,
+        segmentMb: 3,
+        segmentSeconds: 4,
+        egressGbPerSec: 42,
+        egressPbDay: 3.6,
+        broadcasters: broadcasterParams.dau,
+        chunkRps: 1250,
+        renditionsPerStream: 5,
+        glassToGlassSec: 3,
+        cdnEgressUsdPerGb: 0.018,
+        peakFactor: viewerParams.peakFactor,
+    },
+    flows: [
+        { id: VIEWERS, name: { ru: 'Просмотр эфира', en: 'Watch a live stream' }, weightInScore: 0.6 },
+        { id: BROADCASTERS, name: { ru: 'Вещание', en: 'Broadcast' }, weightInScore: 0.4 },
+    ],
+    constraints: {
+        maxNodes: 20,
+        allowedGroups: [
+            'clients',
+            'edge',
+            'compute',
+            'sql',
+            'nosql',
+            'cache',
+            'messaging',
+            'storage',
+            'olap',
+            'platform',
+            'observability',
+            'topology',
+        ],
+    },
+    requirements: [
+        {
+            id: 'R1',
+            kind: 'capability',
+            desc: {
+                ru: 'Поток вещателя доезжает до транскодера через очередь, а не синхронным вызовом',
+                en: 'The broadcaster stream reaches the transcoder through a queue, not a synchronous call',
+            },
+            flow: BROADCASTERS,
+            to: { type: 'transcoder' },
+            viaAny: [{ group: 'messaging' }],
+            asyncBefore: { type: 'transcoder' },
+        },
+        {
+            id: 'R2',
+            kind: 'capability',
+            desc: {
+                ru: 'Готовые качества лежат в объектном хранилище, а не в базе',
+                en: 'Finished renditions live in object storage, not in a database',
+            },
+            flow: BROADCASTERS,
+            to: { group: 'storage' },
+            notVia: [{ group: 'sql' }],
+        },
+        {
+            id: 'R3',
+            kind: 'capability',
+            desc: {
+                ru: 'Зритель получает сегменты с раздающего слоя, а не из origin напрямую',
+                en: 'The viewer gets segments from a delivery layer, not straight from the origin',
+            },
+            flow: VIEWERS,
+            to: { type: 'cdn' },
+        },
+        {
+            id: 'R4',
+            kind: 'slo',
+            desc: { ru: 'p99 выдачи сегмента не выше 350 мс', en: 'p99 of serving a segment stays under 350 ms' },
+            flow: VIEWERS,
+            metric: 'latency.p99',
+            max: 350,
+        },
+        {
+            id: 'R5',
+            kind: 'slo',
+            desc: { ru: 'p99 приёма чанка не выше 500 мс', en: 'p99 of ingesting a chunk stays under 500 ms' },
+            flow: BROADCASTERS,
+            metric: 'latency.p99',
+            max: 500,
+        },
+        {
+            id: 'R6',
+            kind: 'capacity',
+            desc: { ru: 'Ни один блок не загружен выше 60%', en: 'No block runs hotter than 60%' },
+            maxUtilization: 0.6,
+        },
+        {
+            id: 'R7',
+            kind: 'freshness',
+            desc: {
+                ru: 'Очередь транскодинга разбирается быстрее чем за 2 секунды — иначе эфир отстаёт',
+                en: 'The transcoding queue drains in under 2 seconds — otherwise the stream falls behind',
+            },
+            maxLagSec: 2,
+        },
+        {
+            id: 'R8',
+            kind: 'redundancy',
+            desc: {
+                ru: 'На пути зрителя нет ни одного блока в единственном экземпляре',
+                en: 'No block on the viewer path runs as a single copy',
+            },
+            flow: VIEWERS,
+            minRedundancy: 2,
+        },
+        {
+            id: 'R9',
+            kind: 'budget',
+            desc: { ru: 'Стоимость не выше $2.6 млн в месяц', en: 'Monthly cost stays under $2.6M' },
+            maxMonthlyCostUsd: 2600000,
+        },
+    ],
+    bonusObjectives: [
+        {
+            id: 'B1',
+            kind: 'slo',
+            desc: { ru: 'Медианный сегмент отдаётся за 120 мс', en: 'The median segment is served in 120 ms' },
+            flow: VIEWERS,
+            metric: 'latency.p50',
+            max: 120,
+        },
+        {
+            id: 'B2',
+            kind: 'capacity',
+            desc: {
+                ru: 'Самый горячий блок не выходит за 40% ёмкости — вечерний пик втрое выше среднего',
+                en: 'The hottest block stays within 40% of capacity — the evening peak is triple the average',
+            },
+            maxUtilization: 0.4,
+        },
+    ],
+    scenarios: { required: ['peak', 'cache-flush'], bonus: ['az-failure'] },
+    relaxation: {
+        peak: { utilizationFactor: 2.6, latencyFactor: 1.6 },
+        'cache-flush': { utilizationFactor: 1.6, latencyFactor: 3 },
+        'az-failure': { utilizationFactor: 1.8, latencyFactor: 2 },
+    },
+    lockedParams: { [VIEWERS]: viewerParams, [BROADCASTERS]: broadcasterParams },
+    starter,
+    hints: [
+        {
+            level: 1,
+            cost: 5,
+            text: {
+                ru: 'Сколько гигабайт в секунду уходит зрителям — и во что это превращается в счёте за трафик, если раздавать из объектного хранилища по прайсу $0.09 за гигабайт?',
+                en: 'How many gigabytes per second leave for the viewers — and what does that become on the bandwidth bill if you serve from object storage at $0.09 per gigabyte?',
+            },
+        },
+        {
+            level: 2,
+            cost: 10,
+            text: {
+                ru: 'Живой эфир отличается от видеохостинга сроком годности сегмента: он живёт секунды. Кэш с TTL в 12 секунд всё равно окупается — на популярном эфире один сегмент запрашивают десятки тысяч раз. А транскодинг обязан идти быстрее реального времени: если четырёхсекундный сегмент кодируется четыре секунды, очередь растёт бесконечно.',
+                en: 'Live differs from video hosting in the shelf life of a segment: it lives for seconds. A cache with a 12-second TTL still pays for itself — on a popular stream a single segment is requested tens of thousands of times. And transcoding must run faster than real time: if a four-second segment takes four seconds to encode, the queue grows without bound.',
+            },
+            forRequirement: 'R9',
+        },
+        {
+            level: 3,
+            cost: 20,
+            text: {
+                ru: 'Приём — по TCP через L4-балансировщик в сервис, оттуда чанк уходит в очередь. Транскодинг — аппаратный, со speedFactor выше единицы и строгим приоритетом: живой эфир не ждёт за отчётами. Раздача — два CDN с коротким TTL и origin shield, чтобы промахи не сложились в поток к хранилищу. Метаданные эфира — в управляемом key-value с кэшем: список «кто сейчас в эфире» читают все, а меняется он раз в минуту.',
+                en: 'Ingest over TCP through an L4 balancer into a service, from where the chunk goes into a queue. Transcoding is hardware-accelerated, with a speed factor above one and strict priority: live never queues behind reports. Delivery is two CDNs with a short TTL and origin shield so that misses do not add up into a stream against the origin. Stream metadata sits in a managed key-value store with a cache: everybody reads "who is live now" and it changes once a minute.',
+            },
+            forRequirement: 'R7',
+        },
+    ],
+    referenceSolutions: [
+        {
+            id: 'ladder-and-dual-cdn',
+            name: { ru: 'Лестница качеств и два CDN', en: 'Rendition ladder and two CDNs' },
+            tradeoff: {
+                ru: 'Приём отвязан от кодирования очередью, кодирование идёт вдвое быстрее реального времени на аппаратных ускорителях, раздача поделена между двумя провайдерами с коротким TTL. Платите тем, что три с половиной петабайта в сутки всё равно стоят как всё остальное вместе взятое, а короткий TTL означает: промах кэша на популярном эфире мгновенно превращается в поток к origin.',
+                en: 'Ingest is decoupled from encoding by a queue, encoding runs twice faster than real time on hardware accelerators, delivery is split between two providers with a short TTL. You pay with the fact that three and a half petabytes a day still cost as much as everything else combined, and a short TTL means a cache miss on a popular stream instantly becomes a stream against the origin.',
+            },
+            build: ladderAndDualCdn,
+        },
+        {
+            id: 'origin-only-delivery',
+            name: { ru: 'Раздача из origin без CDN', en: 'Origin-only delivery' },
+            tradeoff: {
+                ru: 'Ни транскодинга, ни раздающего слоя: балансировщик, медиасервис и хранилище. Сорок два гигабайта в секунду проходят через ваш собственный периметр и оплачиваются по полному прайсу egress, а зритель с медленным каналом получает то же качество, что и зритель на оптике, — то есть заикание.',
+                en: 'No transcoding, no delivery layer: a balancer, a media service and storage. Forty-two gigabytes per second cross your own perimeter and are billed at the full egress price, and a viewer on a slow link gets the same rendition as a viewer on fibre — which is to say, stuttering.',
+            },
+            build: originOnlyDelivery,
+        },
+    ],
+};

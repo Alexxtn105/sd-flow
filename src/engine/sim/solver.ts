@@ -11,7 +11,7 @@ import { UNBOUNDED } from './resources';
 const DAMPING = 0.5;
 const MAX_ITERATIONS = 50;
 const CONVERGENCE_THRESHOLD = 0.001;
-const RETRY_BUDGET = 0.5;
+export const RETRY_BUDGET = 0.5;
 const ABSORBING_TARGET_GROUPS = new Set(['sql', 'nosql', 'search', 'olap', 'storage']);
 const BALANCING_GROUPS = new Set(['edge', 'clients']);
 
@@ -36,14 +36,31 @@ export interface NodeRuntime {
     requestBytes: number;
     responseBytes: number;
     instances: number;
+    desiredInstances: number;
     serviceSec: number;
     capacity: number;
     boundBy: string;
     limits: ResourceLimit[];
     queue: QueueResult;
+    queueLimit: number;
+    timeoutSec: number;
     hitRatio: number | null;
+    residentKeys: number;
     hotKeyShare: number;
     retryAmplification: number;
+}
+
+export interface SolveOptions {
+    arrivalVariability: number;
+    disabledNodes: ReadonlySet<string>;
+    cacheEnabled: boolean;
+    retryBudget?: number;
+    payloadScale?: number;
+    instanceOverride?: ReadonlyMap<string, number>;
+    capacityScale?: ReadonlyMap<string, number>;
+    serviceScale?: ReadonlyMap<string, number>;
+    hitRatioScale?: ReadonlyMap<string, number>;
+    warmStart?: ReadonlyMap<string, NodeRuntime>;
 }
 
 export interface SolverOutput {
@@ -88,6 +105,7 @@ function idleRuntime(node: CompiledNode): NodeRuntime {
         requestBytes: 0,
         responseBytes: 0,
         instances: Number(node.params.instances ?? 1),
+        desiredInstances: Number(node.params.instances ?? 1),
         serviceSec: 0,
         capacity: UNBOUNDED,
         boundBy: 'unbounded',
@@ -101,22 +119,33 @@ function idleRuntime(node: CompiledNode): NodeRuntime {
             timeoutProbability: 0,
             failureProbability: 0,
         },
+        queueLimit: 0,
+        timeoutSec: 0,
         hitRatio: null,
+        residentKeys: 0,
         hotKeyShare: 0,
         retryAmplification: 0,
     };
 }
 
-function balancingShares(node: CompiledNode, topology: CompiledTopology): Map<string, number> {
+function balancingShares(
+    node: CompiledNode,
+    topology: CompiledTopology,
+    disabledNodes: ReadonlySet<string>,
+): Map<string, number> {
     const shares = new Map<string, number>();
     const outgoing = node.outgoing
         .map((edgeId) => topology.edgeById.get(edgeId))
         .filter((edge): edge is CompiledEdge => edge !== undefined && !edge.isReplication);
 
-    const totalWeight = outgoing.reduce((sum, edge) => sum + Math.max(edge.weight, 0), 0);
+    const reachable = outgoing.filter((edge) => !disabledNodes.has(edge.target));
+    const routed = reachable.length > 0 ? reachable : outgoing;
+    const totalWeight = routed.reduce((sum, edge) => sum + Math.max(edge.weight, 0), 0);
 
-    for (const edge of outgoing) {
-        shares.set(edge.id, totalWeight > 0 ? Math.max(edge.weight, 0) / totalWeight : 1 / outgoing.length);
+    for (const edge of outgoing) shares.set(edge.id, 0);
+
+    for (const edge of routed) {
+        shares.set(edge.id, totalWeight > 0 ? Math.max(edge.weight, 0) / totalWeight : 1 / routed.length);
     }
 
     return shares;
@@ -127,6 +156,7 @@ function computeEdgeFlow(
     source: NodeRuntime,
     splitShare: number,
     absorption: number,
+    payloadScale: number,
 ): OperationFlow {
     const flow = emptyFlow();
 
@@ -141,15 +171,17 @@ function computeEdgeFlow(
         return flow;
     }
 
-    const base = source.throughput * splitShare * (1 - absorption);
+    const base = source.throughput * splitShare;
     let requestWeighted = 0;
     let responseWeighted = 0;
 
     for (const call of edge.calls) {
-        const rps = base * call.share * Math.max(call.fanout, 0);
+        const served = isReadOperation(call.op) ? 1 - absorption : 1;
+        const rps = base * served * call.share * Math.max(call.fanout, 0);
         if (rps <= 0) continue;
 
-        const { requestBytes, responseBytes } = call;
+        const requestBytes = call.requestBytes * payloadScale;
+        const responseBytes = call.responseBytes * payloadScale;
 
         flow.total += rps;
         flow.byOperation[call.op] = (flow.byOperation[call.op] ?? 0) + rps;
@@ -174,12 +206,13 @@ function averageBytes(
     topology: CompiledTopology,
     inflow: OperationFlow,
     flows: Flow[],
+    payloadScale: number,
 ): { requestBytes: number; responseBytes: number } {
     if (node.definition.group === 'clients') {
         const flow = flows.find((item) => item.entryNodeId === node.id);
         return {
-            requestBytes: flow?.requestBytes ?? 0,
-            responseBytes: flow?.responseBytes ?? 0,
+            requestBytes: (flow?.requestBytes ?? 0) * payloadScale,
+            responseBytes: (flow?.responseBytes ?? 0) * payloadScale,
         };
     }
 
@@ -205,7 +238,10 @@ function averageBytes(
 
     if (weight <= 0) return { requestBytes: 0, responseBytes: 0 };
 
-    return { requestBytes: requestWeighted / weight, responseBytes: responseWeighted / weight };
+    return {
+        requestBytes: (requestWeighted / weight) * payloadScale,
+        responseBytes: (responseWeighted / weight) * payloadScale,
+    };
 }
 
 function resolveCapacity(
@@ -254,19 +290,19 @@ function queueLimitFor(node: CompiledNode, servers: number): number {
     return typeof limit === 'number' ? limit : servers;
 }
 
-export function solveFlows(
-    topology: CompiledTopology,
-    flows: Flow[],
-    arrivalVariability: number,
-    disabledNodes: Set<string>,
-    cacheEnabled: boolean,
-): SolverOutput {
+export function solveFlows(topology: CompiledTopology, flows: Flow[], options: SolveOptions): SolverOutput {
+    const { arrivalVariability, disabledNodes, cacheEnabled } = options;
+    const retryBudget = options.retryBudget ?? RETRY_BUDGET;
+    const payloadScale = options.payloadScale ?? 1;
+
     const trafficNodes = topology.nodes.filter((node) => node.definition.shape === 'node');
     const nodeOrder = topology.order
         .map((id) => topology.nodeById.get(id))
         .filter((node): node is CompiledNode => node !== undefined && node.definition.shape === 'node');
 
-    let previous = new Map<string, NodeRuntime>(trafficNodes.map((node) => [node.id, idleRuntime(node)]));
+    let previous = new Map<string, NodeRuntime>(
+        trafficNodes.map((node) => [node.id, options.warmStart?.get(node.id) ?? idleRuntime(node)]),
+    );
     let edgeFlows = new Map<string, OperationFlow>();
     let iterations = 0;
     let converged = false;
@@ -294,7 +330,15 @@ export function solveFlows(
             const priorRuntime = previous.get(node.id) ?? idleRuntime(node);
 
             if (disabledNodes.has(node.id)) {
-                current.set(node.id, { ...idleRuntime(node), instances: 0, capacity: 0, boundBy: 'disabled' });
+                current.set(node.id, {
+                    ...idleRuntime(node),
+                    lambdaNominal: arrived.total,
+                    lambdaOffered: arrived.total,
+                    instances: 0,
+                    desiredInstances: 0,
+                    capacity: 0,
+                    boundBy: 'disabled',
+                });
                 continue;
             }
 
@@ -302,7 +346,7 @@ export function solveFlows(
             const lambdaNominal = Math.max(damped, 0);
             const readShare = arrived.total > 0 ? arrived.read / arrived.total : 1;
             const writeShare = 1 - readShare;
-            const bytes = averageBytes(node, topology, arrived, flows);
+            const bytes = averageBytes(node, topology, arrived, flows, payloadScale);
 
             const baseContext: NodeContext<ComponentParams> = {
                 nodeId: node.id,
@@ -316,14 +360,22 @@ export function solveFlows(
             };
 
             const model = node.definition.model;
-            const instances = model?.autoscale ? model.autoscale(baseContext) : baseContext.instances;
+            const desiredInstances = model?.autoscale ? model.autoscale(baseContext) : baseContext.instances;
+            const override = options.instanceOverride?.get(node.id);
+            const instances = override === undefined ? desiredInstances : Math.max(1, Math.round(override));
             const context: NodeContext<ComponentParams> = { ...baseContext, instances };
-            const { capacity, serviceSec } = resolveCapacity(node, context);
+            const { capacity, serviceSec: nominalServiceSec } = resolveCapacity(node, context);
+
+            const serviceScale = options.serviceScale?.get(node.id) ?? 1;
+            const serviceSec = nominalServiceSec * serviceScale;
+            const effectiveCapacity =
+                (capacity.capacity * (options.capacityScale?.get(node.id) ?? 1)) / serviceScale;
 
             const cacheProfile = cacheEnabled && model?.cache ? model.cache(context) : null;
             const cacheResult = cacheProfile
                 ? cacheHitRatio(cacheProfile, writeShare, lambdaNominal * readShare)
                 : null;
+            const warmth = options.hitRatioScale?.get(node.id) ?? 1;
 
             const incomingRetries = node.incoming
                 .map((edgeId) => topology.edgeById.get(edgeId))
@@ -333,21 +385,23 @@ export function solveFlows(
             const amplification = retryAmplification(
                 priorRuntime.queue.failureProbability,
                 incomingRetries,
-                RETRY_BUDGET,
+                retryBudget,
             );
 
             const lambdaOffered = lambdaNominal * (1 + amplification);
             const servers = serversOf(node, instances);
+            const queueLimit = queueLimitFor(node, servers);
+            const timeoutSec = timeoutSecFor(node);
 
             const queue = solveQueue({
                 lambdaOffered,
-                capacity: capacity.capacity,
+                capacity: effectiveCapacity,
                 servers,
                 serviceSec,
                 arrivalVariability: arrivalVariabilityFor(node, arrivalVariability),
                 serviceVariability: serviceVariabilityFor(node),
-                timeoutSec: timeoutSecFor(node),
-                queueLimit: queueLimitFor(node, servers),
+                timeoutSec,
+                queueLimit,
             });
 
             const runtime: NodeRuntime = {
@@ -361,12 +415,16 @@ export function solveFlows(
                 requestBytes: bytes.requestBytes,
                 responseBytes: bytes.responseBytes,
                 instances,
+                desiredInstances,
                 serviceSec,
-                capacity: capacity.capacity,
+                capacity: effectiveCapacity,
                 boundBy: capacity.boundBy,
                 limits: capacity.limits,
                 queue,
-                hitRatio: cacheResult ? cacheResult.hitRatio : null,
+                queueLimit,
+                timeoutSec,
+                hitRatio: cacheResult ? cacheResult.hitRatio * warmth : null,
+                residentKeys: cacheResult ? cacheResult.residentKeys : 0,
                 hotKeyShare: cacheResult ? cacheResult.hotKeyShare : 0,
                 retryAmplification: amplification,
             };
@@ -374,9 +432,9 @@ export function solveFlows(
             current.set(node.id, runtime);
 
             const isBalancer = BALANCING_GROUPS.has(node.definition.group);
-            const shares = isBalancer ? balancingShares(node, topology) : null;
+            const shares = isBalancer ? balancingShares(node, topology, disabledNodes) : null;
             const siblingAbsorption = cacheAbsorptionFor(node, topology, previous);
-            const ownAbsorption = cacheEnabled ? selfAbsorption(node) : 0;
+            const ownAbsorption = cacheEnabled ? selfAbsorption(node) * warmth : 0;
 
             for (const edgeId of node.outgoing) {
                 const edge = topology.edgeById.get(edgeId);
@@ -392,7 +450,7 @@ export function solveFlows(
                         : ABSORBING_TARGET_GROUPS.has(target.definition.group)
                           ? siblingAbsorption
                           : 0;
-                const flow = computeEdgeFlow(edge, runtime, splitShare, applied);
+                const flow = computeEdgeFlow(edge, runtime, splitShare, applied, payloadScale);
 
                 nextEdgeFlows.set(edge.id, flow);
 

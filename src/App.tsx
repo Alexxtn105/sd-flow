@@ -16,6 +16,7 @@ import ConfirmDialog from './components/dialogs/ConfirmDialog';
 import Icon from './components/common/Icons/Icon';
 import Toast from './components/common/Toast/Toast';
 import type { ToastTone } from './components/common/Toast/Toast';
+import Tutorial from './components/tutorial/Tutorial';
 
 import { DEMO_SCHEMES } from './data/demoSchemes';
 import { useAutoSave } from './hooks/useAutoSave';
@@ -64,6 +65,7 @@ export default function App() {
     const mode = useUiStore((state) => state.mode);
     const inspectorOpen = useUiStore((state) => state.inspectorOpen);
     const toggleInspector = useUiStore((state) => state.toggleInspector);
+    const tutorialOpen = useUiStore((state) => state.tutorialOpen);
     const dashboardOpen = useSimStore((state) => state.dashboardOpen);
 
     const meta = useSchemeStore((state) => state.meta);
@@ -311,6 +313,12 @@ export default function App() {
                         tone={toast.tone}
                         onDismiss={() => setToast(null)}
                     />
+                )}
+
+                {tutorialOpen && (
+                    <ErrorBoundary>
+                        <Tutorial />
+                    </ErrorBoundary>
                 )}
 
                 {confirmState && (

@@ -17,12 +17,26 @@ export interface QueueResult {
     overflowProbability: number;
     timeoutProbability: number;
     failureProbability: number;
+    queueFullShare?: number;
 }
 
 const MAX_STABLE_UTILIZATION = 0.9999;
 
 export function serviceVariabilityFromSigma(sigma: number): number {
     return Math.exp(sigma * sigma) - 1;
+}
+
+export function bindingServers(servers: number, capacity: number, serviceSec: number): number {
+    const declared = Math.max(servers, 1);
+    if (serviceSec <= 0 || !Number.isFinite(capacity)) return declared;
+
+    return Math.min(declared, Math.max(capacity * serviceSec, 1));
+}
+
+export function queueFullShareOf(waitSec: number, drainSec: number): number {
+    if (drainSec <= 0 || waitSec <= 0) return 0;
+
+    return Math.min(waitSec / drainSec, 1);
 }
 
 export function sakasegawaWaitSec(
@@ -55,7 +69,11 @@ export function solveQueue(input: QueueInput): QueueResult {
     }
 
     const utilization = lambdaOffered / capacity;
-    const markovianWait = sakasegawaWaitSec(serviceSec, servers, utilization);
+    const markovianWait = sakasegawaWaitSec(
+        serviceSec,
+        bindingServers(servers, capacity, serviceSec),
+        utilization,
+    );
     const variabilityFactor = (input.arrivalVariability + input.serviceVariability) / 2;
     const unboundedWait = markovianWait * variabilityFactor;
     const drainWait = queueLimit > 0 ? queueLimit / capacity : 0;
@@ -77,6 +95,7 @@ export function solveQueue(input: QueueInput): QueueResult {
         overflowProbability,
         timeoutProbability,
         failureProbability: 1 - (1 - overflowProbability) * (1 - timeoutProbability),
+        queueFullShare: queueFullShareOf(waitSec, drainWait),
     };
 }
 

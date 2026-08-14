@@ -34,6 +34,8 @@ const SQS_API_CALLS_PER_MESSAGE = 3;
 
 const DLQ_PUBLISH_LATENCY_MS = 10;
 
+const DLQ_INGEST_RPS = 3000;
+
 const SECONDS_PER_HOUR = 3600;
 
 const SNS_FILTER_MATCH_SHARE: Record<string, number> = {
@@ -439,7 +441,7 @@ const dlqDefaults = {
     redriveDelaySec: 300,
     alertThresholdMessages: 100,
     notifyOnArrival: true,
-    maxDepth: 1000000,
+    maxDepth: 100000000,
     retentionHours: 336,
     messageSizeKb: 4,
     costPerMillionRequests: 0.4,
@@ -448,7 +450,13 @@ const dlqDefaults = {
 const dlqModel = defineModel<typeof dlqDefaults>({
     serviceSec: () => DLQ_PUBLISH_LATENCY_MS / 1000,
     resources: (ctx) => [
-        littleLaw('depth', ctx.params.maxDepth, ctx.params.retentionHours * SECONDS_PER_HOUR),
+        quotaBound('rate-limit', DLQ_INGEST_RPS),
+        resourceLimit(
+            'depth',
+            ctx.params.maxDepth / (ctx.params.retentionHours * SECONDS_PER_HOUR),
+            'maxDepth / (retentionHours × 3600)',
+            { maxDepth: ctx.params.maxDepth, retentionHours: ctx.params.retentionHours },
+        ),
     ],
     storage: (ctx) => {
         const messageBytes = ctx.params.messageSizeKb * 1000;

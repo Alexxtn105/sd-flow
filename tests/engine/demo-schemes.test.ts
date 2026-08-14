@@ -27,6 +27,17 @@ describe('демо-схема «Видеоплатформа»', () => {
         expect(result.totals.networkGbps).toBeLessThan(30000);
     });
 
+    it('наполнение CDN из origin тоже оплачивается как egress', () => {
+        const result = simulate(demo('video-platform'), { sampleCount: 2000 });
+
+        const cdnPbDay = result.nodes.cdn.egressGbDay / 1e6;
+        const originPbDay = result.nodes.blobs.egressGbDay / 1e6;
+
+        expect(cdnPbDay).toBeGreaterThan(95);
+        expect(originPbDay / cdnPbDay).toBeCloseTo(0.05, 2);
+        expect(result.nodes.blobs.cost.network).toBeGreaterThan(0);
+    });
+
     it('считается на порядок быстрее секунды на полном числе сэмплов', () => {
         const scheme = demo('video-platform');
         simulate(scheme, { sampleCount: 20000 });

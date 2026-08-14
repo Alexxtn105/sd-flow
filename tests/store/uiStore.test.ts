@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import StorageService, { STORAGE_KEYS } from '../../src/services/storageService';
-import { useUiStore } from '../../src/store/uiStore';
+import { isTutorialDone, useUiStore } from '../../src/store/uiStore';
 import { clampPanelSize, PANEL_BOUNDS, PANEL_KEYS, resolvePanelMax } from '../../src/utils/panelSize';
 
 describe('clampPanelSize', () => {
@@ -59,5 +59,55 @@ describe('панели uiStore', () => {
         useUiStore.getState().persistPanels();
         const stored = StorageService.load<{ panels?: Record<string, number> }>(STORAGE_KEYS.PREFERENCES);
         expect(stored?.panels?.dashboard).toBe(300);
+    });
+});
+
+describe('туториал в uiStore', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        vi.resetModules();
+    });
+
+    async function freshStore() {
+        const module = await import('../../src/store/uiStore');
+        return module.useUiStore;
+    }
+
+    it('показывается на первом запуске', async () => {
+        const store = await freshStore();
+        expect(store.getState().tutorialOpen).toBe(true);
+        expect(isTutorialDone()).toBe(false);
+    });
+
+    it('пройденный или закрытый больше не приходит сам', async () => {
+        const store = await freshStore();
+        store.getState().finishTutorial();
+
+        expect(store.getState().tutorialOpen).toBe(false);
+        expect(isTutorialDone()).toBe(true);
+
+        vi.resetModules();
+        const restarted = await freshStore();
+        expect(restarted.getState().tutorialOpen).toBe(false);
+    });
+
+    it('запускается заново из шапки, не забывая отметку о прохождении', async () => {
+        const store = await freshStore();
+        store.getState().finishTutorial();
+        store.getState().startTutorial();
+
+        expect(store.getState().tutorialOpen).toBe(true);
+        expect(isTutorialDone()).toBe(true);
+    });
+
+    it('переживает сохранение размеров панелей', async () => {
+        const store = await freshStore();
+        store.getState().finishTutorial();
+        store.getState().persistPanels();
+
+        expect(isTutorialDone()).toBe(true);
+        expect(
+            StorageService.load<{ panels?: Record<string, number> }>(STORAGE_KEYS.PREFERENCES)?.panels?.palette,
+        ).toBeGreaterThan(0);
     });
 });
