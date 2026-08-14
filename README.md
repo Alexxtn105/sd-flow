@@ -9,13 +9,14 @@ a year and what all of it costs.
 
 **[Open the editor →](https://alexxtn105.github.io/sd-flow/)**
 
-## Status: phase 3 done (v1.1)
+## Status: phase 3 done (v1.2)
 
 Behind us are the scheme editor (phase 0), the steady-state load model (phase 1) and the
 Challenges mode (phase 2). Phase 3 added the passage of time, probes, the second catalogue wave
 and ten new challenges. Version 1.1 closed the catalogue, taught the probes to draw, and added
 three more consistency anomalies, a pod ceiling for the cluster and a metric diff against the
-reference solutions.
+reference solutions. Version 1.2 unblocked the wiring: server blocks now have a second input port
+for consuming broker events, and while you drag a connection the compatible ports light up.
 
 * **Catalogue — 127 blocks in 14 groups: the whole planned catalogue**, MVP (44) plus V1 (65)
   plus V2 (18). A capacity model is filled in for 101 blocks — every block that carries traffic;
@@ -151,7 +152,7 @@ npm run dev        # http://localhost:5173/sd-flow/
 | `npm run preview` | Local preview of the built bundle |
 | `npm run lint` | ESLint 9 (flat config) |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Vitest: 588 tests in 31 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, locales, demo schemes |
+| `npm test` | Vitest: 592 tests in 31 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, locales, demo schemes |
 
 Deployment is GitHub Actions on a push to `main`: lint → typecheck → tests → build → GitHub Pages.
 The app installs as a PWA and runs offline; a scheme can be shared as a link, the canvas exported
