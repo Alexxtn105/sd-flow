@@ -251,7 +251,8 @@
         "delete": "Delete",
         "duplicate": "Duplicate",
         "settings": "Parameters",
-        "detachFromGroup": "Move out of group"
+        "detachFromGroup": "Move out of group",
+        "openProbeWindow": "Probe window"
     },
     "inspector": {
         "title": "Inspector",
@@ -415,7 +416,9 @@
             "usdMonth": "$/mo",
             "usdYear": "$/year",
             "none": ""
-        }
+        },
+        "openWindow": "Double-click to open the probe window",
+        "closeWindow": "Close the window"
     },
     "waterfall": {
         "title": "Latency waterfall",
@@ -433,7 +436,9 @@
         "arm": {
             "sequential": "sequential",
             "parallel": "parallel"
-        }
+        },
+        "residualLabel": "Unaccounted",
+        "hidden": "{{count}} more hops"
     },
     "scenario": {
         "baseline": "Baseline",

@@ -17,6 +17,7 @@ export interface UiState {
     selectedNodeIds: string[];
     selectedEdgeIds: string[];
     pendingAdd: string | null;
+    probeWindowIds: string[];
     tutorialOpen: boolean;
     setMode: (mode: AppMode) => void;
     togglePalette: () => void;
@@ -29,6 +30,8 @@ export interface UiState {
     setSelection: (nodeIds: string[], edgeIds: string[]) => void;
     requestAdd: (componentType: string) => void;
     clearPendingAdd: () => void;
+    toggleProbeWindow: (probeId: string) => void;
+    closeProbeWindow: (probeId: string) => void;
     startTutorial: () => void;
     finishTutorial: () => void;
 }
@@ -90,6 +93,7 @@ export const useUiStore = create<UiState>((set, get) => ({
     selectedNodeIds: [],
     selectedEdgeIds: [],
     pendingAdd: null,
+    probeWindowIds: [],
     tutorialOpen: !isTutorialDone(),
 
     setMode: (mode) => set({ mode }),
@@ -119,6 +123,16 @@ export const useUiStore = create<UiState>((set, get) => ({
     },
     requestAdd: (componentType) => set({ pendingAdd: componentType }),
     clearPendingAdd: () => set({ pendingAdd: null }),
+
+    toggleProbeWindow: (probeId) =>
+        set((state) => ({
+            probeWindowIds: state.probeWindowIds.includes(probeId)
+                ? state.probeWindowIds.filter((id) => id !== probeId)
+                : [...state.probeWindowIds, probeId],
+        })),
+
+    closeProbeWindow: (probeId) =>
+        set((state) => ({ probeWindowIds: state.probeWindowIds.filter((id) => id !== probeId) })),
 
     startTutorial: () => set({ tutorialOpen: true }),
     finishTutorial: () => {

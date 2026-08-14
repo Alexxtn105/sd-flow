@@ -1,13 +1,16 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Icon from '../../common/Icons/Icon';
 import ResizeHandle from '../../common/ResizeHandle/ResizeHandle';
+import Waterfall from '../../common/Waterfall/Waterfall';
 import Timeline from './Timeline';
 import type { Finding } from '../../../engine/sim/types';
 import { useGraphStore } from '../../../store/graphStore';
 import { useSimStore } from '../../../store/simStore';
 import { useUiStore } from '../../../store/uiStore';
 import { formatNumber } from '../../../utils/format';
+import { WATERFALL_PERCENTILES } from '../../../utils/waterfall';
+import type { WaterfallPercentile } from '../../../utils/waterfall';
 import './Dashboard.css';
 
 type MetricTone = 'default' | 'accent' | 'warn' | 'hot';
@@ -45,6 +48,9 @@ export default function Dashboard() {
     const status = useSimStore((state) => state.status);
     const error = useSimStore((state) => state.error);
     const toggleDashboard = useSimStore((state) => state.toggleDashboard);
+    const waterfallFlowId = useSimStore((state) => state.waterfallFlowId);
+    const focusWaterfall = useSimStore((state) => state.focusWaterfall);
+    const [percentile, setPercentile] = useState<WaterfallPercentile>('p99');
 
     const nodes = useGraphStore((state) => state.nodes);
     const setSelection = useUiStore((state) => state.setSelection);
@@ -91,6 +97,8 @@ export default function Dashboard() {
     const anomalies = result && result.consistency.mode === 'anomalies' ? result.consistency.anomalies : [];
     const multiRegion = result?.multiRegion ?? null;
     const timeline = result?.timeline ?? null;
+    const waterfalls = result?.waterfalls ?? [];
+    const waterfall = waterfalls.find((item) => item.flowId === waterfallFlowId) ?? waterfalls[0] ?? null;
 
     return (
         <section className="dash" style={{ height }}>
@@ -231,6 +239,50 @@ export default function Dashboard() {
                                         </div>
                                     ))}
                                 </div>
+                            )}
+                        </section>
+
+                        <section className="dash-section dash-section-wide dash-section-waterfall">
+                            <div className="dash-section-heading">
+                                <h3 className="dash-section-title">{t('waterfall.title')}</h3>
+
+                                {waterfall && (
+                                    <div className="dash-section-controls">
+                                        <select
+                                            className="dash-select"
+                                            value={waterfall.flowId}
+                                            onChange={(event) => focusWaterfall(event.target.value)}
+                                            aria-label={t('waterfall.flow')}
+                                        >
+                                            {waterfalls.map((item) => (
+                                                <option key={item.flowId} value={item.flowId}>
+                                                    {labelOf(item.entryNodeId)}
+                                                </option>
+                                            ))}
+                                        </select>
+
+                                        <select
+                                            className="dash-select"
+                                            value={percentile}
+                                            onChange={(event) =>
+                                                setPercentile(event.target.value as WaterfallPercentile)
+                                            }
+                                            aria-label={t('waterfall.percentile')}
+                                        >
+                                            {WATERFALL_PERCENTILES.map((item) => (
+                                                <option key={item} value={item}>
+                                                    {item}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+                            </div>
+
+                            {waterfall ? (
+                                <Waterfall waterfall={waterfall} percentile={percentile} labelOf={labelOf} />
+                            ) : (
+                                <p className="dash-hint">{t('waterfall.empty')}</p>
                             )}
                         </section>
 

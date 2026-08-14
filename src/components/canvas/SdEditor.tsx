@@ -7,6 +7,7 @@ import '@xyflow/react/dist/style.css';
 import SdNode from './SdNode';
 import GroupNode from './GroupNode';
 import ProbeNode from './ProbeNode';
+import ProbeWindows from './ProbeWindows';
 import TrafficEdge from './TrafficEdge';
 import NodeContextMenu from './NodeContextMenu';
 import type { ContextMenuTarget } from './NodeContextMenu';
@@ -93,6 +94,7 @@ export default function SdEditor() {
     const selectedEdgeIds = useUiStore((state) => state.selectedEdgeIds);
     const pendingAdd = useUiStore((state) => state.pendingAdd);
     const clearPendingAdd = useUiStore((state) => state.clearPendingAdd);
+    const toggleProbeWindow = useUiStore((state) => state.toggleProbeWindow);
 
     const dropComponent = useCallback(
         (type: string, flowPosition: XYPosition) => {
@@ -177,11 +179,13 @@ export default function SdEditor() {
             event.preventDefault();
             const rect = wrapperRef.current?.getBoundingClientRect();
             if (!rect) return;
+            const model = useGraphStore.getState().nodes.find((item) => item.id === node.id);
             setMenuTarget({
                 nodeId: node.id,
                 x: event.clientX - rect.left,
                 y: event.clientY - rect.top,
                 hasParent: Boolean(node.parentId),
+                isProbe: model !== undefined && registry.getShape(model.data.componentType) === 'probe',
             });
         },
         [],
@@ -244,6 +248,8 @@ export default function SdEditor() {
                 />
             </ReactFlow>
 
+            <ProbeWindows />
+
             {isEmpty && (
                 <div className="sd-editor-empty">
                     <span className="sd-editor-empty-title">{t('canvas.empty')}</span>
@@ -258,6 +264,7 @@ export default function SdEditor() {
                     onDuplicate={duplicateNode}
                     onDelete={(nodeId) => removeElements([nodeId], [])}
                     onDetach={(nodeId) => setNodeParent(nodeId, undefined)}
+                    onOpenProbeWindow={toggleProbeWindow}
                 />
             )}
         </div>

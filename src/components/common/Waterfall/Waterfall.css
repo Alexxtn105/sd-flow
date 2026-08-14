@@ -1,0 +1,104 @@
+.sd-waterfall {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+}
+
+.sd-waterfall-summary {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 9.5px;
+    color: var(--panel-text-5);
+}
+
+.sd-waterfall-covered {
+    font-family: 'SF Mono', 'Consolas', monospace;
+    color: var(--panel-text-3);
+    white-space: nowrap;
+}
+
+.sd-waterfall-legend {
+    color: var(--panel-text-6);
+}
+
+.sd-waterfall-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.sd-waterfall-row {
+    display: grid;
+    grid-template-columns: minmax(70px, 150px) 1fr 62px;
+    align-items: center;
+    gap: 8px;
+    height: 17px;
+    border-radius: 3px;
+}
+
+.sd-waterfall-row:hover {
+    background: var(--panel-hover-bg);
+}
+
+.sd-waterfall-name {
+    font-size: 10px;
+    color: var(--panel-text-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sd-waterfall-track {
+    position: relative;
+    height: 9px;
+    background: var(--panel-subtle-bg);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.sd-waterfall-bar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border-radius: 2px;
+    background: var(--panel-accent);
+}
+
+.sd-waterfall-parallel {
+    background: var(--traffic-read);
+    opacity: 0.75;
+}
+
+.sd-waterfall-residual {
+    background: repeating-linear-gradient(
+        135deg,
+        var(--panel-text-6) 0 3px,
+        transparent 3px 6px
+    );
+}
+
+.sd-waterfall-value {
+    font-size: 9.5px;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    color: var(--panel-text-4);
+    text-align: right;
+    white-space: nowrap;
+}
+
+.sd-waterfall-row-folded .sd-waterfall-name,
+.sd-waterfall-row-residual .sd-waterfall-name {
+    color: var(--panel-text-5);
+    font-style: italic;
+}
+
+.sd-waterfall-compact .sd-waterfall-row {
+    grid-template-columns: minmax(60px, 110px) 1fr 56px;
+    height: 15px;
+}
+
+.sd-waterfall-compact .sd-waterfall-name {
+    font-size: 9.5px;
+}

@@ -8,6 +8,7 @@ export interface ContextMenuTarget {
     x: number;
     y: number;
     hasParent: boolean;
+    isProbe: boolean;
 }
 
 interface NodeContextMenuProps {
@@ -16,9 +17,17 @@ interface NodeContextMenuProps {
     onDuplicate: (nodeId: string) => void;
     onDelete: (nodeId: string) => void;
     onDetach: (nodeId: string) => void;
+    onOpenProbeWindow: (nodeId: string) => void;
 }
 
-export default function NodeContextMenu({ target, onClose, onDuplicate, onDelete, onDetach }: NodeContextMenuProps) {
+export default function NodeContextMenu({
+    target,
+    onClose,
+    onDuplicate,
+    onDelete,
+    onDetach,
+    onOpenProbeWindow,
+}: NodeContextMenuProps) {
     const { t } = useTranslation();
     const ref = useRef<HTMLDivElement>(null);
 
@@ -37,6 +46,12 @@ export default function NodeContextMenu({ target, onClose, onDuplicate, onDelete
 
     return (
         <div className="ctx-menu" ref={ref} style={{ left: target.x, top: target.y }}>
+            {target.isProbe && (
+                <button className="ctx-item" onClick={() => run(onOpenProbeWindow)}>
+                    <Icon name="open_in_new" size="small" />
+                    <span>{t('canvas.openProbeWindow')}</span>
+                </button>
+            )}
             <button className="ctx-item" onClick={() => run(onDuplicate)}>
                 <Icon name="content_copy" size="small" />
                 <span>{t('canvas.duplicate')}</span>

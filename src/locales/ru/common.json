@@ -251,7 +251,8 @@
         "delete": "Удалить",
         "duplicate": "Дублировать",
         "settings": "Параметры",
-        "detachFromGroup": "Вынести из группы"
+        "detachFromGroup": "Вынести из группы",
+        "openProbeWindow": "Окно измерителя"
     },
     "inspector": {
         "title": "Инспектор",
@@ -415,7 +416,9 @@
             "usdMonth": "$/мес",
             "usdYear": "$/год",
             "none": ""
-        }
+        },
+        "openWindow": "Двойной клик — окно измерителя",
+        "closeWindow": "Закрыть окно"
     },
     "waterfall": {
         "title": "Водопад задержки",
@@ -433,7 +436,9 @@
         "arm": {
             "sequential": "последовательно",
             "parallel": "параллельно"
-        }
+        },
+        "residualLabel": "Не разложено",
+        "hidden": "ещё {{count}} хопов"
     },
     "scenario": {
         "baseline": "Базовый",

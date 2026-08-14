@@ -111,3 +111,42 @@ describe('туториал в uiStore', () => {
         ).toBeGreaterThan(0);
     });
 });
+
+describe('окна измерителей', () => {
+    beforeEach(() => {
+        for (const probeId of [...useUiStore.getState().probeWindowIds]) {
+            useUiStore.getState().closeProbeWindow(probeId);
+        }
+    });
+
+    it('двойной клик открывает окно, повторный — закрывает', () => {
+        useUiStore.getState().toggleProbeWindow('probe-1');
+        expect(useUiStore.getState().probeWindowIds).toEqual(['probe-1']);
+
+        useUiStore.getState().toggleProbeWindow('probe-1');
+        expect(useUiStore.getState().probeWindowIds).toEqual([]);
+    });
+
+    it('держит несколько окон в порядке открытия', () => {
+        useUiStore.getState().toggleProbeWindow('probe-1');
+        useUiStore.getState().toggleProbeWindow('probe-2');
+        useUiStore.getState().toggleProbeWindow('probe-3');
+
+        expect(useUiStore.getState().probeWindowIds).toEqual(['probe-1', 'probe-2', 'probe-3']);
+    });
+
+    it('закрытие одного окна не трогает остальные', () => {
+        useUiStore.getState().toggleProbeWindow('probe-1');
+        useUiStore.getState().toggleProbeWindow('probe-2');
+        useUiStore.getState().closeProbeWindow('probe-1');
+
+        expect(useUiStore.getState().probeWindowIds).toEqual(['probe-2']);
+    });
+
+    it('закрытие неоткрытого окна ничего не меняет', () => {
+        useUiStore.getState().toggleProbeWindow('probe-1');
+        useUiStore.getState().closeProbeWindow('probe-9');
+
+        expect(useUiStore.getState().probeWindowIds).toEqual(['probe-1']);
+    });
+});

@@ -19,6 +19,22 @@
         var(--shadow-md);
 }
 
+.sd-probe.opened {
+    border-style: solid;
+}
+
+.sd-probe-warn {
+    border-color: var(--util-warn);
+}
+
+.sd-probe-breach {
+    border-color: var(--util-hot);
+}
+
+.sd-probe-no-data {
+    border-color: var(--util-idle);
+}
+
 .sd-probe-icon {
     display: flex;
     align-items: center;
@@ -44,10 +60,27 @@
     white-space: nowrap;
 }
 
-.sd-probe-pending {
-    font-size: 9px;
-    color: var(--text-tertiary);
+.sd-probe-reading {
+    font-size: 9.5px;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    color: var(--text-secondary);
     white-space: nowrap;
+}
+
+.sd-probe-warn .sd-probe-icon {
+    color: var(--util-warn);
+}
+
+.sd-probe-breach .sd-probe-icon {
+    color: var(--util-hot);
+}
+
+.sd-probe-no-data .sd-probe-icon {
+    color: var(--text-tertiary);
+}
+
+.sd-probe-no-data .sd-probe-reading {
+    color: var(--text-tertiary);
 }
 
 .dark-theme .sd-probe {
