@@ -134,3 +134,7 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# Инструкции для Claude Code версионируются намеренно
+# (перекрывает CLAUDE.md из глобального ~/.gitignore_global)
+!CLAUDE.md
