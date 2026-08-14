@@ -69,8 +69,7 @@ export default function Header({ onNew, onSave, onSaveAs, onLoad, onExport, onIm
                         key={item}
                         className={`hdr-mode ${mode === item ? 'active' : ''}`}
                         onClick={() => setMode(item)}
-                        disabled={item === 'challenges'}
-                        title={item === 'challenges' ? t('mode.challengesSoon') : t(`mode.${item}`)}
+                        title={t(`mode.${item}`)}
                     >
                         {t(`mode.${item}`)}
                     </button>

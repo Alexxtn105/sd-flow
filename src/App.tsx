@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import Header from './components/layout/Header/Header';
 import Footer from './components/layout/Footer/Footer';
 import Palette from './components/panels/Palette/Palette';
+import ChallengePanel from './components/panels/Challenges/ChallengePanel';
 import Inspector from './components/panels/Inspector/Inspector';
 import Dashboard from './components/panels/Dashboard/Dashboard';
 import SdEditor from './components/canvas/SdEditor';
@@ -40,6 +41,7 @@ export default function App() {
 
     const isDirty = useIsDirty();
     const replaceGraph = useGraphStore((state) => state.replaceGraph);
+    const mode = useUiStore((state) => state.mode);
     const inspectorOpen = useUiStore((state) => state.inspectorOpen);
     const toggleInspector = useUiStore((state) => state.toggleInspector);
     const dashboardOpen = useSimStore((state) => state.dashboardOpen);
@@ -168,9 +170,7 @@ export default function App() {
                 />
 
                 <div className="app-content">
-                    <ErrorBoundary>
-                        <Palette />
-                    </ErrorBoundary>
+                    <ErrorBoundary>{mode === 'challenges' ? <ChallengePanel /> : <Palette />}</ErrorBoundary>
 
                     <ErrorBoundary>
                         <SdEditor />

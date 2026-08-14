@@ -1,0 +1,618 @@
+import { useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import Icon from '../../common/Icons/Icon';
+import ResizeHandle from '../../common/ResizeHandle/ResizeHandle';
+import { CHALLENGES, challengeById, challengesByLevel } from '../../../data/challenges';
+import { evaluateLive } from '../../../engine/challenges/accept';
+import { compileTopology } from '../../../engine/sim/compile';
+import type {
+    AxisScore,
+    Challenge,
+    LintHit,
+    LocalizedText,
+    Penalty,
+    RealismViolation,
+    ReferenceSolution,
+    RequirementEvaluation,
+    RequirementStatus,
+    ScenarioRun,
+} from '../../../engine/challenges/types';
+import { toScheme } from '../../../services/schemeSerializer';
+import { useChallengeStore } from '../../../store/challengeStore';
+import { useGraphStore } from '../../../store/graphStore';
+import { useSchemeStore } from '../../../store/schemeStore';
+import { useSimStore } from '../../../store/simStore';
+import { useUiStore } from '../../../store/uiStore';
+import { formatNumber } from '../../../utils/format';
+import './ChallengePanel.css';
+
+const STATUS_ICON: Record<RequirementStatus, string> = {
+    met: 'check_circle',
+    unmet: 'cancel',
+    unknown: 'help_outline',
+};
+
+const STAR_SLOTS = [0, 1, 2];
+
+const MAX_AXIS_SCORE = 100;
+
+function pickLanguage(code: string): keyof LocalizedText {
+    return code.startsWith('en') ? 'en' : 'ru';
+}
+
+function Stars({ value }: { value: number }) {
+    return (
+        <span className="chl-stars">
+            {STAR_SLOTS.map((slot) => (
+                <Icon
+                    key={slot}
+                    name={slot < value ? 'star' : 'star_border'}
+                    size="small"
+                    className={slot < value ? 'chl-star-on' : 'chl-star-off'}
+                />
+            ))}
+        </span>
+    );
+}
+
+export default function ChallengePanel() {
+    const { t, i18n } = useTranslation(['common', 'params', 'blocks', 'groups']);
+    const language = pickLanguage(i18n.language);
+
+    const width = useUiStore((state) => state.panels.palette);
+    const setSelection = useUiStore((state) => state.setSelection);
+
+    const activeId = useChallengeStore((state) => state.activeId);
+    const status = useChallengeStore((state) => state.status);
+    const error = useChallengeStore((state) => state.error);
+    const verdict = useChallengeStore((state) => state.verdict);
+    const hintsUsed = useChallengeStore((state) => state.hintsUsed);
+    const progress = useChallengeStore((state) => state.progress);
+    const openChallenge = useChallengeStore((state) => state.open);
+    const closeChallenge = useChallengeStore((state) => state.close);
+    const revealHint = useChallengeStore((state) => state.revealHint);
+    const submit = useChallengeStore((state) => state.submit);
+
+    const nodes = useGraphStore((state) => state.nodes);
+    const edges = useGraphStore((state) => state.edges);
+    const meta = useSchemeStore((state) => state.meta);
+    const settings = useSchemeStore((state) => state.settings);
+    const result = useSimStore((state) => state.result);
+
+    const challenge = activeId === null ? undefined : challengeById(activeId);
+
+    const localized = useCallback((text: LocalizedText) => text[language], [language]);
+
+    const labels = useMemo(() => {
+        const map = new Map<string, string>();
+
+        for (const node of nodes) {
+            const fallback = t(node.data.componentType, {
+                ns: 'blocks',
+                defaultValue: node.data.componentType,
+            });
+            map.set(node.id, node.data.label || fallback);
+        }
+
+        return map;
+    }, [nodes, t]);
+
+    const live = useMemo<RequirementEvaluation[]>(() => {
+        if (!challenge || !result) return [];
+
+        const topology = compileTopology(toScheme({ meta, nodes, edges, settings }));
+        if (topology.issues.some((issue) => issue.severity === 'error')) return [];
+
+        return evaluateLive(challenge, topology, result);
+    }, [challenge, edges, meta, nodes, result, settings]);
+
+    const measure = useCallback(
+        (value: number, unit: string): string => {
+            if (unit === 'ratio') return `${formatNumber(value * 100)} %`;
+            if (unit === '') return formatNumber(value);
+
+            return `${formatNumber(value)} ${t(`challenge.unit.${unit}`, { defaultValue: unit })}`;
+        },
+        [t],
+    );
+
+    const decorate = useCallback(
+        (values: Record<string, string | number>): Record<string, string | number> => {
+            const decorated: Record<string, string | number> = {};
+
+            for (const [key, value] of Object.entries(values)) {
+                decorated[key] = typeof value === 'number' ? formatNumber(value) : value;
+            }
+
+            if (typeof values.param === 'string') {
+                decorated.param = t(values.param, { ns: 'params', defaultValue: values.param });
+            }
+            if (typeof values.type === 'string') {
+                decorated.type = t(values.type, { ns: 'blocks', defaultValue: values.type });
+            }
+            if (typeof values.group === 'string') {
+                decorated.group = t(values.group, { ns: 'groups', defaultValue: values.group });
+            }
+            if (typeof values.boundBy === 'string') {
+                decorated.boundBy = t(`bound.${values.boundBy}`, { defaultValue: values.boundBy });
+            }
+            if (typeof values.node === 'string') {
+                decorated.node = labels.get(values.node) ?? values.node;
+            }
+
+            return decorated;
+        },
+        [labels, t],
+    );
+
+    const requirementDesc = useCallback(
+        (id: string): string => {
+            if (!challenge) return id;
+
+            const requirement = [...challenge.requirements, ...challenge.bonusObjectives].find(
+                (item) => item.id === id,
+            );
+
+            return requirement ? localized(requirement.desc) : id;
+        },
+        [challenge, localized],
+    );
+
+    const penaltyText = useCallback(
+        (penalty: Penalty): string => {
+            if (penalty.code.startsWith('override-')) {
+                const param = penalty.code.slice('override-'.length);
+                return t('challenge.penalty.override', {
+                    param: t(param, { ns: 'params', defaultValue: param }),
+                });
+            }
+
+            if (penalty.code.startsWith('hint-')) {
+                return t('challenge.penalty.hint', { level: penalty.code.slice('hint-'.length) });
+            }
+
+            return t(`challenge.penalty.${penalty.code}`, { defaultValue: penalty.code });
+        },
+        [t],
+    );
+
+    const start = useCallback(
+        (item: Challenge) => {
+            useSchemeStore.getState().importScheme(item.starter());
+            openChallenge(item.id);
+        },
+        [openChallenge],
+    );
+
+    const handleSubmit = useCallback(() => {
+        submit(useSchemeStore.getState().exportScheme());
+    }, [submit]);
+
+    const loadSolution = useCallback((solution: ReferenceSolution) => {
+        useSchemeStore.getState().importScheme(solution.build());
+    }, []);
+
+    const highlight = useCallback((nodeIds: string[]) => setSelection(nodeIds, []), [setSelection]);
+
+    const showButton = (nodeIds: string[]) => {
+        if (nodeIds.length === 0) return null;
+
+        return (
+            <button
+                type="button"
+                className="chl-show"
+                onClick={() => highlight(nodeIds)}
+                title={t('challenge.showOnScheme')}
+                aria-label={t('challenge.showOnScheme')}
+            >
+                <Icon name="my_location" size="small" />
+            </button>
+        );
+    };
+
+    const renderRequirement = (evaluation: RequirementEvaluation, key: string) => {
+        const hasNumbers = evaluation.actual !== null && evaluation.target !== null;
+        const met = evaluation.status === 'met';
+        const showHeadroom = met && evaluation.headroom !== null && evaluation.headroom > 0;
+
+        return (
+            <li key={key} className={`chl-req chl-req-${evaluation.status}`}>
+                <Icon name={STATUS_ICON[evaluation.status]} size="small" className="chl-req-icon" />
+                <div className="chl-req-body">
+                    <span className="chl-req-head">
+                        <span className="chl-req-id">{evaluation.id}</span>
+                        <span className="chl-req-desc">{requirementDesc(evaluation.id)}</span>
+                    </span>
+                    {hasNumbers && (
+                        <span className="chl-req-fact">
+                            {t('challenge.fact', {
+                                actual: measure(evaluation.actual as number, evaluation.unit),
+                                target: measure(evaluation.target as number, evaluation.unit),
+                            })}
+                            {showHeadroom && (
+                                <span className="chl-req-headroom">
+                                    {t('challenge.headroom', {
+                                        value: formatNumber((evaluation.headroom as number) * 100),
+                                    })}
+                                </span>
+                            )}
+                        </span>
+                    )}
+                    {!met && (
+                        <span className="chl-req-reason">
+                            {t(`challenge.reason.${evaluation.reason}`, { defaultValue: evaluation.reason })}
+                        </span>
+                    )}
+                </div>
+                {showButton(evaluation.nodeIds)}
+            </li>
+        );
+    };
+
+    const renderRealism = (violation: RealismViolation, index: number) => (
+        <li key={`${violation.code}-${index}`} className="chl-hit chl-hit-bad">
+            <div className="chl-hit-body">
+                <span className="chl-rule">{violation.code}</span>
+                <span className="chl-hit-text">
+                    {t(`challenge.realism.${violation.code}`, {
+                        ...decorate(violation.values),
+                        defaultValue: violation.code,
+                    })}
+                </span>
+            </div>
+            {showButton(violation.nodeIds)}
+        </li>
+    );
+
+    const renderLint = (hit: LintHit, index: number) => (
+        <li key={`${hit.rule}-${index}`} className={`chl-hit chl-hit-${hit.kind === 'positive' ? 'good' : 'bad'}`}>
+            <div className="chl-hit-body">
+                <span className="chl-rule">
+                    {hit.rule}
+                    {hit.kind === 'antipattern' && <span className="chl-rule-weight">−{hit.weight}</span>}
+                </span>
+                <span className="chl-hit-text">
+                    {t(`challenge.lint.${hit.rule}`, { ...decorate(hit.values), defaultValue: hit.rule })}
+                </span>
+            </div>
+            {showButton(hit.nodeIds)}
+        </li>
+    );
+
+    const renderScenario = (run: ScenarioRun) => (
+        <div key={run.scenario} className={`chl-scenario ${run.passed ? 'chl-scenario-pass' : 'chl-scenario-fail'}`}>
+            <div className="chl-scenario-head">
+                <Icon name={run.passed ? 'check_circle' : 'cancel'} size="small" className="chl-req-icon" />
+                <span className="chl-scenario-name">
+                    {t(`scenario.${run.scenario}`, { defaultValue: run.scenario })}
+                </span>
+                <span className="chl-badge">
+                    {run.required ? t('challenge.scenarioRequired') : t('challenge.scenarioBonus')}
+                </span>
+            </div>
+            {run.failures.length > 0 && (
+                <ul className="chl-reqs">
+                    {run.failures.map((failure, index) => renderRequirement(failure, `${run.scenario}-${index}`))}
+                </ul>
+            )}
+        </div>
+    );
+
+    const renderAxis = (axis: AxisScore) => (
+        <div key={axis.axis} className="chl-axis">
+            <span className="chl-axis-name">{t(`challenge.axis.${axis.axis}`, { defaultValue: axis.axis })}</span>
+            <span className="chl-axis-track">
+                <span
+                    className="chl-axis-fill"
+                    style={{ width: `${Math.max(0, Math.min(MAX_AXIS_SCORE, axis.score))}%` }}
+                />
+            </span>
+            <span className="chl-axis-value">{formatNumber(axis.score)}</span>
+            <span className="chl-axis-weight">{t('challenge.axisWeight', { value: axis.weight })}</span>
+        </div>
+    );
+
+    const renderSolution = (solution: ReferenceSolution) => (
+        <article key={solution.id} className="chl-solution">
+            <div className="chl-solution-head">
+                <span className="chl-solution-name">{localized(solution.name)}</span>
+                <button type="button" className="chl-btn" onClick={() => loadSolution(solution)}>
+                    {t('challenge.loadSolution')}
+                </button>
+            </div>
+            <p className="chl-solution-tradeoff">{localized(solution.tradeoff)}</p>
+        </article>
+    );
+
+    const renderCatalog = () => (
+        <div className="chl-body">
+            {CHALLENGES.length === 0 && <div className="chl-empty">{t('challenge.catalogEmpty')}</div>}
+
+            {challengesByLevel().map((bucket) => (
+                <section key={bucket.level} className="chl-section">
+                    <h3 className="chl-section-title">{t('challenge.level', { level: bucket.level })}</h3>
+
+                    {bucket.items.map((item) => {
+                        const stars = progress[item.id]?.stars ?? 0;
+                        const attempts = progress[item.id]?.attempts ?? 0;
+
+                        return (
+                            <article key={item.id} className="chl-card">
+                                <div className="chl-card-head">
+                                    <span className="chl-card-name">{localized(item.title)}</span>
+                                    <Stars value={stars} />
+                                </div>
+
+                                <div className="chl-card-meta">
+                                    <span>{t('challenge.minutes', { value: item.estimatedMinutes })}</span>
+                                    <span>{t('challenge.requirements', { value: item.requirements.length })}</span>
+                                    {attempts > 0 && <span>{t('challenge.attempts', { value: attempts })}</span>}
+                                </div>
+
+                                {item.tags.length > 0 && (
+                                    <div className="chl-tags">
+                                        {item.tags.map((tag) => (
+                                            <span key={tag} className="chl-tag">
+                                                {t(`challenge.tag.${tag}`, { defaultValue: tag })}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+
+                                <button
+                                    type="button"
+                                    className="chl-btn chl-btn-primary"
+                                    onClick={() => start(item)}
+                                    title={t('challenge.startHint')}
+                                >
+                                    <Icon name="play_arrow" size="small" />
+                                    <span>{t('challenge.start')}</span>
+                                </button>
+                            </article>
+                        );
+                    })}
+                </section>
+            ))}
+        </div>
+    );
+
+    const renderActive = (item: Challenge) => (
+        <div className="chl-body">
+            <p className="chl-brief">{localized(item.brief)}</p>
+
+            <section className="chl-section">
+                <h3 className="chl-section-title">{t('challenge.section.given')}</h3>
+                {Object.entries(item.given).map(([key, value]) => (
+                    <div key={key} className="chl-line">
+                        <span className="chl-line-label">{t(key, { ns: 'params', defaultValue: key })}</span>
+                        <span className="chl-line-value">
+                            {typeof value === 'number' ? formatNumber(value) : value}
+                        </span>
+                    </div>
+                ))}
+
+                {item.flows.map((flow) => (
+                    <div key={flow.id} className="chl-line">
+                        <span className="chl-line-label">{localized(flow.name)}</span>
+                        <span className="chl-line-value">
+                            {t('challenge.flowWeight', { value: formatNumber(flow.weightInScore * 100) })}
+                        </span>
+                    </div>
+                ))}
+
+                {item.constraints.maxNodes !== undefined && (
+                    <div className="chl-line">
+                        <span className="chl-line-label">{t('challenge.constraint.maxNodes')}</span>
+                        <span className="chl-line-value">{item.constraints.maxNodes}</span>
+                    </div>
+                )}
+
+                {item.constraints.allowedGroups && (
+                    <div className="chl-line chl-line-wrap">
+                        <span className="chl-line-label">{t('challenge.constraint.allowedGroups')}</span>
+                        <span className="chl-line-value">
+                            {item.constraints.allowedGroups
+                                .map((group) => t(group, { ns: 'groups', defaultValue: group }))
+                                .join(', ')}
+                        </span>
+                    </div>
+                )}
+
+                {item.constraints.forbiddenTypes && item.constraints.forbiddenTypes.length > 0 && (
+                    <div className="chl-line chl-line-wrap">
+                        <span className="chl-line-label">{t('challenge.constraint.forbiddenTypes')}</span>
+                        <span className="chl-line-value">
+                            {item.constraints.forbiddenTypes
+                                .map((type) => t(type, { ns: 'blocks', defaultValue: type }))
+                                .join(', ')}
+                        </span>
+                    </div>
+                )}
+            </section>
+
+            <section className="chl-section">
+                <h3 className="chl-section-title">{t('challenge.section.requirements')}</h3>
+                {live.length === 0 ? (
+                    <p className="chl-hint-text">{t('challenge.notCompiled')}</p>
+                ) : (
+                    <ul className="chl-reqs">
+                        {live.map((evaluation) => renderRequirement(evaluation, evaluation.id))}
+                    </ul>
+                )}
+            </section>
+
+            {item.hints.length > 0 && (
+                <section className="chl-section">
+                    <h3 className="chl-section-title">{t('challenge.section.hints')}</h3>
+                    {item.hints.map((hint, index) =>
+                        hintsUsed.includes(index) ? (
+                            <p key={`${hint.level}-${index}`} className="chl-hint-open">
+                                <span className="chl-rule">{t('challenge.hintLevel', { level: hint.level })}</span>
+                                <span className="chl-hit-text">{localized(hint.text)}</span>
+                            </p>
+                        ) : (
+                            <button
+                                key={`${hint.level}-${index}`}
+                                type="button"
+                                className="chl-btn chl-btn-wide"
+                                onClick={() => revealHint(index)}
+                            >
+                                <Icon name="lightbulb_outline" size="small" />
+                                <span>{t('challenge.revealHint', { level: hint.level, cost: hint.cost })}</span>
+                            </button>
+                        ),
+                    )}
+                </section>
+            )}
+
+            {status === 'error' && <p className="chl-error">{t('challenge.failed', { message: error ?? '' })}</p>}
+
+            <button
+                type="button"
+                className="chl-btn chl-btn-primary chl-btn-wide"
+                onClick={handleSubmit}
+                disabled={status === 'running'}
+            >
+                {status === 'running' ? t('challenge.submitting') : t('challenge.submit')}
+            </button>
+        </div>
+    );
+
+    const renderReport = (item: Challenge) => {
+        if (!verdict) return null;
+
+        const antipatterns = verdict.lint.antipatterns;
+        const positives = verdict.lint.positives;
+
+        return (
+            <div className="chl-body">
+                <div className={`chl-verdict chl-verdict-${verdict.stage}`}>
+                    <Stars value={verdict.stars} />
+                    <span className="chl-verdict-stage">
+                        {t(`challenge.stage.${verdict.stage}`, { defaultValue: verdict.stage })}
+                    </span>
+                    <span className="chl-verdict-score">
+                        {t('challenge.score', { value: formatNumber(verdict.rubric.total) })}
+                    </span>
+                </div>
+
+                {verdict.stage === 'compile' && <p className="chl-error">{t('challenge.notCompiled')}</p>}
+
+                {verdict.realism.length > 0 && (
+                    <section className="chl-section">
+                        <h3 className="chl-section-title">{t('challenge.section.realism')}</h3>
+                        <ul className="chl-hits">{verdict.realism.map(renderRealism)}</ul>
+                    </section>
+                )}
+
+                {verdict.requirements.length > 0 && (
+                    <section className="chl-section">
+                        <h3 className="chl-section-title">{t('challenge.section.requirements')}</h3>
+                        <ul className="chl-reqs">
+                            {verdict.requirements.map((evaluation) => renderRequirement(evaluation, evaluation.id))}
+                        </ul>
+                    </section>
+                )}
+
+                {verdict.bonusObjectives.length > 0 && (
+                    <section className="chl-section">
+                        <h3 className="chl-section-title">{t('challenge.section.bonus')}</h3>
+                        <ul className="chl-reqs">
+                            {verdict.bonusObjectives.map((evaluation) =>
+                                renderRequirement(evaluation, `bonus-${evaluation.id}`),
+                            )}
+                        </ul>
+                    </section>
+                )}
+
+                {verdict.scenarioRuns.length > 0 && (
+                    <section className="chl-section">
+                        <h3 className="chl-section-title">{t('challenge.section.scenarios')}</h3>
+                        {verdict.scenarioRuns.map(renderScenario)}
+                    </section>
+                )}
+
+                {antipatterns.length > 0 && (
+                    <section className="chl-section">
+                        <h3 className="chl-section-title">{t('challenge.section.antipatterns')}</h3>
+                        <ul className="chl-hits">{antipatterns.map(renderLint)}</ul>
+                    </section>
+                )}
+
+                {positives.length > 0 && (
+                    <section className="chl-section">
+                        <h3 className="chl-section-title">{t('challenge.section.practices')}</h3>
+                        <ul className="chl-hits">{positives.map(renderLint)}</ul>
+                    </section>
+                )}
+
+                {verdict.rubric.axes.length > 0 && (
+                    <section className="chl-section">
+                        <h3 className="chl-section-title">{t('challenge.section.rubric')}</h3>
+                        {verdict.rubric.axes.map(renderAxis)}
+                    </section>
+                )}
+
+                {verdict.rubric.penalties.length > 0 && (
+                    <section className="chl-section">
+                        <h3 className="chl-section-title">{t('challenge.section.penalties')}</h3>
+                        {verdict.rubric.penalties.map((penalty, index) => (
+                            <div key={`${penalty.code}-${index}`} className="chl-line">
+                                <span className="chl-line-label">{penaltyText(penalty)}</span>
+                                <span className="chl-line-value chl-tone-hot">−{formatNumber(penalty.points)}</span>
+                            </div>
+                        ))}
+                    </section>
+                )}
+
+                {item.referenceSolutions.length > 0 && (
+                    <section className="chl-section">
+                        <h3 className="chl-section-title">{t('challenge.section.solutions')}</h3>
+                        {item.referenceSolutions.map(renderSolution)}
+                    </section>
+                )}
+
+                <button
+                    type="button"
+                    className="chl-btn chl-btn-primary chl-btn-wide"
+                    onClick={() => openChallenge(item.id)}
+                >
+                    {t('challenge.retry')}
+                </button>
+            </div>
+        );
+    };
+
+    return (
+        <aside className="chl" style={{ width }}>
+            <ResizeHandle panel="palette" side="right" label={t('resize.palette')} />
+
+            <div className="chl-header">
+                {challenge && (
+                    <button
+                        type="button"
+                        className="chl-back"
+                        onClick={closeChallenge}
+                        title={t('challenge.backToCatalog')}
+                        aria-label={t('challenge.backToCatalog')}
+                    >
+                        <Icon name="arrow_back" size="small" />
+                    </button>
+                )}
+                <span className="chl-title" title={challenge ? localized(challenge.title) : undefined}>
+                    {challenge ? localized(challenge.title) : t('challenge.title')}
+                </span>
+                {!challenge && <span className="chl-count">{CHALLENGES.length}</span>}
+                {status === 'running' && (
+                    <span className="chl-running">
+                        <span className="chl-running-dot" />
+                    </span>
+                )}
+            </div>
+
+            {!challenge && renderCatalog()}
+            {challenge && verdict === null && renderActive(challenge)}
+            {challenge && verdict !== null && renderReport(challenge)}
+        </aside>
+    );
+}
