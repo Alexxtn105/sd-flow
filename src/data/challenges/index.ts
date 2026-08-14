@@ -1,5 +1,7 @@
 import type { Challenge } from '../../engine/challenges/types';
+import { flashSale } from './flashSale';
 import { imageResize } from './imageResize';
+import { multiRegion } from './multiRegion';
 import { notifications } from './notifications';
 import { pastebin } from './pastebin';
 import { rateLimiter } from './rateLimiter';
@@ -7,6 +9,7 @@ import { shopCatalog } from './shopCatalog';
 import { staticSite } from './staticSite';
 import { twitterFeed } from './twitterFeed';
 import { urlShortener } from './urlShortener';
+import { videoHosting } from './videoHosting';
 
 export const CHALLENGES: Challenge[] = [
     staticSite,
@@ -17,6 +20,9 @@ export const CHALLENGES: Challenge[] = [
     twitterFeed,
     notifications,
     shopCatalog,
+    videoHosting,
+    flashSale,
+    multiRegion,
 ];
 
 export function challengeById(id: string): Challenge | undefined {
