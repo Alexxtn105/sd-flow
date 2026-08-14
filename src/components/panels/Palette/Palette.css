@@ -253,6 +253,20 @@
     border-color: var(--panel-border);
 }
 
+.pal-block-locked,
+.pal-block-locked:hover,
+.pal-block-locked:active {
+    opacity: 0.35;
+    cursor: not-allowed;
+    background: transparent;
+    border-color: transparent;
+}
+
+.pal-block-lock {
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
 .pal-block:active,
 .pal-block.dragging {
     cursor: grabbing;

@@ -59,7 +59,9 @@ export default function ChallengePanel() {
     const { t, i18n } = useTranslation(['common', 'params', 'blocks', 'groups']);
     const language = pickLanguage(i18n.language);
 
-    const width = useUiStore((state) => state.panels.palette);
+    const width = useUiStore((state) => state.panels.challenge);
+    const collapsed = useUiStore((state) => state.challengeCollapsed);
+    const togglePanel = useUiStore((state) => state.toggleChallengePanel);
     const setSelection = useUiStore((state) => state.setSelection);
 
     const activeId = useChallengeStore((state) => state.activeId);
@@ -583,9 +585,35 @@ export default function ChallengePanel() {
         );
     };
 
+    const title = challenge ? localized(challenge.title) : t('challenge.title');
+
+    if (collapsed) {
+        return (
+            <aside className="chl chl-collapsed">
+                <div className="chl-header">
+                    <button
+                        type="button"
+                        className="chl-collapse-btn"
+                        onClick={togglePanel}
+                        title={t('challenge.expandPanel')}
+                        aria-label={t('challenge.expandPanel')}
+                    >
+                        <Icon name="chevron_right" size="small" />
+                    </button>
+                </div>
+
+                <button type="button" className="chl-rail" onClick={togglePanel} title={title}>
+                    <Icon name="assignment" size="small" />
+                    <span className="chl-rail-title">{title}</span>
+                    {status === 'running' && <span className="chl-running-dot" />}
+                </button>
+            </aside>
+        );
+    }
+
     return (
         <aside className="chl" style={{ width }}>
-            <ResizeHandle panel="palette" side="right" label={t('resize.palette')} />
+            <ResizeHandle panel="challenge" side="right" label={t('resize.challenge')} />
 
             <div className="chl-header">
                 {challenge && (
@@ -599,8 +627,8 @@ export default function ChallengePanel() {
                         <Icon name="arrow_back" size="small" />
                     </button>
                 )}
-                <span className="chl-title" title={challenge ? localized(challenge.title) : undefined}>
-                    {challenge ? localized(challenge.title) : t('challenge.title')}
+                <span className="chl-title" title={title}>
+                    {title}
                 </span>
                 {!challenge && <span className="chl-count">{CHALLENGES.length}</span>}
                 {status === 'running' && (
@@ -608,6 +636,15 @@ export default function ChallengePanel() {
                         <span className="chl-running-dot" />
                     </span>
                 )}
+                <button
+                    type="button"
+                    className="chl-collapse-btn"
+                    onClick={togglePanel}
+                    title={t('challenge.collapsePanel')}
+                    aria-label={t('challenge.collapsePanel')}
+                >
+                    <Icon name="chevron_left" size="small" />
+                </button>
             </div>
 
             {!challenge && renderCatalog()}

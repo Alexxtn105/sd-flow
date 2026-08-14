@@ -4,7 +4,9 @@ import Icon from '../../common/Icons/Icon';
 import ResizeHandle from '../../common/ResizeHandle/ResizeHandle';
 import registry from '../../../engine/ComponentRegistry';
 import type { ComponentDefinition } from '../../../engine/types/component';
+import { challengeById } from '../../../data/challenges';
 import { useTouchContext } from '../../../contexts/TouchContext';
+import { useChallengeStore } from '../../../store/challengeStore';
 import { useUiStore } from '../../../store/uiStore';
 import TrafficLegend from './TrafficLegend';
 import './Palette.css';
@@ -18,6 +20,7 @@ export default function Palette() {
     const width = useUiStore((state) => state.panels.palette);
     const togglePalette = useUiStore((state) => state.togglePalette);
     const requestAdd = useUiStore((state) => state.requestAdd);
+    const activeChallengeId = useChallengeStore((state) => state.activeId);
 
     const [query, setQuery] = useState('');
     const [legendOpen, setLegendOpen] = useState(false);
@@ -38,6 +41,28 @@ export default function Palette() {
     }, [legendOpen]);
 
     const blockName = useCallback((id: string) => t(id, { ns: 'blocks', defaultValue: id }), [t]);
+
+    const restriction = useMemo(() => {
+        const challenge = activeChallengeId === null ? undefined : challengeById(activeChallengeId);
+        if (!challenge) return null;
+
+        const { allowedGroups, forbiddenTypes } = challenge.constraints;
+        if (!allowedGroups && !forbiddenTypes) return null;
+
+        return {
+            groups: allowedGroups ? new Set(allowedGroups) : null,
+            types: new Set(forbiddenTypes ?? []),
+        };
+    }, [activeChallengeId]);
+
+    const isLocked = useCallback(
+        (component: ComponentDefinition) => {
+            if (!restriction) return false;
+            if (restriction.types.has(component.id)) return true;
+            return restriction.groups !== null && !restriction.groups.has(component.group);
+        },
+        [restriction],
+    );
 
     const groups = useMemo(
         () =>
@@ -87,23 +112,28 @@ export default function Palette() {
 
     const renderItem = (component: ComponentDefinition) => {
         const name = blockName(component.id);
+        const locked = isLocked(component);
+        const draggable = !isTouch && !locked;
+
         return (
             <div
                 key={component.id}
-                className={`pal-block pal-shape-${component.shape}`}
-                draggable={!isTouch}
-                onDragStart={isTouch ? undefined : (event) => onDragStart(event, component.id)}
-                onDragEnd={isTouch ? undefined : onDragEnd}
-                onClick={isTouch ? () => requestAdd(component.id) : undefined}
-                title={name}
+                className={`pal-block pal-shape-${component.shape} ${locked ? 'pal-block-locked' : ''}`}
+                draggable={draggable}
+                onDragStart={draggable ? (event) => onDragStart(event, component.id) : undefined}
+                onDragEnd={draggable ? onDragEnd : undefined}
+                onClick={isTouch && !locked ? () => requestAdd(component.id) : undefined}
+                title={locked ? `${name} — ${t('palette.blockLocked')}` : name}
                 role="button"
                 tabIndex={0}
-                aria-label={`${t('palette.addBlock')}: ${name}`}
+                aria-disabled={locked}
+                aria-label={locked ? `${name}: ${t('palette.blockLocked')}` : `${t('palette.addBlock')}: ${name}`}
             >
                 <div className="pal-block-icon">
                     <Icon name={component.icon} size="medium" />
                 </div>
                 <span className="pal-block-name">{name}</span>
+                {locked && <Icon name="lock" size="small" className="pal-block-lock" />}
             </div>
         );
     };
@@ -214,21 +244,31 @@ export default function Palette() {
                 <div className="pal-content pal-content-icons">
                     {groups
                         .flatMap((group) => group.components)
-                        .map((component) => (
-                            <div
-                                key={component.id}
-                                className="pal-block-mini"
-                                draggable={!isTouch}
-                                onDragStart={isTouch ? undefined : (event) => onDragStart(event, component.id)}
-                                onDragEnd={isTouch ? undefined : onDragEnd}
-                                onClick={isTouch ? () => requestAdd(component.id) : undefined}
-                                title={blockName(component.id)}
-                                role="button"
-                                tabIndex={0}
-                            >
-                                <Icon name={component.icon} size="medium" />
-                            </div>
-                        ))}
+                        .map((component) => {
+                            const locked = isLocked(component);
+                            const draggable = !isTouch && !locked;
+
+                            return (
+                                <div
+                                    key={component.id}
+                                    className={`pal-block-mini ${locked ? 'pal-block-locked' : ''}`}
+                                    draggable={draggable}
+                                    onDragStart={draggable ? (event) => onDragStart(event, component.id) : undefined}
+                                    onDragEnd={draggable ? onDragEnd : undefined}
+                                    onClick={isTouch && !locked ? () => requestAdd(component.id) : undefined}
+                                    title={
+                                        locked
+                                            ? `${blockName(component.id)} — ${t('palette.blockLocked')}`
+                                            : blockName(component.id)
+                                    }
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-disabled={locked}
+                                >
+                                    <Icon name={component.icon} size="medium" />
+                                </div>
+                            );
+                        })}
                 </div>
             )}
 

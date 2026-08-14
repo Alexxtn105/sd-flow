@@ -10,6 +10,7 @@ export type PanelSizes = Record<PanelKey, number>;
 export interface UiState {
     mode: AppMode;
     paletteCollapsed: boolean;
+    challengeCollapsed: boolean;
     inspectorOpen: boolean;
     xray: boolean;
     panels: PanelSizes;
@@ -18,6 +19,7 @@ export interface UiState {
     pendingAdd: string | null;
     setMode: (mode: AppMode) => void;
     togglePalette: () => void;
+    toggleChallengePanel: () => void;
     toggleInspector: () => void;
     toggleXray: () => void;
     setPanelSize: (key: PanelKey, value: number) => void;
@@ -68,6 +70,7 @@ function sameIds(left: string[], right: string[]): boolean {
 export const useUiStore = create<UiState>((set, get) => ({
     mode: 'sandbox',
     paletteCollapsed: false,
+    challengeCollapsed: false,
     inspectorOpen: true,
     xray: false,
     panels: loadPanels(),
@@ -77,6 +80,7 @@ export const useUiStore = create<UiState>((set, get) => ({
 
     setMode: (mode) => set({ mode }),
     togglePalette: () => set((state) => ({ paletteCollapsed: !state.paletteCollapsed })),
+    toggleChallengePanel: () => set((state) => ({ challengeCollapsed: !state.challengeCollapsed })),
     toggleInspector: () => set((state) => ({ inspectorOpen: !state.inspectorOpen })),
     toggleXray: () => set((state) => ({ xray: !state.xray })),
 

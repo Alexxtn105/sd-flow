@@ -170,7 +170,15 @@ export default function App() {
                 />
 
                 <div className="app-content">
-                    <ErrorBoundary>{mode === 'challenges' ? <ChallengePanel /> : <Palette />}</ErrorBoundary>
+                    <ErrorBoundary>
+                        <Palette />
+                    </ErrorBoundary>
+
+                    {mode === 'challenges' && (
+                        <ErrorBoundary>
+                            <ChallengePanel />
+                        </ErrorBoundary>
+                    )}
 
                     <ErrorBoundary>
                         <SdEditor />

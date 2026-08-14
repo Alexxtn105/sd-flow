@@ -35,6 +35,8 @@
         "start": "Start",
         "startHint": "Load the starting scheme of the challenge and begin",
         "backToCatalog": "Back to the challenge catalog",
+        "collapsePanel": "Collapse the challenge panel",
+        "expandPanel": "Expand the challenge panel",
         "submit": "Submit",
         "submitting": "Grading…",
         "retry": "Keep working",
@@ -228,6 +230,7 @@
         "collapseAllGroups": "Collapse all groups",
         "nothingFound": "Nothing found",
         "addBlock": "Add block",
+        "blockLocked": "the challenge does not allow this block",
         "blocksGroup": "Blocks of group {{name}}",
         "legend": "Edges",
         "legendTitle": "Traffic types"
@@ -268,6 +271,7 @@
     },
     "resize": {
         "palette": "Palette width — drag to resize, double-click to reset",
+        "challenge": "Challenge panel width — drag to resize, double-click to reset",
         "inspector": "Inspector width — drag to resize, double-click to reset",
         "dashboard": "Dashboard height — drag to resize, double-click to reset"
     },

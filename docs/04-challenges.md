@@ -528,6 +528,7 @@ requirements:
 | Эталонные решения (§8) | `Challenge.referenceSolutions`, стоимость лучшего — точка отсчёта оси «Экономика» |
 | Каталог (§9) | `src/data/challenges/` |
 | Живая панель требований (§3.2) | `evaluateLive` + панель заданий |
+| Ограничения задания в палитре | `Palette.tsx`: блоки вне `allowedGroups` и типы из `forbiddenTypes` заблокированы |
 | Прогресс | `src/store/challengeStore.ts`, localStorage `sd-challenges` |
 
 ### 11.2. Отклонения от документа
