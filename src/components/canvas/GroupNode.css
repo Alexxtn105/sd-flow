@@ -1,0 +1,67 @@
+.sd-group {
+    width: 100%;
+    height: 100%;
+    border-radius: var(--radius-xl);
+    border: 1.5px dashed var(--group-region-border);
+    background: var(--group-region-bg);
+    position: relative;
+    transition: border-color var(--transition-fast);
+}
+
+.sd-group-az {
+    border-color: var(--group-az-border);
+    background: var(--group-az-bg);
+    border-style: dotted;
+}
+
+.sd-group.selected {
+    border-style: solid;
+}
+
+.sd-group-label {
+    position: absolute;
+    top: -11px;
+    left: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    border-radius: 999px;
+    color: var(--text-secondary);
+    box-shadow: var(--shadow-sm);
+    pointer-events: none;
+}
+
+.sd-group-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.3px;
+}
+
+.sd-group-kind {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-tertiary);
+}
+
+.sd-group-resize-line {
+    border-color: var(--accent-primary) !important;
+}
+
+.sd-group-resize-handle {
+    background: var(--accent-primary) !important;
+    border-color: var(--bg-secondary) !important;
+    width: 8px !important;
+    height: 8px !important;
+    border-radius: 2px !important;
+}
+
+.dark-theme .sd-group-label {
+    background: var(--bg-tertiary);
+    border-color: var(--border-secondary);
+}

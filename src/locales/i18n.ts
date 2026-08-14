@@ -1,0 +1,44 @@
+import i18n from 'i18next';
+import { initReactI18next } from 'react-i18next';
+import LanguageDetector from 'i18next-browser-languagedetector';
+
+import ruCommon from './ru/common.json';
+import ruBlocks from './ru/blocks.json';
+import ruGroups from './ru/groups.json';
+import ruParams from './ru/params.json';
+
+import enCommon from './en/common.json';
+import enBlocks from './en/blocks.json';
+import enGroups from './en/groups.json';
+import enParams from './en/params.json';
+
+export interface LanguageOption {
+    code: string;
+    label: string;
+}
+
+export const LANGUAGES: LanguageOption[] = [
+    { code: 'ru', label: 'Русский' },
+    { code: 'en', label: 'English' },
+];
+
+i18n.use(LanguageDetector)
+    .use(initReactI18next)
+    .init({
+        resources: {
+            ru: { common: ruCommon, blocks: ruBlocks, groups: ruGroups, params: ruParams },
+            en: { common: enCommon, blocks: enBlocks, groups: enGroups, params: enParams },
+        },
+        defaultNS: 'common',
+        fallbackLng: 'ru',
+        supportedLngs: LANGUAGES.map((language) => language.code),
+        nonExplicitSupportedLngs: true,
+        interpolation: { escapeValue: false },
+        detection: {
+            order: ['localStorage'],
+            lookupLocalStorage: 'sd-flow-language',
+            caches: ['localStorage'],
+        },
+    });
+
+export default i18n;

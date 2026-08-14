@@ -1,0 +1,21 @@
+.error-boundary {
+    padding: 24px 16px;
+    text-align: center;
+    color: var(--panel-text-4);
+    font-size: 12px;
+}
+
+.error-boundary-btn {
+    margin-top: 10px;
+    padding: 5px 14px;
+    border: 1px solid var(--panel-border);
+    border-radius: 3px;
+    background: var(--panel-subtle-bg);
+    color: var(--panel-text-2);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.error-boundary-btn:hover {
+    background: var(--panel-hover-bg);
+}

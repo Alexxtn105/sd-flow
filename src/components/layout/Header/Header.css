@@ -1,0 +1,259 @@
+.hdr {
+    display: flex;
+    align-items: center;
+    height: 42px;
+    padding: 0 12px;
+    background: var(--panel-bg);
+    border-bottom: 1px solid var(--panel-border);
+    flex-shrink: 0;
+    z-index: 20;
+    gap: 14px;
+    user-select: none;
+}
+
+.hdr-brand {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.hdr-logo {
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--panel-accent);
+    letter-spacing: 1.5px;
+}
+
+.hdr-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--panel-text-4);
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+}
+
+.hdr-modes {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    background: var(--panel-subtle-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.hdr-mode {
+    height: 22px;
+    padding: 0 10px;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--panel-text-4);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+    transition: all 120ms ease;
+    white-space: nowrap;
+}
+
+.hdr-mode:hover:not(:disabled) {
+    background: var(--panel-hover-bg);
+    color: var(--panel-text-2);
+}
+
+.hdr-mode.active {
+    background: var(--panel-accent-soft);
+    color: var(--panel-accent);
+}
+
+.hdr-mode:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.hdr-center {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.hdr-scheme {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 12px;
+    background: var(--panel-subtle-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 3px;
+    max-width: 280px;
+    min-width: 0;
+}
+
+.hdr-scheme-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--panel-text-6);
+    flex-shrink: 0;
+}
+
+.hdr-scheme-unsaved .hdr-scheme-dot {
+    background: var(--panel-accent-orange);
+    box-shadow: 0 0 4px rgba(255, 140, 0, 0.5);
+}
+
+.hdr-scheme-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--panel-text-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hdr-scheme-badge {
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--panel-accent-orange);
+    padding: 1px 5px;
+    background: rgba(255, 140, 0, 0.1);
+    border: 1px solid rgba(255, 140, 0, 0.2);
+    border-radius: 2px;
+    white-space: nowrap;
+}
+
+.hdr-actions,
+.hdr-right {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 0;
+}
+
+.hdr-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--panel-text-4);
+    cursor: pointer;
+    transition: all 120ms ease;
+    text-decoration: none;
+}
+
+.hdr-btn:hover:not(:disabled) {
+    background: var(--panel-hover-bg);
+    border-color: var(--panel-border);
+    color: var(--panel-accent);
+}
+
+.hdr-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+.hdr-divider {
+    width: 1px;
+    height: 16px;
+    background: var(--panel-border);
+    margin: 0 3px;
+}
+
+.hdr-lang {
+    position: relative;
+}
+
+.hdr-lang-btn {
+    height: 26px;
+    padding: 0 8px;
+    border: 1px solid var(--panel-border);
+    border-radius: 3px;
+    background: var(--panel-subtle-bg);
+    color: var(--panel-text-4);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 120ms ease;
+}
+
+.hdr-lang-btn:hover,
+.hdr-lang-btn.active {
+    background: var(--panel-hover-bg);
+    color: var(--panel-text-2);
+    border-color: var(--panel-border-hover);
+}
+
+.hdr-lang-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    padding: 4px;
+    background: var(--panel-dropdown-bg);
+    border: 1px solid var(--panel-dropdown-border);
+    border-radius: 4px;
+    box-shadow: var(--shadow-lg);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 120px;
+}
+
+.hdr-lang-option {
+    padding: 5px 10px;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--panel-text-3);
+    font-size: 11px;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.hdr-lang-option:hover {
+    background: var(--panel-hover-bg);
+}
+
+.hdr-lang-option.active {
+    background: var(--panel-accent-soft);
+    color: var(--panel-accent);
+    font-weight: 600;
+}
+
+@media (max-width: 1100px) {
+    .hdr-title {
+        display: none;
+    }
+}
+
+@media (max-width: 860px) {
+    .hdr-modes,
+    .hdr-scheme-badge {
+        display: none;
+    }
+}
+
+@media (max-width: 640px) {
+    .hdr {
+        gap: 8px;
+        padding: 0 6px;
+    }
+
+    .hdr-actions .hdr-divider,
+    .hdr-actions .hdr-btn:nth-child(n + 5) {
+        display: none;
+    }
+}

@@ -1,0 +1,16 @@
+{
+    "clients": "Clients",
+    "edge": "Edge & network",
+    "compute": "Compute",
+    "sql": "Relational databases",
+    "nosql": "NoSQL",
+    "search": "Search",
+    "olap": "Analytics & OLAP",
+    "cache": "Caches",
+    "messaging": "Queues & brokers",
+    "storage": "Storage",
+    "platform": "Platform services",
+    "observability": "Observability",
+    "topology": "Topology",
+    "probes": "Probes"
+}

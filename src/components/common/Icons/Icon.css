@@ -1,0 +1,32 @@
+.material-icons,
+.material-icons-outlined {
+    font-size: 24px;
+    user-select: none;
+}
+
+.sd-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.icon-small {
+    font-size: 18px !important;
+    width: 18px;
+    height: 18px;
+}
+
+.icon-medium {
+    font-size: 22px !important;
+    width: 22px;
+    height: 22px;
+}
+
+.icon-large {
+    font-size: 32px !important;
+    width: 32px;
+    height: 32px;
+}

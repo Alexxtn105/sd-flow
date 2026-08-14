@@ -1,0 +1,80 @@
+.react-flow {
+    background: var(--canvas-bg);
+}
+
+.react-flow__edge-path.sd-edge-path {
+    transition: stroke-width var(--transition-fast);
+}
+
+.react-flow__edge:hover .sd-edge-path {
+    stroke-width: 3.5px;
+    filter: brightness(1.15);
+}
+
+.react-flow__edge.selected .sd-edge-path {
+    filter: drop-shadow(0 0 3px currentColor);
+}
+
+.react-flow__connectionline path {
+    stroke: var(--accent-primary);
+    stroke-width: 2;
+    stroke-dasharray: 4 4;
+}
+
+.react-flow__handle-connecting {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-primary) 25%, transparent);
+}
+
+.react-flow__handle-valid {
+    background: var(--util-ok) !important;
+    border-color: var(--util-ok) !important;
+}
+
+.react-flow__node-group {
+    z-index: -1 !important;
+}
+
+.react-flow__controls {
+    box-shadow: var(--shadow-md);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.react-flow__controls-button {
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-primary);
+    fill: var(--text-secondary);
+}
+
+.react-flow__controls-button:hover {
+    background: var(--bg-tertiary);
+    fill: var(--accent-primary);
+}
+
+.sd-controls-dark .react-flow__controls-button {
+    background: var(--bg-tertiary);
+    border-bottom-color: var(--border-secondary);
+    fill: var(--text-secondary);
+}
+
+.sd-controls-dark .react-flow__controls-button:hover {
+    background: var(--bg-secondary);
+    fill: var(--accent-primary);
+}
+
+.sd-minimap {
+    background: var(--bg-secondary) !important;
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+}
+
+.dark-theme .sd-minimap {
+    background: var(--bg-tertiary) !important;
+    border-color: var(--border-secondary);
+}
+
+@media (max-width: 768px) {
+    .react-flow__minimap {
+        display: none;
+    }
+}

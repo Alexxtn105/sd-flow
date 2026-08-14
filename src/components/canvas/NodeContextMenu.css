@@ -1,0 +1,57 @@
+.ctx-menu {
+    position: absolute;
+    z-index: 50;
+    min-width: 168px;
+    padding: 4px;
+    background: var(--panel-dropdown-bg);
+    border: 1px solid var(--panel-dropdown-border);
+    border-radius: 4px;
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    animation: ctx-appear 110ms ease-out;
+}
+
+.ctx-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--panel-text-2);
+    font-size: 11.5px;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    transition: background 100ms ease;
+}
+
+.ctx-item:hover {
+    background: var(--panel-hover-bg);
+}
+
+.ctx-item-danger:hover {
+    background: rgba(239, 68, 68, 0.12);
+    color: var(--danger);
+}
+
+@keyframes ctx-appear {
+    from {
+        opacity: 0;
+        transform: scale(0.96);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@media (pointer: coarse) {
+    .ctx-item {
+        padding: 11px 12px;
+        font-size: 13px;
+    }
+}

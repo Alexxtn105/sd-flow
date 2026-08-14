@@ -1,0 +1,155 @@
+{
+    "app": {
+        "name": "SysDesign Flow",
+        "logo": "SD",
+        "tagline": "A trainer for designing high-load systems"
+    },
+    "header": {
+        "unnamed": "Untitled",
+        "modified": "unsaved",
+        "newScheme": "New scheme",
+        "save": "Save",
+        "saveAs": "Save as…",
+        "load": "Open",
+        "export": "Export to file",
+        "import": "Import from file",
+        "undo": "Undo",
+        "redo": "Redo",
+        "lightTheme": "Light theme",
+        "darkTheme": "Dark theme",
+        "xray": "Edge x-ray",
+        "source": "Source code"
+    },
+    "mode": {
+        "sandbox": "Sandbox",
+        "challenges": "Challenges",
+        "challengesSoon": "Challenge mode arrives in phase 2"
+    },
+    "palette": {
+        "title": "Blocks",
+        "search": "Search a block…",
+        "clearSearch": "Clear search",
+        "expand": "Expand",
+        "collapse": "Collapse",
+        "expandPanel": "Expand panel",
+        "collapsePanel": "Collapse panel",
+        "expandAllGroups": "Expand all groups",
+        "collapseAllGroups": "Collapse all groups",
+        "nothingFound": "Nothing found",
+        "addBlock": "Add block",
+        "blocksGroup": "Blocks of group {{name}}",
+        "legend": "Edges",
+        "legendTitle": "Traffic types"
+    },
+    "legend": {
+        "read": "Read",
+        "write": "Write",
+        "replication": "Replication",
+        "event": "Event / async",
+        "stream": "Stream",
+        "batch": "Batch",
+        "thickness": "Line width is log-scaled RPS"
+    },
+    "canvas": {
+        "empty": "Drag a block from the palette to start",
+        "emptyHint": "Clients on the left, storages on the right — like a whiteboard",
+        "delete": "Delete",
+        "duplicate": "Duplicate",
+        "settings": "Parameters",
+        "detachFromGroup": "Move out of group"
+    },
+    "inspector": {
+        "title": "Inspector",
+        "empty": "Select a block or an edge",
+        "multiple": "Selected objects: {{count}}",
+        "label": "Label",
+        "labelPlaceholder": "custom block name",
+        "type": "Type",
+        "ports": "Ports",
+        "portsIn": "In",
+        "portsOut": "Out",
+        "edge": "Edge",
+        "edgeKind": "Kind",
+        "calls": "Call profiles",
+        "policy": "Policy",
+        "noParams": "This block has no editable parameters",
+        "modelPending": "The load model is wired up in phase 1"
+    },
+    "section": {
+        "scale": "Scale",
+        "performance": "Performance",
+        "capacity": "Capacity",
+        "behaviour": "Behaviour",
+        "reliability": "Reliability",
+        "data": "Data",
+        "consistency": "Consistency",
+        "topology": "Topology",
+        "cost": "Cost"
+    },
+    "edgeKind": {
+        "sync": "Synchronous",
+        "async": "Asynchronous",
+        "replication": "Replication",
+        "stream": "Stream",
+        "cdc": "CDC",
+        "batch": "Batch"
+    },
+    "op": {
+        "read": "Read",
+        "write": "Write",
+        "delete": "Delete",
+        "scan": "Scan",
+        "publish": "Publish",
+        "consume": "Consume",
+        "transfer": "Transfer"
+    },
+    "policy": {
+        "timeoutMs": "Timeout, ms",
+        "retries": "Retries",
+        "circuitBreaker": "Circuit breaker",
+        "idempotent": "Idempotent"
+    },
+    "footer": {
+        "nodes": "blocks",
+        "edges": "edges",
+        "groups": "groups",
+        "phase": "Phase 0 — editor without the model",
+        "storage": "used in storage"
+    },
+    "dialog": {
+        "cancel": "Cancel",
+        "confirm": "Confirm",
+        "close": "Close",
+        "save": {
+            "title": "Save scheme",
+            "name": "Name",
+            "placeholder": "e.g. YouTube at 10M DAU",
+            "action": "Save",
+            "nameRequired": "Enter a name",
+            "failed": "Save failed: storage unavailable or full"
+        },
+        "load": {
+            "title": "Open scheme",
+            "empty": "No saved schemes yet",
+            "action": "Open",
+            "remove": "Delete",
+            "nodes": "blocks: {{count}}"
+        },
+        "confirmNew": {
+            "title": "New scheme",
+            "message": "The current scheme is unsaved. Create a new one and lose the changes?"
+        },
+        "confirmRemove": {
+            "title": "Delete scheme",
+            "message": "Scheme \"{{name}}\" will be deleted permanently."
+        },
+        "confirmLoad": {
+            "title": "Open scheme",
+            "message": "The current scheme is unsaved. Open another one and lose the changes?"
+        }
+    },
+    "errorBoundary": {
+        "message": "Something went wrong in this part of the interface.",
+        "retry": "Try again"
+    }
+}

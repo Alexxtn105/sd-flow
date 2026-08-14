@@ -1,0 +1,42 @@
+export type {
+    CapacityResult,
+    ComponentDefinition,
+    ComponentModel,
+    ComponentParams,
+    ComponentShape,
+    ComponentTypeId,
+    CostBreakdown,
+    Explain,
+    GroupId,
+    GroupWithComponents,
+    NodeContext,
+    NumericRange,
+    ParamField,
+    ParamSchema,
+    ParamSection,
+    ParamValue,
+    PortDefinition,
+    PortRole,
+    PortSpec,
+    Protocol,
+    ResourceLimit,
+    Wave,
+} from './component';
+
+export type {
+    CallOperation,
+    CallProfile,
+    Consistency,
+    EdgeKind,
+    EdgePolicy,
+    Position,
+    SchemeEdge,
+    SchemeMeta,
+    SchemeNode,
+    SchemeSettings,
+    SchemeV1,
+    SchemeViewport,
+    Size,
+} from './scheme';
+
+export { DEFAULT_POLICY, DEFAULT_SETTINGS, MODEL_VERSION } from './scheme';

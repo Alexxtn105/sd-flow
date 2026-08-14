@@ -44,14 +44,17 @@ sd-flow/
 │   │   ├── scenarios/                 ← baseline, peak, az-failure, …
 │   │   ├── rules/                     ← RuleEngine: антипаттерны и best practices
 │   │   ├── challenges/                ← движок предикатов, рубрика, вердикт
-│   │   ├── components/                ← ОПРЕДЕЛЕНИЯ БЛОКОВ по группам
-│   │   │   ├── _shared/               ← общие хелперы ёмкости и стоимости
-│   │   │   ├── clients/  edge/  compute/  sql/  nosql/  search/
-│   │   │   ├── olap/  cache/  messaging/  storage/  platform/
-│   │   │   └── observability/  topology/  probes/
+│   │   ├── components/                ← ОПРЕДЕЛЕНИЯ БЛОКОВ, один модуль на группу
+│   │   │   ├── _shared/params.ts      ← хелперы num/bool/choice/text/defineComponent
+│   │   │   ├── clients.ts  edge.ts  compute.ts  sql.ts  nosql.ts  search.ts
+│   │   │   ├── olap.ts  cache.ts  messaging.ts  storage.ts  platform.ts
+│   │   │   └── observability.ts  topology.ts  probes.ts
 │   │   ├── types/                     ← Scheme, Node, Edge, Flow, Metrics, Findings
+│   │   ├── ports.ts                   ← совместимость портов по протоколам
+│   │   ├── edgeDefaults.ts            ← профили вызова по умолчанию для новой связи
+│   │   ├── ids.ts                     ← счётчик идентификаторов без Math.random
 │   │   ├── rng.ts                     ← xoshiro128**
-│   │   └── initComponents.ts          ← регистрация групп, опций и всех блоков
+│   │   └── initComponents.ts          ← регистрация групп и всех блоков
 │   ├── worker/
 │   │   ├── simulation.worker.ts
 │   │   └── workerClient.ts            ← Comlink-обёртка, отмена, генерации
@@ -100,18 +103,23 @@ sd-flow/
 export interface ComponentDefinition<P extends ComponentParams = ComponentParams> {
   id: ComponentTypeId;
   group: GroupId;
+  shape: 'node' | 'container' | 'policy' | 'probe' | 'link';
+  wave: 'mvp' | 'v1' | 'v2';
   icon: string;
   ports: PortSpec;
   defaultParams: P;
   paramSchema: ParamSchema<P>;
-  realisticRanges: Partial<Record<keyof P, NumericRange>>;
+  helpId: string;
+  model?: ComponentModel<P>;
+}
+
+export interface ComponentModel<P extends ComponentParams = ComponentParams> {
   capacity(ctx: NodeContext<P>): CapacityResult;
   derive?(ctx: NodeContext<P>): DerivedMetrics;
   absorb?(ctx: NodeContext<P>, edge: CompiledEdge): number;
   cost(ctx: NodeContext<P>): CostBreakdown;
   availability?(ctx: NodeContext<P>): AvailabilitySpec;
   lint?(ctx: NodeContext<P>): Finding[];
-  helpId: string;
 }
 
 export interface CapacityResult {
@@ -134,7 +142,9 @@ export interface Explain {
 const postgres: ComponentDefinition<PostgresParams> = {
   id: 'postgres',
   group: 'sql',
-  icon: 'sd-postgres',
+  shape: 'node',
+  wave: 'mvp',
+  icon: 'sd-sql',
   ports: {
     in: [{ id: 'sql', protocols: ['sql'], role: 'serve' }],
     out: [{ id: 'replication', protocols: ['sql'], role: 'replicate' },
@@ -146,24 +156,48 @@ const postgres: ComponentDefinition<PostgresParams> = {
     iopsPerRead: 1, iopsPerWrite: 4, readReplicas: 0, replicationMode: 'async',
     rowSizeBytes: 400, indexOverhead: 0.4, bufferPoolGb: 48, storageGb: 1000,
   },
-  realisticRanges: { maxConnections: [10, 5000], readServiceMs: [0.1, 500] },
-  capacity: (ctx) => kernel(ctx, [
-    limitConnections(ctx), limitIops(ctx), limitCpu(ctx), limitNetwork(ctx),
-  ]),
-  derive: (ctx) => ({
-    storageGrowthGbDay: storageGrowth(ctx),
-    replicaLagMs: replicaLag(ctx),
-    bufferHitRatio: bufferPoolHit(ctx),
-  }),
-  cost: (ctx) => instanceCost(ctx) + storageCost(ctx) + iopsCost(ctx) + backupCost(ctx),
-  availability: (ctx) => ({ base: 0.9995, failoverSec: ctx.params.multiAz ? 60 : 300 }),
-  lint: (ctx) => [ruleNoPooler(ctx), ruleRf1(ctx), ruleBlobInSql(ctx)],
+  paramSchema: {
+    maxConnections: num('capacity', { min: 10, max: 5000 }),
+    readServiceMs: num('performance', { unitKey: 'ms', min: 0.1, max: 500 }),
+    connectionPooler: choice('capacity', ['none', 'pgbouncer', 'rds-proxy']),
+    // …по одной записи на каждый ключ defaultParams
+  },
   helpId: 'postgres',
+  model: {
+    capacity: (ctx) => kernel(ctx, [
+      limitConnections(ctx), limitIops(ctx), limitCpu(ctx), limitNetwork(ctx),
+    ]),
+    derive: (ctx) => ({
+      storageGrowthGbDay: storageGrowth(ctx),
+      replicaLagMs: replicaLag(ctx),
+      bufferHitRatio: bufferPoolHit(ctx),
+    }),
+    cost: (ctx) => instanceCost(ctx) + storageCost(ctx) + iopsCost(ctx) + backupCost(ctx),
+    availability: (ctx) => ({ base: 0.9995, failoverSec: ctx.params.multiAz ? 60 : 300 }),
+    lint: (ctx) => [ruleNoPooler(ctx), ruleRf1(ctx), ruleBlobInSql(ctx)],
+  },
 };
 ```
 
-Реестр повторяет поведение dsp-flow: `register()`, `registerGroup()`, `registerParamOptions()`,
-`freeze()` после `initComponents()`, запрет регистрации в рантайме.
+Реестр повторяет поведение dsp-flow: `register()`, `registerGroup()`, `freeze()` после
+`initComponents()`, запрет регистрации в рантайме.
+
+**Три отличия от dsp-flow, зафиксированные в фазе 0:**
+
+1. **Модель вынесена в необязательный слот `model`.** Декларативная часть блока (порты,
+   значения по умолчанию, схема параметров) не зависит от того, посчитан ли уже его capacity.
+   Это позволило описать весь каталог первой волны до появления солверов и не выдумывать
+   фиктивные формулы ради удовлетворения контракта.
+2. **`realisticRanges` слит с `paramSchema`.** Границы `min`/`max`/`realistic` живут прямо в
+   описании поля, иначе один и тот же диапазон приходится держать в двух местах.
+3. **`registerParamOptions()` не реализован.** Варианты enum лежат в самом `paramSchema`
+   (`choice('behaviour', [...])`), где они проверяются типами и относятся к конкретному блоку;
+   глобальный словарь опций по имени параметра давал бы ложное единство (`mode` у `redis` и
+   `mode` у `multi-region-policy` — разные множества).
+
+`register()` дополнительно проверяет, что множества ключей `defaultParams` и `paramSchema`
+совпадают один в один — это ловит опечатку в имени параметра при старте приложения, а не при
+первом открытии инспектора.
 
 ---
 
@@ -328,22 +362,40 @@ install → lint → typecheck → test → compile-challenges (YAML→JSON) →
 
 ## 12. План переиспользования кода из dsp-flow
 
-**Фаза 0 (скелет), порядок работ:**
+**Фаза 0 (скелет) — выполнена.** Что и как перенесено:
 
-1. Форкнуть каркас: `vite.config`, `eslint.config`, `tsconfig`, `.github/workflows/deploy.yml`,
-   `styles/`, `common/` (Dialog, ErrorBoundary, Icon), `contexts/`, `locales/i18n.js`,
-   `services/storageService`, хуки `useTheme`/`useAutoSave`/`useDialogManager`/`useSchemeStorage`.
-2. Перенести `Toolbar` и `Header`/`Footer`, переключив источник данных на заглушку `ComponentRegistry`.
-3. Перенести `DSPEditor` → `SdEditor`: канвас, drag&drop, контекстное меню, touch.
-4. Заменить `RealSignalEdge`/`ComplexSignalEdge` на `TrafficEdge` (пока без метрик).
-5. Ввести `ComponentRegistry` + 15 блоков-заглушек с `defaultParams` и портами.
-6. Поднять группы-контейнеры (parent-nodes React Flow) сразу в фазе 0 — Region/AZ нужны в MVP
-   (ADR-11), а ретрофитить группировку в готовый канвас заметно дороже, чем заложить её сразу.
+| Из dsp-flow | Стало в SysDesign Flow | Степень переноса |
+|---|---|---|
+| `vite.config`, `eslint.config`, `tsconfig`, `deploy.yml` | те же, `base: '/sd-flow/'`, всё на TypeScript | каркас |
+| `styles/variables.css` | + токены трафика (`--traffic-read/write/replication/event/stream/batch`), утилизации и групп | расширен |
+| `Dialog`, `ErrorBoundary`, `Icon` | те же, `DspIcons` → `SdIcons` (43 родовые иконки, без вендорских логотипов, ADR-10) | почти как есть |
+| `ThemeContext`, `TouchContext`, `useTheme` | как есть, переписаны на TS | как есть |
+| `locales/i18n.js` + неймспейсы | `i18n.ts`, языки ru/en, неймспейсы `common`/`blocks`/`groups`/`params` | как есть |
+| `storageService` | ключи `sd-*`, типизированный `SaveResult`, guard на отсутствие `localStorage` (нужен для тестов в Node) | переписан |
+| `Toolbar` | `Palette`: та же структура (поиск, свёртка групп, «свернуть всё», легенда внизу), источник данных — `ComponentRegistry` | структура целиком |
+| `Header`/`Footer` | + переключатель режимов, файловые действия, undo/redo; футер считает блоки/связи/группы | расширены |
+| `DSPEditor` | `SdEditor`: drag&drop, контекстное меню, MiniMap, вложение в контейнеры при drop | переписан |
+| `RealSignalEdge`/`ComplexSignalEdge` | `TrafficEdge`: 1–2 жилы по профилям вызова, цвет по операции, штрих по `kind`, прозрачность по доле | развитие приёма |
+| `BlockNode` | `SdNode` (+ `GroupNode` с `NodeResizer`, `ProbeNode`) | переписан |
+| `DSPEditorContext` (Context API) | `graphStore`/`schemeStore`/`uiStore` на Zustand (ADR-2) | заменён |
 
-После этого получается работающий редактор схем без модели — и уже можно строить движок.
+Отклонения от исходного плана: блоков описано не 15, а все **44** первой волны (см. PRD §12);
+`registerParamOptions` не реализован (см. §3).
 
 **Что НЕ переносим:** всё содержимое `engine/plugins/**` (DSP-алгоритмы), `visualization/**`
 (осциллограф/спектр/созвездие), `MicrophoneService`, `WavFileService`, Web Audio-слой.
+
+### 12.1. Что осталось на фазу 1 в уже написанном коде
+
+* `ComponentDefinition.model` не заполнен ни у одного блока — солверы из
+  [02-simulation.md](02-simulation.md) появятся вместе с воркером.
+* `TrafficEdge` кодирует долю профиля прозрачностью, но не кодирует RPS толщиной и не анимирует
+  поток: нет чисел. Формула `w = clamp(1 + 1.6·log10(rps), 1, 8)` из
+  [03-connections.md](03-connections.md) §5.1 включается вместе с движком.
+* Пробы (`probe-*`) ставятся на схему и хранятся, но окон измерителей ещё нет.
+* Undo/redo пишет в историю только структурные правки: перетаскивание и ресайз оформляются
+  транзакцией (`beginTransaction`/`commitTransaction`), а служебные изменения React Flow
+  (`select`, `dimensions`) не попадают в историю и не помечают схему изменённой.
 
 ---
 
