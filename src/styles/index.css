@@ -35,6 +35,12 @@ body.dialog-open {
     overflow: hidden !important;
 }
 
+select option,
+select optgroup {
+    background-color: var(--panel-dropdown-bg);
+    color: var(--panel-text-2);
+}
+
 ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
