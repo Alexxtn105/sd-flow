@@ -9,21 +9,22 @@ a year and what all of it costs.
 
 **[Open the editor →](https://alexxtn105.github.io/sd-flow/)**
 
-## Status: phase 3 done (v1.2)
+## Status: phase 4 done (v1.3)
 
-Behind us are the scheme editor (phase 0), the steady-state load model (phase 1) and the
-Challenges mode (phase 2). Phase 3 added the passage of time, probes, the second catalogue wave
-and ten new challenges. Version 1.1 closed the catalogue, taught the probes to draw, and added
-three more consistency anomalies, a pod ceiling for the cluster and a metric diff against the
-reference solutions. Version 1.2 unblocked the wiring: server blocks now have a second input port
-for consuming broker events, and while you drag a connection the compatible ports light up.
+Behind us are the scheme editor (phase 0), the steady-state load model (phase 1), the
+Challenges mode (phase 2) and the passage of time with probes and the full catalogue (phase 3).
+Version 1.2 unblocked the wiring: server blocks got a second input port for consuming broker events,
+and compatible ports light up while you drag a connection. Version 1.3 adds three practice modes on
+top of the challenge catalogue — **Interview**, **Incident** and **Golf** — plus a **challenge
+editor**: write your own task in YAML or JSON and run it through the same acceptance engine.
 
 * **Catalogue — 127 blocks in 14 groups: the whole planned catalogue**, MVP (44) plus V1 (65)
   plus V2 (18). A capacity model is filled in for 101 blocks — every block that carries traffic;
   clients have none by construction (they are sources), and containers, links and probes never
   have one. 99 generic icons, no vendor logos as a matter of principle.
 * **23 challenges** across levels 1–5, accepted by predicates, a Realism Gate, an anti-pattern
-  linter, a seven-axis rubric and stars.
+  linter, a seven-axis rubric and stars — plus **6 interview sessions, 10 incidents and 5 golf
+  tasks** derived from them.
 * **16 scenarios**, ten of which run over time.
 * The computation is deterministic: the seed is derived from the scheme, the scenario and the
   model version; `Math.random()` is banned inside the engine.
@@ -102,6 +103,41 @@ Acceptance runs as a pipeline: compilation → Realism Gate (which catches sham 
 predicates → scenario battery → linter → seven-axis rubric → stars. The verdict is deterministic
 and always points at the specific requirement that failed.
 
+### Practice modes
+
+Three sets sit on top of the same catalogue and the same acceptance engine — they are derived
+challenges, not a parallel universe.
+
+**Interview** — 6 timed sessions of 45–60 minutes. You build from an empty canvas; requirements
+arrive in stages. At minute 20 the load grows three to tenfold and the budget is revised, at minute
+35 geography or redundancy shows up. A later requirement with the same id replaces the earlier one,
+so "budget ×10" reads as a revision rather than a second budget.
+
+**Incident** — 10 broken schemes with a symptom and 10 minutes on the clock. Each starts from a
+reference solution with a fault planted in it: a shrunken machine, a pinned instance count, a
+dropped cache, reservation without a version check. A test holds the invariant that the clean
+reference passes and the broken one fails on hard gates or scenarios — never on the Realism Gate,
+which would name the broken parameter and give the puzzle away. The cause is revealed only after
+you submit.
+
+**Golf** — 5 tasks on minimum cost. The scheme already holds its SLO but is inflated with instances,
+shards and replicas; the budget requirement is lifted and the monthly bill becomes the score. The
+target equals the cost of the untouched reference, so gold is attainable by construction. Medals
+only count once the scheme passes acceptance.
+
+### Challenge editor
+
+Write your own challenge in YAML or JSON and run it through the same engine. The format is the one
+the catalogue uses, with a single difference: the starter scheme is data (`nodes` and `links`) rather
+than a function, and "scheme from canvas" writes that block out of whatever is on screen — emitting
+only the parameters that differ from the block defaults.
+
+The YAML subset is parsed by a dependency-free parser of about 300 lines: block mappings and
+sequences, flow collections, block scalars, numeric underscores, comments, JSON passthrough. Anchors,
+aliases and tags are refused by name with a line number rather than mis-parsed. Validation returns
+the whole list of problems with a path to each field, and the starter scheme is actually built during
+the check, so incompatible ports surface in the editor instead of on the canvas.
+
 ### Not there yet
 
 * **`splitByFlow` on `probe-rps`**: the timeline sums every flow into a single arrival rate, so
@@ -117,8 +153,11 @@ and always points at the specific requirement that failed.
   are not modelled. No document specifies a cap, so none was invented.
 * **The structural diff against a reference solution** — the metric diff exists; matching nodes
   between two schemes with independent ids does not.
-* The `custom` predicate, the Incident, Golf and Interview modes, the challenge editor and
-  leaderboards — those are still ahead.
+* **Leaderboards** and **community challenges** need a backend and a trusted source for imported
+  tasks; the app is static, so golf keeps a personal best locally and nothing is shared.
+* The `custom` predicate — the fourteenth requirement kind. It is needed exactly where a function
+  cannot go: in an authored challenge, that is, on untrusted input in a static app without `eval`.
+  That means designing a bounded expression language, which no document specifies yet.
 * The whole scheme is always recomputed; there is no incremental recomputation by subgraph.
 
 ## Demo schemes
@@ -152,7 +191,7 @@ npm run dev        # http://localhost:5173/sd-flow/
 | `npm run preview` | Local preview of the built bundle |
 | `npm run lint` | ESLint 9 (flat config) |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Vitest: 592 tests in 31 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, locales, demo schemes |
+| `npm test` | Vitest: 703 tests in 34 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, practice sets, the authoring format, locales, demo schemes |
 
 Deployment is GitHub Actions on a push to `main`: lint → typecheck → tests → build → GitHub Pages.
 The app installs as a PWA and runs offline; a scheme can be shared as a link, the canvas exported
@@ -168,7 +207,7 @@ The documentation is written in Russian; this README is the English entry point.
 | [docs/01-components.md](docs/01-components.md) | Catalogue of building blocks: 14 groups, 127 types, all of them in the registry, parameters of each |
 | [docs/02-simulation.md](docs/02-simulation.md) | Simulation model: capacity, queues, latency, cache, multi-region, consistency anomalies, storage, cost, availability, constants; §15 — what of it is implemented |
 | [docs/03-connections.md](docs/03-connections.md) | Connections: read/write/mixed, sync/async, traffic visualisation |
-| [docs/04-challenges.md](docs/04-challenges.md) | Challenges mode and the acceptance algorithm, a catalogue of 28 tasks (23 implemented), the "YouTube" walkthrough |
+| [docs/04-challenges.md](docs/04-challenges.md) | Challenges mode and the acceptance algorithm, a catalogue of 28 tasks (23 implemented), the practice sets, the challenge editor and its YAML subset, the "YouTube" walkthrough |
 | [docs/05-architecture.md](docs/05-architecture.md) | Technical architecture, repository structure, code reuse plan, ADRs |
 
 **Decisions taken (2026-08-14):**

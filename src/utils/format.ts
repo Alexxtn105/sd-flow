@@ -1,5 +1,7 @@
 import type { ParamField, ParamValue } from '../engine/types/component';
 
+const SECONDS_PER_MINUTE = 60;
+
 export function formatNumber(value: number): string {
     if (!Number.isFinite(value)) return '—';
     if (value === 0) return '0';
@@ -56,4 +58,11 @@ export function formatDateTime(iso: string, locale: string): string {
     const date = new Date(iso);
     if (Number.isNaN(date.getTime())) return iso;
     return date.toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' });
+}
+
+export function formatClock(totalSeconds: number): string {
+    const minutes = Math.floor(Math.abs(totalSeconds) / SECONDS_PER_MINUTE);
+    const seconds = Math.abs(totalSeconds) % SECONDS_PER_MINUTE;
+
+    return `${totalSeconds < 0 ? '−' : ''}${minutes}:${String(seconds).padStart(2, '0')}`;
 }

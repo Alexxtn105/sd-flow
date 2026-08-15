@@ -199,6 +199,7 @@ function emptyVerdict(challenge: Challenge, attempt: number): ChallengeVerdict {
         lint: { positives: [], antipatterns: [], practiceScore: 0, penalty: 0 },
         rubric: { axes: [], penalties: [], total: 0 },
         comparison: null,
+        metrics: { latencyP99: 0, costMonth: 0, availability: 0, nodeCount: 0, peakUtilization: 0 },
         attempt,
     };
 }
@@ -315,6 +316,7 @@ export function acceptChallenge(input: AcceptInput): ChallengeVerdict {
         lint,
         rubric,
         comparison: compareWithReferences(mine, references, servesTheTask(requirements, mine)),
+        metrics: mine,
         attempt,
     };
 }

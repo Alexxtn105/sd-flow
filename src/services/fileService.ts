@@ -25,6 +25,11 @@ export function downloadMarkdown(filename: string, text: string): void {
     downloadBlob(withExtension(filename, '.md'), blob);
 }
 
+export function downloadText(filename: string, text: string): void {
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    downloadBlob(filename, blob);
+}
+
 export function downloadDataUrl(filename: string, dataUrl: string): void {
     triggerDownload(filename, dataUrl);
 }
@@ -77,6 +82,29 @@ export function pickJsonFile(): Promise<unknown | null> {
                     resolve(null);
                 }
             };
+            reader.onerror = () => resolve(null);
+            reader.readAsText(file);
+        };
+
+        input.click();
+    });
+}
+
+export function pickTextFile(accept: string): Promise<string | null> {
+    return new Promise((resolve) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = accept;
+
+        input.onchange = () => {
+            const file = input.files?.[0];
+            if (!file) {
+                resolve(null);
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
             reader.onerror = () => resolve(null);
             reader.readAsText(file);
         };

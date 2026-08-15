@@ -65,6 +65,9 @@ sd-flow/
 │   │   │   ├── lint.ts                ← положительные правила и антипаттерны
 │   │   │   ├── rubric.ts              ← 7 осей рубрики, звёзды, цена подсказок
 │   │   │   └── accept.ts              ← конвейер приёмки, батарея сценариев
+│   │   ├── practice/                  ← фаза 4: типы наборов и производные задания (derive.ts)
+│   │   ├── authoring/                 ← фаза 4: парсер подмножества YAML, проверка спецификации,
+│   │   │                                выгрузка схемы холста, шаблон задания
 │   │   └── components/                ← ОПРЕДЕЛЕНИЯ БЛОКОВ, один модуль на группу
 │   │       ├── _shared/params.ts      ← хелперы num/bool/choice/text/defineComponent
 │   │       ├── clients.ts  edge.ts  compute.ts  sql.ts  nosql.ts  search.ts
@@ -76,14 +79,15 @@ sd-flow/
 │   │   ├── canvas/                    ← SdEditor, SdNode, GroupNode, ProbeNode, ProbeWindows, TrafficEdge
 │   │   ├── panels/                    ← Palette, Inspector, Dashboard (+ Timeline), Challenges
 │   │   ├── tutorial/                  ← Tutorial + tutorialSteps.ts (чистый редьюсер шагов)
-│   │   ├── dialogs/                   ← Save, Load, Confirm
+│   │   ├── dialogs/                   ← Save, Load, Confirm, ChallengeEditor (конструктор заданий)
 │   │   ├── layout/                    ← Header, Footer
 │   │   └── common/                    ← Dialog, ErrorBoundary, Icon, SdIcons, ResizeHandle, Waterfall
 │   ├── hooks/                         ← useSimulation, useAutoSave, useDialogManager, useTheme
 │   ├── contexts/                      ← ThemeContext, TouchContext
 │   ├── data/
 │   │   ├── demoSchemes.ts             ← демо-схемы, они же приёмка Definition of Done
-│   │   └── challenges/                ← 23 задания, один модуль на задачу + index.ts
+│   │   ├── challenges/                ← 23 задания, один модуль на задачу + index.ts
+│   │   └── practice/                  ← наборы фазы 4: интервью, инциденты, гольф + разрешение ссылок
 │   ├── locales/                       ← ru/en × {common, blocks, groups, params}
 │   ├── services/                      ← storage, файлы, сериализация, конструктор схем, воркеры,
 │   │                                    share-link, экспорт PNG и Markdown, service worker
@@ -92,7 +96,8 @@ sd-flow/
 ├── public/                            ← иконки, manifest.webmanifest, sw.js (PWA)
 ├── tests/
 │   ├── engine/                        ← реестр, каталог, порты, сериализация, модель, transient, пробы, демо
-│   ├── challenges/                    ← приёмка каталога заданий и локали формулировок
+│   ├── challenges/                    ← приёмка каталога, авторский формат, локали формулировок
+│   ├── practice/                      ← наборы «Интервью», «Инцидент», «Гольф»
 │   ├── components/                    ← туториал, окна проб, покрытие ключей локалей
 │   ├── services/                      ← share-link, экспорт отчёта
 │   ├── store/                         ← graphStore, uiStore
@@ -103,8 +108,9 @@ sd-flow/
 ```
 
 **Чего пока нет:** `data/defaults/*.json` (константы живут в `sim/constants.ts` и в дефолтах
-блоков), авторского YAML-формата заданий (решение **D3**: задания — TypeScript-модули),
-`tests/golden/`, `scripts/`.
+блоков), `tests/golden/`, `scripts/`. Задания каталога остаются TypeScript-модулями (решение **D3**);
+YAML появился в фазе 4 только как авторский вход для пользовательских заданий —
+`src/engine/authoring/` разбирает и проверяет его в рантайме.
 
 ---
 
@@ -352,8 +358,11 @@ Undo/redo — на патчах Immer, ограничение 100 шагов. Т
 Копия пайплайна dsp-flow с добавлением шагов:
 
 ```
-install → lint → typecheck → test → compile-challenges (YAML→JSON) → build → deploy (GitHub Pages)
+install → lint → typecheck → test → build → deploy (GitHub Pages)
 ```
+
+Шага `compile-challenges` нет и не будет: задания каталога — TypeScript-модули, а авторский YAML
+разбирается в браузере, а не при сборке.
 
 Дополнительно в PR: бенчмарк производительности движка и дифф золотых снапшотов в комментарии.
 
@@ -449,8 +458,8 @@ install → lint → typecheck → test → compile-challenges (YAML→JSON) →
 * Зеркальные регионы `mirrorOf` (ADR-13): регионы пока описываются явно.
 * Инкрементальный пересчёт по хэшу подграфа; сейчас схема считается целиком.
 * Волна V2 каталога — 20 блоков из [01-components.md](01-components.md) §15.
-* `custom`-предикат и дифф с эталонным решением — [04-challenges.md](04-challenges.md) §11.3.
-* Режимы «Инцидент», «Гольф», «Интервью», конструктор заданий, лидерборды, LLM-ревьюер (фаза 4).
+* `custom`-предикат и структурный дифф с эталонным решением — [04-challenges.md](04-challenges.md) §11.3.
+* Лидерборды (нужен бэкенд), LLM-ревьюер и импорт задания по ссылке из недоверенного источника.
 * Графическая часть проб: `probe-rps` без тайм-серии, `probe-latency` без гистограммы,
   `probe-heatmap` без оверлея на схеме — сейчас эти измерители отдают число, а не картинку.
 
@@ -471,7 +480,7 @@ React Flow (`select`, `dimensions`) не попадают в историю и �
 | ADR-5 | Циклы в графе разрешены | Ретраи, cache-aside и репликация — легальные циклы; вместо запрета — SCC и итерации |
 | ADR-6 | Одно ребро с профилями вызова | См. [03-connections.md](03-connections.md), §3 |
 | ADR-7 | Приёмка через предикаты и сценарии, а не сравнение с эталоном | В System Design нет единственного верного графа |
-| ADR-8 | Задания в YAML, компилируются при сборке | Удобно писать и ревьюить в PR, дёшево в рантайме |
+| ADR-8 | Задания каталога — TypeScript-модули; YAML оставлен авторскому режиму и разбирается в рантайме своим парсером подмножества | Типизация ловит опечатку в задании на компиляции, а сборочный шаг YAML→JSON не нужен. Для авторского входа (FR-CHL-9) YAML всё же нужен — человеку писать задание в JSON неудобно; парсер свой, около 300 строк, чтобы не тянуть полноценный YAML в бандл ради одного экрана |
 | ADR-9 | Константы и цены — версионируемые датасеты с `asOf` | Устаревание неизбежно; должно быть видимым и PR-friendly |
 | ADR-10 | Никаких вендорских логотипов-ассетов | Юридический риск; свой набор иконок в стиле `DspIcons` |
 | ADR-11 | **Мультирегион входит в MVP** (решение D1) | Без него не существует заданий уровня 5, а гео-маршрутизация и межрегиональный лаг — физическая основа модели аномалий. Цена по UI гасится «зеркальными регионами»: регион описывается один раз и инстанцируется N раз |

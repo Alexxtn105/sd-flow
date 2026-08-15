@@ -13,6 +13,7 @@ import ErrorBoundary from './components/common/ErrorBoundary/ErrorBoundary';
 import SaveDialog from './components/dialogs/SaveDialog';
 import LoadDialog from './components/dialogs/LoadDialog';
 import ConfirmDialog from './components/dialogs/ConfirmDialog';
+import ChallengeEditor from './components/dialogs/ChallengeEditor';
 import Icon from './components/common/Icons/Icon';
 import Toast from './components/common/Toast/Toast';
 import type { ToastTone } from './components/common/Toast/Toast';
@@ -22,6 +23,7 @@ import { DEMO_SCHEMES } from './data/demoSchemes';
 import { useAutoSave } from './hooks/useAutoSave';
 import { useDialogManager } from './hooks/useDialogManager';
 import { useSimulation } from './hooks/useSimulation';
+import { useChallengeStore } from './store/challengeStore';
 import { useGraphStore } from './store/graphStore';
 import { useIsDirty, useSchemeStore } from './store/schemeStore';
 import type { StoredSchemeInfo } from './store/schemeStore';
@@ -67,6 +69,9 @@ export default function App() {
     const toggleInspector = useUiStore((state) => state.toggleInspector);
     const tutorialOpen = useUiStore((state) => state.tutorialOpen);
     const dashboardOpen = useSimStore((state) => state.dashboardOpen);
+    const editorOpen = useChallengeStore((state) => state.editorOpen);
+    const editing = useChallengeStore((state) => state.editing);
+    const closeEditor = useChallengeStore((state) => state.closeEditor);
 
     const meta = useSchemeStore((state) => state.meta);
     const library = useSchemeStore((state) => state.library);
@@ -313,6 +318,12 @@ export default function App() {
                         tone={toast.tone}
                         onDismiss={() => setToast(null)}
                     />
+                )}
+
+                {editorOpen && (
+                    <ErrorBoundary>
+                        <ChallengeEditor item={editing} onClose={closeEditor} />
+                    </ErrorBoundary>
                 )}
 
                 {tutorialOpen && (

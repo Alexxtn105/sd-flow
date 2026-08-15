@@ -1,9 +1,12 @@
-import { Fragment, useCallback, useMemo } from 'react';
+import { Fragment, useCallback, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import Icon from '../../common/Icons/Icon';
 import ResizeHandle from '../../common/ResizeHandle/ResizeHandle';
-import { CHALLENGES, challengeById, challengesByLevel } from '../../../data/challenges';
+import { AuthoredList, GolfList, IncidentList, InterviewList } from './PracticeLists';
+import { CHALLENGES, challengesByLevel } from '../../../data/challenges';
+import { golfById, incidentById, interviewById } from '../../../data/practice';
 import { evaluateLive } from '../../../engine/challenges/accept';
+import { golfMedal } from '../../../engine/practice/derive';
 import { compileTopology } from '../../../engine/sim/compile';
 import type {
     AxisScore,
@@ -19,13 +22,17 @@ import type {
     ScenarioRun,
     SolutionComparison,
 } from '../../../engine/challenges/types';
+import { parseChallengeSource } from '../../../services/authoredChallenges';
+import type { AuthoredChallenge } from '../../../services/authoredChallenges';
+import { removeAuthored } from '../../../services/authoredChallenges';
 import { toScheme } from '../../../services/schemeSerializer';
 import { useChallengeStore } from '../../../store/challengeStore';
+import type { PracticeTrack } from '../../../store/challengeStore';
 import { useGraphStore } from '../../../store/graphStore';
 import { useSchemeStore } from '../../../store/schemeStore';
 import { useSimStore } from '../../../store/simStore';
 import { useUiStore } from '../../../store/uiStore';
-import { formatNumber } from '../../../utils/format';
+import { formatClock, formatNumber } from '../../../utils/format';
 import './ChallengePanel.css';
 
 const STATUS_ICON: Record<RequirementStatus, string> = {
@@ -41,6 +48,10 @@ const MAX_AXIS_SCORE = 100;
 const AVAILABILITY_DIGITS = 4;
 
 const LETTER_ALPHABET_SIZE = 26;
+
+const TICK_MS = 1000;
+
+const TRACKS: PracticeTrack[] = ['catalog', 'interview', 'incident', 'golf', 'authored'];
 
 const DIRECTION_ARROW: Record<ComparisonRow['better'], string> = {
     lower: '↓',
@@ -81,16 +92,26 @@ export default function ChallengePanel() {
     const togglePanel = useUiStore((state) => state.toggleChallengePanel);
     const setSelection = useUiStore((state) => state.setSelection);
 
-    const activeId = useChallengeStore((state) => state.activeId);
+    const track = useChallengeStore((state) => state.track);
+    const setTrack = useChallengeStore((state) => state.setTrack);
+    const activeRef = useChallengeStore((state) => state.ref);
+    const challenge = useChallengeStore((state) => state.active);
+    const session = useChallengeStore((state) => state.session);
     const status = useChallengeStore((state) => state.status);
     const error = useChallengeStore((state) => state.error);
     const verdict = useChallengeStore((state) => state.verdict);
     const hintsUsed = useChallengeStore((state) => state.hintsUsed);
     const progress = useChallengeStore((state) => state.progress);
-    const openChallenge = useChallengeStore((state) => state.open);
+    const practice = useChallengeStore((state) => state.practice);
+    const authored = useChallengeStore((state) => state.authored);
+    const openRef = useChallengeStore((state) => state.open);
+    const restart = useChallengeStore((state) => state.restart);
     const closeChallenge = useChallengeStore((state) => state.close);
     const revealHint = useChallengeStore((state) => state.revealHint);
     const submit = useChallengeStore((state) => state.submit);
+    const tick = useChallengeStore((state) => state.tick);
+    const refreshAuthored = useChallengeStore((state) => state.refreshAuthored);
+    const openEditor = useChallengeStore((state) => state.openEditor);
 
     const nodes = useGraphStore((state) => state.nodes);
     const edges = useGraphStore((state) => state.edges);
@@ -98,9 +119,18 @@ export default function ChallengePanel() {
     const settings = useSchemeStore((state) => state.settings);
     const result = useSimStore((state) => state.result);
 
-    const challenge = activeId === null ? undefined : challengeById(activeId);
+    useEffect(() => {
+        if (!session) return;
+
+        const timer = window.setInterval(tick, TICK_MS);
+        return () => window.clearInterval(timer);
+    }, [session, tick]);
 
     const localized = useCallback((text: LocalizedText) => text[language], [language]);
+
+    const golfTask = activeRef?.kind === 'golf' ? golfById(activeRef.taskId) : undefined;
+    const incident = activeRef?.kind === 'incident' ? incidentById(activeRef.caseId) : undefined;
+    const interview = activeRef?.kind === 'interview' ? interviewById(activeRef.sessionId) : undefined;
 
     const labels = useMemo(() => {
         const map = new Map<string, string>();
@@ -210,14 +240,6 @@ export default function ChallengePanel() {
         [t],
     );
 
-    const start = useCallback(
-        (item: Challenge) => {
-            useSchemeStore.getState().importScheme(item.starter());
-            openChallenge(item.id);
-        },
-        [openChallenge],
-    );
-
     const handleSubmit = useCallback(() => {
         submit(useSchemeStore.getState().exportScheme());
     }, [submit]);
@@ -225,6 +247,24 @@ export default function ChallengePanel() {
     const loadSolution = useCallback((solution: ReferenceSolution) => {
         useSchemeStore.getState().importScheme(solution.build());
     }, []);
+
+    const openAuthored = useCallback(
+        (item: AuthoredChallenge) => {
+            const outcome = parseChallengeSource(item.source);
+            if (!outcome.ok) return;
+
+            openRef({ kind: 'authored', spec: outcome.spec });
+        },
+        [openRef],
+    );
+
+    const removeAuthoredItem = useCallback(
+        (item: AuthoredChallenge) => {
+            removeAuthored(item.id);
+            refreshAuthored();
+        },
+        [refreshAuthored],
+    );
 
     const highlight = useCallback((nodeIds: string[]) => setSelection(nodeIds, []), [setSelection]);
 
@@ -458,7 +498,7 @@ export default function ChallengePanel() {
                                 <button
                                     type="button"
                                     className="chl-btn chl-btn-primary"
-                                    onClick={() => start(item)}
+                                    onClick={() => openRef({ kind: 'catalog', challengeId: item.id })}
                                     title={t('challenge.startHint')}
                                 >
                                     <Icon name="play_arrow" size="small" />
@@ -472,8 +512,67 @@ export default function ChallengePanel() {
         </div>
     );
 
+    const renderTrack = () => {
+        if (track === 'interview') {
+            return <InterviewList localized={localized} records={practice} onOpen={openRef} />;
+        }
+        if (track === 'incident') {
+            return <IncidentList localized={localized} records={practice} onOpen={openRef} />;
+        }
+        if (track === 'golf') {
+            return <GolfList localized={localized} records={practice} onOpen={openRef} />;
+        }
+        if (track === 'authored') {
+            return (
+                <AuthoredList items={authored} onOpen={openAuthored} onEdit={openEditor} onRemove={removeAuthoredItem} />
+            );
+        }
+
+        return renderCatalog();
+    };
+
+    const renderTimer = () => {
+        if (!session) return null;
+
+        const remaining = session.limitSec - session.elapsedSec;
+        const stageCount = interview?.stages.length ?? 1;
+
+        return (
+            <div className={`chl-timer ${session.expired ? 'chl-timer-expired' : ''}`}>
+                <Icon name="timer" size="small" />
+                <span className="chl-timer-value">{formatClock(remaining)}</span>
+                {interview && (
+                    <span className="chl-timer-stage">
+                        {t('practice.stage', { value: session.stage + 1, total: stageCount })}
+                    </span>
+                )}
+                {session.expired && <span className="chl-timer-note">{t('practice.expired')}</span>}
+            </div>
+        );
+    };
+
+    const renderGolfGauge = () => {
+        if (!golfTask) return null;
+
+        const cost = result?.totals.costMonth ?? null;
+        const medal = cost === null ? 'none' : golfMedal(cost, golfTask.parUsdMonth);
+
+        return (
+            <div className={`chl-golf chl-golf-${medal}`}>
+                <span className="chl-line-label">{t('practice.par', { value: formatNumber(golfTask.parUsdMonth) })}</span>
+                <span className="chl-line-value">
+                    {cost === null ? t('challenge.notCompiled') : t('practice.cost', { value: formatNumber(cost) })}
+                </span>
+                {cost !== null && <span className="chl-badge">{t(`practice.medal.${medal}`)}</span>}
+            </div>
+        );
+    };
+
     const renderActive = (item: Challenge) => (
         <div className="chl-body">
+            {renderTimer()}
+            {renderGolfGauge()}
+
             <p className="chl-brief">{localized(item.brief)}</p>
 
             <section className="chl-section">
@@ -574,6 +673,58 @@ export default function ChallengePanel() {
         </div>
     );
 
+    const renderOutcome = () => {
+        if (!verdict) return null;
+
+        const solved = verdict.stage === 'passed';
+
+        if (golfTask) {
+            const medal = solved ? golfMedal(verdict.metrics.costMonth, golfTask.parUsdMonth) : 'none';
+
+            return (
+                <section className="chl-section">
+                    <h3 className="chl-section-title">{t('practice.section.golf')}</h3>
+                    <div className={`chl-golf chl-golf-${medal}`}>
+                        <span className="chl-line-label">
+                            {t('practice.par', { value: formatNumber(golfTask.parUsdMonth) })}
+                        </span>
+                        <span className="chl-line-value">
+                            {t('practice.cost', { value: formatNumber(verdict.metrics.costMonth) })}
+                        </span>
+                        <span className="chl-badge">{t(`practice.medal.${medal}`)}</span>
+                    </div>
+                    {!solved && <p className="chl-hint-text">{t('practice.golfGateFailed')}</p>}
+                </section>
+            );
+        }
+
+        if (incident) {
+            return (
+                <section className="chl-section">
+                    <h3 className="chl-section-title">{t('practice.section.incident')}</h3>
+                    <p className={solved ? 'chl-tone-ok' : 'chl-tone-hot'}>
+                        {solved ? t('practice.incidentFixed') : t('practice.incidentOpen')}
+                    </p>
+                    {solved && <p className="chl-hint-open">{localized(incident.rootCause)}</p>}
+                </section>
+            );
+        }
+
+        if (!interview) return null;
+
+        return (
+            <section className="chl-section">
+                <h3 className="chl-section-title">{t('practice.section.interview')}</h3>
+                <p className="chl-hint-text">
+                    {t('practice.interviewOutcome', {
+                        stage: (session?.stage ?? 0) + 1,
+                        total: interview.stages.length,
+                    })}
+                </p>
+            </section>
+        );
+    };
+
     const renderReport = (item: Challenge) => {
         if (!verdict) return null;
 
@@ -591,6 +742,8 @@ export default function ChallengePanel() {
                         {t('challenge.score', { value: formatNumber(verdict.rubric.total) })}
                     </span>
                 </div>
+
+                {renderOutcome()}
 
                 {verdict.stage === 'compile' && <p className="chl-error">{t('challenge.notCompiled')}</p>}
 
@@ -670,18 +823,14 @@ export default function ChallengePanel() {
                     </section>
                 )}
 
-                <button
-                    type="button"
-                    className="chl-btn chl-btn-primary chl-btn-wide"
-                    onClick={() => openChallenge(item.id)}
-                >
+                <button type="button" className="chl-btn chl-btn-primary chl-btn-wide" onClick={restart}>
                     {t('challenge.retry')}
                 </button>
             </div>
         );
     };
 
-    const title = challenge ? localized(challenge.title) : t('challenge.title');
+    const title = challenge ? localized(challenge.title) : t(`practice.track.${track}`);
 
     if (collapsed) {
         return (
@@ -726,7 +875,6 @@ export default function ChallengePanel() {
                 <span className="chl-title" title={title}>
                     {title}
                 </span>
-                {!challenge && <span className="chl-count">{CHALLENGES.length}</span>}
                 {status === 'running' && (
                     <span className="chl-running">
                         <span className="chl-running-dot" />
@@ -743,7 +891,24 @@ export default function ChallengePanel() {
                 </button>
             </div>
 
-            {!challenge && renderCatalog()}
+            {!challenge && (
+                <div className="chl-tracks">
+                    <select
+                        className="chl-track-select"
+                        value={track}
+                        onChange={(event) => setTrack(event.target.value as PracticeTrack)}
+                        aria-label={t('practice.trackLabel')}
+                    >
+                        {TRACKS.map((item) => (
+                            <option key={item} value={item}>
+                                {t(`practice.track.${item}`)}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+            )}
+
+            {!challenge && renderTrack()}
             {challenge && verdict === null && renderActive(challenge)}
             {challenge && verdict !== null && renderReport(challenge)}
         </aside>

@@ -1,3 +1,4 @@
+import type { ChallengeRef } from '../data/practice';
 import type { ChallengeVerdict } from '../engine/challenges/types';
 import type { SimResult } from '../engine/sim/types';
 import type { SchemeV1 } from '../engine/types/scheme';
@@ -9,7 +10,7 @@ export interface SimulationRequest {
 }
 
 export interface AcceptanceRequest {
-    challengeId: string;
+    ref: ChallengeRef;
     scheme: SchemeV1;
     attempt: number;
     hintsUsed: number[];
@@ -92,16 +93,13 @@ async function simulateInline(request: SimulationRequest): Promise<SimResult> {
 }
 
 async function acceptInline(request: AcceptanceRequest): Promise<ChallengeVerdict> {
-    const [{ acceptChallenge }, { challengeById }] = await Promise.all([
+    const [{ acceptChallenge }, { resolveChallenge }] = await Promise.all([
         import('../engine/challenges/accept'),
-        import('../data/challenges'),
+        import('../data/practice'),
     ]);
 
-    const challenge = challengeById(request.challengeId);
-    if (!challenge) throw new Error(`unknown challenge ${request.challengeId}`);
-
     return acceptChallenge({
-        challenge,
+        challenge: resolveChallenge(request.ref),
         scheme: request.scheme,
         attempt: request.attempt,
         hintsUsed: request.hintsUsed,

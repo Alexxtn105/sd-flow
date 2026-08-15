@@ -4,6 +4,8 @@ export const STORAGE_KEYS = {
     THEME: 'sd-theme',
     PREFERENCES: 'sd-preferences',
     CHALLENGES: 'sd-challenges',
+    PRACTICE: 'sd-practice',
+    AUTHORED: 'sd-authored',
 } as const;
 
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];

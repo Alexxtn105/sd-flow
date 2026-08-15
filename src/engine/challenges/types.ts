@@ -307,6 +307,7 @@ export interface ChallengeVerdict {
     lint: LintResult;
     rubric: RubricResult;
     comparison: SolutionComparison | null;
+    metrics: ComparisonMetrics;
     attempt: number;
 }
 

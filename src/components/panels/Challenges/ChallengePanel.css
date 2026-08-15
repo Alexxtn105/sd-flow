@@ -786,3 +786,104 @@
         box-shadow: var(--shadow-xl);
     }
 }
+
+.chl-tracks {
+    padding: 8px 10px 0;
+    flex-shrink: 0;
+}
+
+.chl-track-select {
+    width: 100%;
+    height: 26px;
+    padding: 0 8px;
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius-sm);
+    background: var(--panel-input-bg);
+    color: var(--panel-text-2);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.chl-track-select:hover {
+    border-color: var(--panel-border-hover);
+    color: var(--panel-text-1);
+}
+
+.chl-timer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding: 6px 10px;
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius-sm);
+    background: var(--panel-subtle-bg);
+    color: var(--panel-text-2);
+}
+
+.chl-timer-value {
+    font-size: 15px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--panel-text-1);
+}
+
+.chl-timer-stage {
+    font-size: 10px;
+    color: var(--panel-text-4);
+}
+
+.chl-timer-note {
+    margin-left: auto;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--util-hot);
+}
+
+.chl-timer-expired {
+    border-color: var(--util-hot);
+    background: color-mix(in srgb, var(--util-hot) 12%, transparent);
+}
+
+.chl-golf {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: 6px 10px;
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius-sm);
+    background: var(--panel-subtle-bg);
+}
+
+.chl-golf .chl-line-value {
+    font-weight: 700;
+}
+
+.chl-golf-gold {
+    border-color: var(--panel-accent-gold);
+    background: color-mix(in srgb, var(--panel-accent-gold) 12%, transparent);
+}
+
+.chl-golf-silver {
+    border-color: var(--util-ok);
+}
+
+.chl-golf-bronze {
+    border-color: var(--util-warn);
+}
+
+.chl-golf-none {
+    border-color: var(--util-hot);
+}
+
+.chl-tone-ok {
+    color: var(--util-ok);
+}
+
+.chl-authored-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}

@@ -1,4 +1,5 @@
-import { challengeById } from '../data/challenges';
+import { resolveChallenge } from '../data/practice';
+import type { ChallengeRef } from '../data/practice';
 import { acceptChallenge } from '../engine/challenges/accept';
 import initComponents from '../engine/initComponents';
 import { simulate } from '../engine/sim/simulate';
@@ -15,7 +16,7 @@ interface SimulationRequestMessage {
 interface AcceptanceRequestMessage {
     id: number;
     kind: 'accept';
-    challengeId: string;
+    ref: ChallengeRef;
     scheme: SchemeV1;
     attempt: number;
     hintsUsed: number[];
@@ -31,11 +32,8 @@ self.onmessage = (event: MessageEvent<RequestMessage>) => {
 
     try {
         if (request.kind === 'accept') {
-            const challenge = challengeById(request.challengeId);
-            if (!challenge) throw new Error(`unknown challenge ${request.challengeId}`);
-
             const verdict = acceptChallenge({
-                challenge,
+                challenge: resolveChallenge(request.ref),
                 scheme: request.scheme,
                 attempt: request.attempt,
                 hintsUsed: request.hintsUsed,

@@ -4,7 +4,6 @@ import Icon from '../../common/Icons/Icon';
 import ResizeHandle from '../../common/ResizeHandle/ResizeHandle';
 import registry from '../../../engine/ComponentRegistry';
 import type { ComponentDefinition } from '../../../engine/types/component';
-import { challengeById } from '../../../data/challenges';
 import { useTouchContext } from '../../../contexts/TouchContext';
 import { useChallengeStore } from '../../../store/challengeStore';
 import { useUiStore } from '../../../store/uiStore';
@@ -21,7 +20,7 @@ export default function Palette() {
     const togglePalette = useUiStore((state) => state.togglePalette);
     const requestAdd = useUiStore((state) => state.requestAdd);
     const mode = useUiStore((state) => state.mode);
-    const activeChallengeId = useChallengeStore((state) => state.activeId);
+    const activeChallenge = useChallengeStore((state) => state.active);
 
     const [query, setQuery] = useState('');
     const [legendOpen, setLegendOpen] = useState(false);
@@ -44,19 +43,16 @@ export default function Palette() {
     const blockName = useCallback((id: string) => t(id, { ns: 'blocks', defaultValue: id }), [t]);
 
     const restriction = useMemo(() => {
-        if (mode !== 'challenges' || activeChallengeId === null) return null;
+        if (mode !== 'challenges' || activeChallenge === null) return null;
 
-        const challenge = challengeById(activeChallengeId);
-        if (!challenge) return null;
-
-        const { allowedGroups, forbiddenTypes } = challenge.constraints;
+        const { allowedGroups, forbiddenTypes } = activeChallenge.constraints;
         if (!allowedGroups && !forbiddenTypes) return null;
 
         return {
             groups: allowedGroups ? new Set(allowedGroups) : null,
             types: new Set(forbiddenTypes ?? []),
         };
-    }, [activeChallengeId, mode]);
+    }, [activeChallenge, mode]);
 
     const isLocked = useCallback(
         (component: ComponentDefinition) => {
