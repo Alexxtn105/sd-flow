@@ -251,11 +251,14 @@ export default function ChallengePanel() {
     const openAuthored = useCallback(
         (item: AuthoredChallenge) => {
             const outcome = parseChallengeSource(item.source);
-            if (!outcome.ok) return;
+            if (!outcome.ok) {
+                openEditor(item);
+                return;
+            }
 
             openRef({ kind: 'authored', spec: outcome.spec });
         },
-        [openRef],
+        [openEditor, openRef],
     );
 
     const removeAuthoredItem = useCallback(
