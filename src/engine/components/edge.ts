@@ -647,7 +647,6 @@ const reverseCacheDefaults = {
     instances: 3,
     azSpread: 3,
     cacheSizeGb: 50,
-    cacheHitRatio: 0.85,
     ttlSec: 600,
     staleWhileRevalidateSec: 30,
     varyHeaders: 2,
@@ -682,7 +681,7 @@ function reverseCacheCapacityBytes(params: typeof reverseCacheDefaults, instance
 }
 
 function reverseCacheFillShare(params: typeof reverseCacheDefaults, writeShare: number): number {
-    return Math.min(1, 1 - params.cacheHitRatio + writeShare);
+    return Math.min(1, 1 - params.hitRatioOverride + writeShare);
 }
 
 const reverseCacheModel = defineModel<typeof reverseCacheDefaults>({
@@ -733,7 +732,6 @@ const reverseCache = defineComponent({
         instances: num('scale', { min: 1, max: 500 }),
         azSpread: num('scale', { min: 1, max: 6 }),
         cacheSizeGb: num('capacity', { unitKey: 'gb', min: 0.1, max: 10000, step: 0.1 }),
-        cacheHitRatio: num('performance', { min: 0, max: 1, step: 0.01, realistic: { min: 0.6, max: 0.95 } }),
         ttlSec: num('behaviour', { unitKey: 'sec', min: 0, max: 2592000 }),
         staleWhileRevalidateSec: num('behaviour', { unitKey: 'sec', min: 0, max: 86400 }),
         varyHeaders: num('behaviour', { min: 0, max: 12, realistic: { min: 0, max: 3 } }),

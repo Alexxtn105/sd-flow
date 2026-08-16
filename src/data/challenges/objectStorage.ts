@@ -76,7 +76,7 @@ function erasureAndShardedMeta(): SchemeV1 {
                     instances: 4,
                     azSpread: 3,
                     cacheSizeGb: 800,
-                    cacheHitRatio: 0.6,
+                    hitRatioOverride: 0.6,
                     ttlSec: 600,
                     staleWhileRevalidateSec: 60,
                     avgObjectKb: 120,

@@ -174,7 +174,7 @@ p99(L) = median · e^(2.3263 · σ)   при σ = 0.8 → 6.43 × медианы
 | `lb-l7` | L7 балансировщик / реверс-прокси (ALB, nginx, Envoy, Traefik, HAProxy) | **M** | `maxRps`, `tlsTerminate`, `tlsHandshakeMs`, `keepAlive`, `http2`, `compression`, `latencyMs` (~1), `healthCheck`, `retryPolicy`, `connectionDrainSec` | CPU (особенно TLS) / RPS |
 | `api-gateway` | API Gateway (Kong / AWS API GW / Envoy Gateway / Apigee) | **M** | `authMode` (none/JWT-local/introspection), `authLatencyMs`, `rateLimitRpsPerClient`, `quotaPerDay`, `requestTransform`, `responseCacheEnabled` + `cacheTtl`, `maxRps`, `costPerMillionRequests`, `payloadLimitMb` | CPU / вендорский лимит RPS |
 | `rate-limiter` | Rate limiter / throttle | V1 | `algorithm` (token-bucket / leaky-bucket / sliding-window / GCRA), `limitRps`, `burst`, `scope` (global/per-user/per-ip/per-key), `backingStore` (local/redis), `rejectMode` (429 / queue / shed) | Backing store |
-| `reverse-cache` | Кэширующий прокси (Varnish / nginx cache) | V1 | `cacheSizeGb`, `hitRatio` (авто), `ttlSec`, `staleWhileRevalidate`, `varyHeaders`, `purgeApi` | Память / диск |
+| `reverse-cache` | Кэширующий прокси (Varnish / nginx cache) | V1 | `cacheSizeGb`, `hitRatioMode` + `hitRatioOverride`, `ttlSec`, `staleWhileRevalidate`, `varyHeaders`, `purgeApi` | Память / диск |
 | `ws-gateway` | WebSocket / push-шлюз | V1 | `concurrentConnections`, `connectionsPerInstance` (типично 50k–200k), `memoryPerConnKb`, `messagesPerConnMin`, `messageBytes`, `heartbeatSec`, `fanoutMode` (direct / pub-sub) | **Соединения и память, а не RPS** |
 | `service-mesh` | Sidecar-прокси (Istio / Linkerd) | V1 | `latencyOverheadMs` (0.5–2), `cpuOverheadPercent`, `mtls`, `retryPolicy`, `circuitBreaker`, `observabilityExport` | Оверхед CPU на каждом хопе |
 | `nat-egress` | NAT / egress-шлюз | V2 | `throughputGbps`, `portsPerIp`, `costPerGb` | Порты / пропускная способность |
@@ -462,10 +462,14 @@ H(n, α)       = Σ_{k=1..n} k^(−α)
 | `hitRatioMode` | `auto` / `manual` | Откуда берётся hit ratio: из модели или из объявленного числа |
 | `hitRatioOverride` | 0–1 | Число, которое используется в режиме `manual` |
 
-По умолчанию узлы-кэши стоят в `auto` (считает модель), а `reverse-cache` — в `manual`: у него
-объявленный `cacheHitRatio` и так поглощает трафик, и раньше показанное число расходилось с
-поглощённым. Ручной режим годится, когда доля попаданий известна из наблюдений; авто — когда её
-надо получить из схемы. Сброс кэша (сценарий `cache-flush`) обнуляет оба режима одинаково.
+По умолчанию узлы-кэши стоят в `auto` (считает модель), а `reverse-cache` — в `manual`. В обоих
+режимах показанное число и поглощение трафика — одно и то же: что видно в панели, то и снимается с
+нижестоящих блоков. Ручной режим годится, когда доля попаданий известна из наблюдений; авто — когда
+её надо получить из схемы. Сброс кэша (сценарий `cache-flush`) обнуляет оба режима одинаково.
+
+У `reverse-cache` до версии 1.5.1 было **два** параметра доли попаданий: `cacheHitRatio` поглощал
+трафик, `hitRatioOverride` показывался в панели, и крутить можно было не тот. Остался один —
+`hitRatioOverride`; он же оценивает, какая доля запросов заполняет кэш и занимает память.
 
 У блоков, где кэш — свойство самого блока, а не отдельный узел, модели ключей нет и режим не
 заведён: `cdn.cacheHitRatio` (0.92 по умолчанию) и `dns.resolverCacheHitRatio` (0.9) остаются

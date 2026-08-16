@@ -42,6 +42,46 @@ export function resolveHitRatio(
     return base === null ? null : clampRatio(base * warmth);
 }
 
+export function residencyRatio(uniqueKeys: number, residentKeys: number, alpha: number): number {
+    if (residentKeys >= uniqueKeys) return 1;
+
+    return generalizedHarmonic(residentKeys, alpha) / generalizedHarmonic(uniqueKeys, alpha);
+}
+
+export function ttlAwareRatio(
+    uniqueKeys: number,
+    residentKeys: number,
+    alpha: number,
+    readRps: number,
+    ttlSec: number,
+): number {
+    const resident = Math.max(1, Math.min(residentKeys, uniqueKeys));
+    const ceiling = residencyRatio(uniqueKeys, residentKeys, alpha);
+
+    if (ttlSec <= 0 || readRps <= 0) return ceiling;
+
+    const totalWeight = generalizedHarmonic(uniqueKeys, alpha);
+    const arrivals = readRps * ttlSec;
+    const head = Math.min(resident, HEAD_TERMS);
+
+    let ratio = 0;
+    for (let key = 1; key <= head; key += 1) {
+        const share = Math.pow(key, -alpha) / totalWeight;
+        ratio += share * (1 - Math.exp(-arrivals * share));
+    }
+
+    if (resident > head) {
+        const boundary = Math.min(resident, Math.max(head, Math.pow(arrivals / totalWeight, 1 / alpha)));
+        const hotWeight = generalizedHarmonic(boundary, alpha) - generalizedHarmonic(head, alpha);
+        const coldWeight = generalizedHarmonic(resident, 2 * alpha) - generalizedHarmonic(boundary, 2 * alpha);
+
+        ratio += hotWeight / totalWeight;
+        ratio += (arrivals * Math.max(coldWeight, 0)) / (totalWeight * totalWeight);
+    }
+
+    return Math.max(0, Math.min(ratio, ceiling));
+}
+
 export function cacheHitRatio(profile: CacheProfile, writeShare: number, readRps: number): CacheResult {
     const entryBytes = Math.max(profile.entryBytes, 1);
     const residentKeys = Math.max(1, Math.floor(profile.capacityBytes / entryBytes));
@@ -49,32 +89,24 @@ export function cacheHitRatio(profile: CacheProfile, writeShare: number, readRps
     const alpha = Math.max(profile.zipfAlpha, 0.01);
 
     const totalWeight = generalizedHarmonic(uniqueKeys, alpha);
-    const residentWeight = generalizedHarmonic(Math.min(residentKeys, uniqueKeys), alpha);
-    const baseRatio = residentKeys >= uniqueKeys ? 1 : residentWeight / totalWeight;
+    const baseRatio = ttlAwareRatio(uniqueKeys, residentKeys, alpha, readRps, profile.ttlSec);
 
     const invalidationFactor = 1 - Math.min(writeShare, 1);
-
-    const workingKeys = Math.min(residentKeys, uniqueKeys);
-    const reaccessIntervalSec = readRps > 0 ? workingKeys / readRps : Number.POSITIVE_INFINITY;
-    const ttlFactor =
-        profile.ttlSec > 0 && Number.isFinite(reaccessIntervalSec)
-            ? 1 - Math.exp(-profile.ttlSec / Math.max(reaccessIntervalSec, 1e-9))
-            : 1;
-
-    const hitRatio = Math.max(0, Math.min(1, baseRatio * invalidationFactor * ttlFactor));
+    const hitRatio = Math.max(0, Math.min(1, baseRatio * invalidationFactor));
 
     return {
         hitRatio,
         residentKeys,
         hotKeyShare: 1 / totalWeight,
         explain: explain(
-            'H(M, α) / H(N, α) × (1 − writeShare) × ttlFactor',
+            'Σ_k≤M p_k · (1 − e^(−λ_read · p_k · TTL)) × (1 − writeShare)',
             {
                 M: residentKeys,
                 N: uniqueKeys,
                 alpha,
+                readRps,
+                ttlSec: profile.ttlSec,
                 writeShare,
-                ttlFactor,
             },
             hitRatio,
             'ratio',

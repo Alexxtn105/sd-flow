@@ -694,7 +694,7 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
 }
 
 function ownAbsorptionOf(node: CompiledNode, hitRatio: number | null, warmth: number): number {
-    if (String(node.params.hitRatioMode ?? '') === 'auto' && hitRatio !== null) return hitRatio;
+    if (hitRatio !== null) return hitRatio;
 
     return selfAbsorption(node) * warmth;
 }
