@@ -275,7 +275,9 @@
         "blockHelp": "Block reference",
         "paste": "Paste",
         "fitView": "Fit to screen",
-        "deleteEdge": "Delete connection"
+        "deleteEdge": "Delete connection",
+        "minimapShow": "Show minimap",
+        "minimapHide": "Hide minimap"
     },
     "inspector": {
         "title": "Inspector",

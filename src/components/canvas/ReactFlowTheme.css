@@ -89,8 +89,22 @@
     border-color: var(--border-secondary);
 }
 
+.react-flow__controls-button.sd-control-active {
+    color: var(--accent-primary);
+    fill: var(--accent-primary);
+}
+
+.react-flow__controls-button .sd-icon {
+    width: 14px;
+    height: 14px;
+}
+
 @media (max-width: 768px) {
-    .react-flow__minimap {
-        display: none;
+    .sd-minimap {
+        width: 110px !important;
+        height: 80px !important;
+        right: auto;
+        left: 0;
+        margin-bottom: 124px;
     }
 }

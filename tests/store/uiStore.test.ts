@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import StorageService, { STORAGE_KEYS } from '../../src/services/storageService';
 import { isTutorialDone, useUiStore } from '../../src/store/uiStore';
 import { clampPanelSize, PANEL_BOUNDS, PANEL_KEYS, resolvePanelMax } from '../../src/utils/panelSize';
@@ -112,6 +112,39 @@ describe('туториал в uiStore', () => {
     });
 });
 
+describe('миникарта на старте', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        vi.resetModules();
+    });
+
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    async function freshMinimap(width: number) {
+        vi.stubGlobal('innerWidth', width);
+        const module = await import('../../src/store/uiStore');
+        return module.useUiStore.getState().minimapOn;
+    }
+
+    it('на узком экране выключена, на широком включена', async () => {
+        expect(await freshMinimap(420)).toBe(false);
+
+        vi.resetModules();
+        expect(await freshMinimap(1440)).toBe(true);
+    });
+
+    it('сохранённый выбор сильнее ширины экрана', async () => {
+        StorageService.save(STORAGE_KEYS.PREFERENCES, { minimapOn: true });
+        expect(await freshMinimap(420)).toBe(true);
+
+        vi.resetModules();
+        StorageService.save(STORAGE_KEYS.PREFERENCES, { minimapOn: false });
+        expect(await freshMinimap(1440)).toBe(false);
+    });
+});
+
 describe('окна измерителей', () => {
     beforeEach(() => {
         for (const probeId of [...useUiStore.getState().probeWindowIds]) {
@@ -195,6 +228,17 @@ describe('тепловая карта и фокус', () => {
 
         useUiStore.getState().toggleHeatmap();
         expect(useUiStore.getState().heatmapOn).toBe(true);
+    });
+
+    it('миникарта переключается и переживает перезагрузку', () => {
+        expect(useUiStore.getState().minimapOn).toBe(true);
+
+        useUiStore.getState().toggleMinimap();
+        expect(useUiStore.getState().minimapOn).toBe(false);
+        expect(StorageService.load<{ minimapOn?: boolean }>(STORAGE_KEYS.PREFERENCES)?.minimapOn).toBe(false);
+
+        useUiStore.getState().toggleMinimap();
+        expect(useUiStore.getState().minimapOn).toBe(true);
     });
 
     it('запрос фокуса меняет выделение и увеличивает счётчик', () => {

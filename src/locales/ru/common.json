@@ -275,7 +275,9 @@
         "blockHelp": "Справка о блоке",
         "paste": "Вставить",
         "fitView": "Вписать в экран",
-        "deleteEdge": "Удалить связь"
+        "deleteEdge": "Удалить связь",
+        "minimapShow": "Показать миникарту",
+        "minimapHide": "Скрыть миникарту"
     },
     "inspector": {
         "title": "Инспектор",

@@ -31,6 +31,7 @@ export interface UiState {
     helpBlockType: string | null;
     paramHints: boolean;
     heatmapOn: boolean;
+    minimapOn: boolean;
     connectionSource: ConnectionSource | null;
     setMode: (mode: AppMode) => void;
     togglePalette: () => void;
@@ -53,6 +54,7 @@ export interface UiState {
     closeBlockHelp: () => void;
     toggleParamHints: () => void;
     toggleHeatmap: () => void;
+    toggleMinimap: () => void;
     startConnection: (source: ConnectionSource) => void;
     endConnection: () => void;
 }
@@ -62,9 +64,12 @@ interface StoredPreferences {
     tutorialDone?: boolean;
     paramHints?: boolean;
     heatmapOn?: boolean;
+    minimapOn?: boolean;
 }
 
 const FALLBACK_VIEWPORT: Record<PanelAxis, number> = { x: 1440, y: 900 };
+
+const MINIMAP_MIN_VIEWPORT = 768;
 
 function viewport(axis: PanelAxis): number {
     if (typeof window === 'undefined') return FALLBACK_VIEWPORT[axis];
@@ -88,18 +93,13 @@ function loadPanels(): PanelSizes {
     return panels;
 }
 
-function savePanels(panels: PanelSizes): void {
+function savePreference(patch: StoredPreferences): void {
     const stored = StorageService.load<StoredPreferences>(STORAGE_KEYS.PREFERENCES) ?? {};
-    StorageService.save(STORAGE_KEYS.PREFERENCES, { ...stored, panels });
+    StorageService.save(STORAGE_KEYS.PREFERENCES, { ...stored, ...patch });
 }
 
 export function isTutorialDone(): boolean {
     return StorageService.load<StoredPreferences>(STORAGE_KEYS.PREFERENCES)?.tutorialDone === true;
-}
-
-function saveTutorialDone(): void {
-    const stored = StorageService.load<StoredPreferences>(STORAGE_KEYS.PREFERENCES) ?? {};
-    StorageService.save(STORAGE_KEYS.PREFERENCES, { ...stored, tutorialDone: true });
 }
 
 function loadParamHints(): boolean {
@@ -110,14 +110,9 @@ function loadHeatmapOn(): boolean {
     return StorageService.load<StoredPreferences>(STORAGE_KEYS.PREFERENCES)?.heatmapOn !== false;
 }
 
-function saveHeatmapOn(heatmapOn: boolean): void {
-    const stored = StorageService.load<StoredPreferences>(STORAGE_KEYS.PREFERENCES) ?? {};
-    StorageService.save(STORAGE_KEYS.PREFERENCES, { ...stored, heatmapOn });
-}
-
-function saveParamHints(paramHints: boolean): void {
-    const stored = StorageService.load<StoredPreferences>(STORAGE_KEYS.PREFERENCES) ?? {};
-    StorageService.save(STORAGE_KEYS.PREFERENCES, { ...stored, paramHints });
+function loadMinimapOn(): boolean {
+    const stored = StorageService.load<StoredPreferences>(STORAGE_KEYS.PREFERENCES)?.minimapOn;
+    return typeof stored === 'boolean' ? stored : viewport('x') > MINIMAP_MIN_VIEWPORT;
 }
 
 function sameIds(left: string[], right: string[]): boolean {
@@ -141,6 +136,7 @@ export const useUiStore = create<UiState>((set, get) => ({
     helpBlockType: null,
     paramHints: loadParamHints(),
     heatmapOn: loadHeatmapOn(),
+    minimapOn: loadMinimapOn(),
     connectionSource: null,
 
     setMode: (mode) => set({ mode }),
@@ -158,10 +154,10 @@ export const useUiStore = create<UiState>((set, get) => ({
     resetPanelSize: (key) => {
         const panels = { ...get().panels, [key]: fitPanel(key, PANEL_BOUNDS[key].preferred) };
         set({ panels });
-        savePanels(panels);
+        savePreference({ panels });
     },
 
-    persistPanels: () => savePanels(get().panels),
+    persistPanels: () => savePreference({ panels: get().panels }),
 
     setSelection: (nodeIds, edgeIds) => {
         const { selectedNodeIds, selectedEdgeIds } = get();
@@ -201,7 +197,7 @@ export const useUiStore = create<UiState>((set, get) => ({
 
     startTutorial: () => set({ tutorialOpen: true }),
     finishTutorial: () => {
-        saveTutorialDone();
+        savePreference({ tutorialDone: true });
         set({ tutorialOpen: false });
     },
 
@@ -210,13 +206,19 @@ export const useUiStore = create<UiState>((set, get) => ({
 
     toggleHeatmap: () => {
         const heatmapOn = !get().heatmapOn;
-        saveHeatmapOn(heatmapOn);
+        savePreference({ heatmapOn });
         set({ heatmapOn });
+    },
+
+    toggleMinimap: () => {
+        const minimapOn = !get().minimapOn;
+        savePreference({ minimapOn });
+        set({ minimapOn });
     },
 
     toggleParamHints: () => {
         const paramHints = !get().paramHints;
-        saveParamHints(paramHints);
+        savePreference({ paramHints });
         set({ paramHints });
     },
 

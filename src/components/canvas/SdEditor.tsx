@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Background, Controls, MiniMap, ReactFlow, useReactFlow } from '@xyflow/react';
+import { Background, ControlButton, Controls, MiniMap, ReactFlow, useReactFlow } from '@xyflow/react';
 import type { Edge, Node, OnConnectStart, XYPosition } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
 import '@xyflow/react/dist/style.css';
@@ -8,6 +8,7 @@ import SdNode from './SdNode';
 import GroupNode from './GroupNode';
 import ProbeNode from './ProbeNode';
 import ProbeWindows from './ProbeWindows';
+import Icon from '../common/Icons/Icon';
 import TrafficEdge from './TrafficEdge';
 import CanvasContextMenu from './CanvasContextMenu';
 import type { ContextMenuTarget } from './CanvasContextMenu';
@@ -103,6 +104,8 @@ export default function SdEditor() {
     const clearPendingAdd = useUiStore((state) => state.clearPendingAdd);
     const toggleProbeWindow = useUiStore((state) => state.toggleProbeWindow);
     const openBlockHelp = useUiStore((state) => state.openBlockHelp);
+    const minimapOn = useUiStore((state) => state.minimapOn);
+    const toggleMinimap = useUiStore((state) => state.toggleMinimap);
     const startConnection = useUiStore((state) => state.startConnection);
     const endConnection = useUiStore((state) => state.endConnection);
 
@@ -355,14 +358,26 @@ export default function SdEditor() {
                 {...flowProps}
             >
                 <Background color={isDarkTheme ? '#30363d' : '#e5e7eb'} gap={18} size={1} />
-                <Controls showInteractive={false} className={isDarkTheme ? 'sd-controls-dark' : ''} />
-                <MiniMap
-                    pannable
-                    zoomable
-                    nodeColor={minimapColor}
-                    maskColor={isDarkTheme ? 'rgba(13,17,23,0.7)' : 'rgba(249,250,251,0.7)'}
-                    className="sd-minimap"
-                />
+                <Controls showInteractive={false} className={isDarkTheme ? 'sd-controls-dark' : ''}>
+                    <ControlButton
+                        onClick={toggleMinimap}
+                        title={minimapOn ? t('canvas.minimapHide') : t('canvas.minimapShow')}
+                        aria-label={minimapOn ? t('canvas.minimapHide') : t('canvas.minimapShow')}
+                        aria-pressed={minimapOn}
+                        className={minimapOn ? 'sd-control-active' : ''}
+                    >
+                        <Icon name="map" size="small" />
+                    </ControlButton>
+                </Controls>
+                {minimapOn && (
+                    <MiniMap
+                        pannable
+                        zoomable
+                        nodeColor={minimapColor}
+                        maskColor={isDarkTheme ? 'rgba(13,17,23,0.7)' : 'rgba(249,250,251,0.7)'}
+                        className="sd-minimap"
+                    />
+                )}
             </ReactFlow>
 
             <ProbeWindows />
