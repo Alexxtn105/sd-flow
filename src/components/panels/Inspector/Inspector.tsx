@@ -8,11 +8,34 @@ import type { EdgeKind } from '../../../engine/types/scheme';
 import useParamHelp from '../../../hooks/useParamHelp';
 import useReference from '../../../hooks/useReference';
 import { useGraphStore } from '../../../store/graphStore';
+import { useNodeResult } from '../../../store/simStore';
 import { useUiStore } from '../../../store/uiStore';
+import { formatNumber } from '../../../utils/format';
 import { groupParams } from '../../../utils/paramSections';
 import './Inspector.css';
 
 const EDGE_KINDS: EdgeKind[] = ['sync', 'async', 'replication', 'stream', 'cdc', 'batch'];
+
+type RangeStatus = 'ok' | 'warn' | 'error';
+
+function utilizationTone(utilization: number): string {
+    if (utilization >= 1) return 'ins-metric-hot';
+    if (utilization >= 0.8) return 'ins-metric-warm';
+
+    return '';
+}
+
+function rangeStatus(value: ParamValue, field: ParamField | undefined): RangeStatus {
+    if (field?.kind !== 'number' || typeof value !== 'number') return 'ok';
+
+    if ((field.min !== undefined && value < field.min) || (field.max !== undefined && value > field.max)) {
+        return 'error';
+    }
+
+    if (field.realistic && (value < field.realistic.min || value > field.realistic.max)) return 'warn';
+
+    return 'ok';
+}
 
 export default function Inspector() {
     const { t } = useTranslation(['common', 'params', 'blocks', 'groups', 'hints']);
@@ -38,6 +61,7 @@ export default function Inspector() {
 
     useReference(['hints'], Boolean(node));
     const paramHelp = useParamHelp();
+    const metrics = useNodeResult(node?.id);
 
     const sections = useMemo(
         () => (node && definition ? groupParams(node.data.params, definition.paramSchema) : []),
@@ -78,11 +102,13 @@ export default function Inspector() {
         }
 
         if (field?.kind === 'number') {
+            const status = rangeStatus(value, field);
+
             return (
                 <input
                     id={inputId}
                     type="number"
-                    className="ins-input"
+                    className={`ins-input ${status === 'ok' ? '' : `ins-input-${status}`}`}
                     value={Number(value)}
                     min={field.min}
                     max={field.max}
@@ -150,6 +176,47 @@ export default function Inspector() {
                             </button>
                         </div>
 
+                        {metrics && (
+                            <div className="ins-metrics">
+                                <div className="ins-metric">
+                                    <span className="ins-metric-label">{t('inspector.metric.lambda')}</span>
+                                    <span className="ins-metric-value">
+                                        {formatNumber(metrics.throughput)}
+                                        <span className="ins-metric-unit">{t('dashboard.unit.rps')}</span>
+                                    </span>
+                                </div>
+                                <div className="ins-metric">
+                                    <span className="ins-metric-label">{t('inspector.metric.utilization')}</span>
+                                    <span className={`ins-metric-value ${utilizationTone(metrics.utilization)}`}>
+                                        {formatNumber(Math.round(metrics.utilization * 100) / 100)}
+                                    </span>
+                                </div>
+                                <div className="ins-metric">
+                                    <span className="ins-metric-label">{t('inspector.metric.response')}</span>
+                                    <span className="ins-metric-value">
+                                        {formatNumber(
+                                            Math.round((metrics.serviceSec + metrics.waitSec) * 100000) / 100,
+                                        )}
+                                        <span className="ins-metric-unit">{t('units.ms', { ns: 'params' })}</span>
+                                    </span>
+                                </div>
+                                <div className="ins-metric">
+                                    <span className="ins-metric-label">{t('inspector.metric.cost')}</span>
+                                    <span className="ins-metric-value">
+                                        {formatNumber(metrics.cost.total)}
+                                        <span className="ins-metric-unit">{t('dashboard.unit.usdMonth')}</span>
+                                    </span>
+                                </div>
+                                <p className="ins-metrics-bound">
+                                    {t('inspector.metric.boundBy', {
+                                        bound: t(`bound.${metrics.boundBy}`, { defaultValue: metrics.boundBy }),
+                                        capacity: formatNumber(metrics.capacity),
+                                        instances: metrics.instances,
+                                    })}
+                                </p>
+                            </div>
+                        )}
+
                         <button
                             className={`ins-descriptions ${paramHints ? 'active' : ''}`}
                             onClick={toggleParamHints}
@@ -205,6 +272,16 @@ export default function Inspector() {
                                                     <span className="ins-unit">{help.unit}</span>
                                                 </span>
                                             </div>
+                                            {rangeStatus(value, field) !== 'ok' && (
+                                                <p className={`ins-warn ins-warn-${rangeStatus(value, field)}`}>
+                                                    {t(
+                                                        rangeStatus(value, field) === 'error'
+                                                            ? 'inspector.outOfLimits'
+                                                            : 'inspector.outOfRealistic',
+                                                        { span: spanText || (help.realistic || help.limits) },
+                                                    )}
+                                                </p>
+                                            )}
                                             {paramHints && (help.hint || spanText) && (
                                                 <p className="ins-hint">
                                                     {help.hint}

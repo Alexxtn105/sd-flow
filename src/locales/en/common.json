@@ -295,7 +295,16 @@
         "realistic": "Typical range",
         "limits": "Allowed",
         "descriptions": "Parameter descriptions",
-        "descriptionsTitle": "Parameter descriptions: text under every field; with it off the hint comes from hovering the name"
+        "descriptionsTitle": "Parameter descriptions: text under every field; with it off the hint comes from hovering the name",
+        "metric": {
+            "lambda": "Load",
+            "utilization": "Utilisation ρ",
+            "response": "Node response",
+            "cost": "Cost",
+            "boundBy": "Bound by «{{bound}}»: capacity {{capacity}} rps at {{instances}} instances"
+        },
+        "outOfLimits": "Value is outside the allowed range — {{span}}; the result will be meaningless",
+        "outOfRealistic": "That does not happen in practice — {{span}}"
     },
     "blockHelp": {
         "title": "Block reference",
