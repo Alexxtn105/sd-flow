@@ -30,9 +30,13 @@ interface WorkerResponse {
 }
 
 interface PendingRequest {
+    kind: string;
+    message: Record<string, unknown>;
     resolve: (payload: WorkerPayload) => void;
     reject: (error: Error) => void;
 }
+
+export const SUPERSEDED = 'superseded';
 
 const pending = new Map<number, PendingRequest>();
 
@@ -72,17 +76,44 @@ function createWorker(): Worker | null {
     }
 }
 
-function send(message: Record<string, unknown>): Promise<WorkerPayload> {
+function send(kind: string, message: Record<string, unknown>): Promise<WorkerPayload> {
     if (!worker) worker = createWorker();
     if (!worker) return Promise.reject(new Error('worker unavailable'));
 
     const id = nextRequestId;
     nextRequestId += 1;
+    const envelope = { kind, ...message };
 
     return new Promise<WorkerPayload>((resolve, reject) => {
-        pending.set(id, { resolve, reject });
-        worker?.postMessage({ id, ...message });
+        pending.set(id, { kind, message: envelope, resolve, reject });
+        worker?.postMessage({ id, ...envelope });
     });
+}
+
+function dropStale(kind: string): void {
+    const stale = [...pending].filter(([, request]) => request.kind === kind);
+    if (stale.length === 0) return;
+
+    for (const [id, request] of stale) {
+        pending.delete(id);
+        request.reject(new Error(SUPERSEDED));
+    }
+
+    const survivors = [...pending];
+    worker?.terminate();
+    worker = createWorker();
+
+    for (const [id, request] of survivors) {
+        if (worker) worker.postMessage({ id, ...request.message });
+        else {
+            pending.delete(id);
+            request.reject(new Error('worker unavailable'));
+        }
+    }
+}
+
+function superseded(error: unknown): boolean {
+    return error instanceof Error && error.message === SUPERSEDED;
 }
 
 async function simulateInline(request: SimulationRequest): Promise<SimResult> {
@@ -114,9 +145,14 @@ async function acceptInline(request: AcceptanceRequest): Promise<ChallengeVerdic
 export function runSimulation(request: SimulationRequest): Promise<SimResult> {
     if (workerUnavailable) return simulateInline(request);
 
-    return send({ kind: 'simulate', ...request })
+    dropStale('simulate');
+
+    return send('simulate', { ...request })
         .then((payload) => payload as SimResult)
-        .catch(() => simulateInline(request));
+        .catch((error: unknown) => {
+            if (superseded(error)) throw error;
+            return simulateInline(request);
+        });
 }
 
 async function ceilingInline(request: CeilingRequest): Promise<CeilingResult | null> {
@@ -127,15 +163,18 @@ async function ceilingInline(request: CeilingRequest): Promise<CeilingResult | n
 export function runCeiling(request: CeilingRequest): Promise<CeilingResult | null> {
     if (workerUnavailable) return ceilingInline(request);
 
-    return send({ kind: 'ceiling', ...request })
+    return send('ceiling', { ...request })
         .then((payload) => payload as CeilingResult | null)
-        .catch(() => ceilingInline(request));
+        .catch((error: unknown) => {
+            if (superseded(error)) throw error;
+            return ceilingInline(request);
+        });
 }
 
 export function runAcceptance(request: AcceptanceRequest): Promise<ChallengeVerdict> {
     if (workerUnavailable) return acceptInline(request);
 
-    return send({ kind: 'accept', ...request })
+    return send('accept', { ...request })
         .then((payload) => payload as ChallengeVerdict)
         .catch(() => acceptInline(request));
 }

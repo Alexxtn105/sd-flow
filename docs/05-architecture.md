@@ -274,19 +274,22 @@ interface SchemeV1 {
 
 ```ts
 type WorkerRequest =
-  | { type: 'simulate'; gen: number; scheme: SchemeV1; scenario: ScenarioId; quality: 'preview' | 'full' }
-  | { type: 'battery'; gen: number; scheme: SchemeV1; scenarios: ScenarioId[] }
-  | { type: 'sweep'; gen: number; scheme: SchemeV1; flowId: string }
-  | { type: 'grade'; gen: number; scheme: SchemeV1; challenge: CompiledChallenge };
+  | { id: number; kind: 'simulate'; scheme: SchemeV1; scenario: string; sampleCount: number }
+  | { id: number; kind: 'ceiling'; scheme: SchemeV1; scenario: string }
+  | { id: number; kind: 'accept'; ref: ChallengeRef; scheme: SchemeV1; attempt: number; hintsUsed: number[] };
 
-type WorkerResponse =
-  | { type: 'result'; gen: number; result: SimulationResult }
-  | { type: 'progress'; gen: number; done: number; total: number }
-  | { type: 'error'; gen: number; error: EngineError };
+type WorkerResponse = { id: number; payload?: SimResult | CeilingResult | ChallengeVerdict | null; error?: string };
 ```
 
-Каждый запрос несёт номер поколения `gen`; ответы с устаревшим `gen` игнорируются. Долгие операции
-(`battery`, `sweep`) шлют `progress` и проверяют флаг отмены между сценариями.
+Каждый запрос несёт номер `id`; ответ находит свой отложенный промис по нему. Устаревшие ответы
+дополнительно отбрасываются в сторах по номеру запроса, поэтому доехавший поздний результат не
+перетирает свежий.
+
+**Отмена.** Новый расчёт схемы снимает предыдущий: его промис отклоняется меткой `superseded`,
+воркер убивается `terminate()` (иначе он досчитывал бы заведомо ненужное — сообщения он читает
+только между задачами), на его место создаётся свежий, а чужие запросы из очереди — например,
+идущая приёмка задания — переносятся на него без потери. Метка `superseded` отличается от ошибки:
+на ней запрос не пересчитывается синхронно в главном потоке, в отличие от отказа воркера.
 
 ### 5.2. Инкрементальность
 
@@ -296,8 +299,10 @@ type WorkerResponse =
 
 ### 5.3. Capacity sweep
 
-Бинарный поиск множителя трафика `m ∈ [1, 1000]`: 12–16 итераций steady-state (без Monte-Carlo)
-≈ 20 мс. Возвращает предельный RPS и узел-ограничитель.
+Бинарный поиск множителя трафика (`sim/ceiling.ts`, `docs/02-simulation.md` §4.1): удвоение вверх
+до первого насыщения, затем 12 делений отрезка пополам — до 30 прогонов решателя без Monte-Carlo,
+7 мс на демо-схеме «Видеоплатформа». Возвращает предельный RPS, множитель к текущему трафику,
+узел-ограничитель и его `boundBy`.
 
 ---
 
@@ -435,7 +440,7 @@ install → lint → typecheck → test → build → deploy (GitHub Pages)
 |---|---|---|
 | Слот модели у блока | `types/component.ts` | `ComponentModel` = `serviceSec` + `capacity` (+ опционально `autoscale`, `cost`, `storage`, `availability`, `cache`). Заполнен у всех блоков MVP, несущих трафик |
 | Декларативные ограничители | `sim/resources.ts` | `littleLaw`, `explicitRps`, `connectionBound`, `iopsBound`, `vendorUnitBound`, `bandwidthBound`, `partitionBound`, `quotaBound`, `memoryResidencyBound`. Каждый отдаёт `Explain` с формулой и подставленными значениями, поэтому `boundBy` всегда объясним |
-| Расчёт вне UI | `workers/simulation.worker.ts`, `services/simulationService.ts` | Web Worker с отбрасыванием устаревших ответов; в Node и при отказе воркера — синхронный fallback через динамический импорт |
+| Расчёт вне UI | `workers/simulation.worker.ts`, `services/simulationService.ts` | Web Worker с отменой устаревших расчётов (§5.1) и отбрасыванием поздних ответов; в Node и при отказе воркера — синхронный fallback через динамический импорт |
 | Метрики на канвасе | `SdNode`, `TrafficEdge` | Полоса утилизации с цветом по порогу, RPS, переведённое имя ограничителя; толщина жилы по RPS, красный отлив при ρ > 0.8, подписи в X-ray |
 | Панель результатов | `panels/Dashboard` | Итоги, потоки с квантилями, находки с переходом на узел, аномалии согласованности, мультирегион с RPO/RTO |
 | Демо-схемы | `data/demoSchemes.ts` | «Видеоплатформа» и «Платежи в двух регионах» — они же приёмочный тест фазы |
