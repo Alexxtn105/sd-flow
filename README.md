@@ -30,7 +30,8 @@ caller's capacity drops and the cascade arrives as ρ, not only as errors. The m
 switch in the canvas controls — off by default on a phone. Version 1.4.1 corrects the tail of a
 wide parallel fan-out and keeps a resized container size in the saved scheme. Version 1.4.2 fixes
 updating after a release: the document is fetched from the network, a version change clears the
-offline cache, and the version number is visible in the header.
+offline cache, and the version number is visible in the header. Version 1.4.3 turns the heat map on:
+the thermometer button tints blocks by utilisation and puts a scale legend on the canvas.
 
 * **Catalogue — 127 blocks in 14 groups: the whole planned catalogue**, MVP (44) plus V1 (65)
   plus V2 (18). A capacity model is filled in for 101 blocks — every block that carries traffic;
@@ -218,7 +219,7 @@ npm run dev        # http://localhost:5173/sd-flow/
 | `npm run preview` | Local preview of the built bundle |
 | `npm run lint` | ESLint 9 (flat config) |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Vitest: 804 tests in 47 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, practice sets, the authoring format, locales, node names, block reference and parameter hints, sample schemes, demo schemes |
+| `npm test` | Vitest: 810 tests in 47 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, practice sets, the authoring format, locales, node names, block reference and parameter hints, sample schemes, demo schemes |
 
 Deployment is GitHub Actions on a push to `main`: lint → typecheck → tests → build → GitHub Pages.
 The app installs as a PWA and runs offline; a scheme can be shared as a link, the canvas exported
