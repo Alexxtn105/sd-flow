@@ -27,6 +27,8 @@ export interface UiState {
     probeWindowIds: string[];
     heatmapProbeId: string | null;
     tutorialOpen: boolean;
+    helpBlockType: string | null;
+    paramHints: boolean;
     connectionSource: ConnectionSource | null;
     setMode: (mode: AppMode) => void;
     togglePalette: () => void;
@@ -44,6 +46,9 @@ export interface UiState {
     toggleHeatmapProbe: (probeId: string) => void;
     startTutorial: () => void;
     finishTutorial: () => void;
+    openBlockHelp: (componentType: string) => void;
+    closeBlockHelp: () => void;
+    toggleParamHints: () => void;
     startConnection: (source: ConnectionSource) => void;
     endConnection: () => void;
 }
@@ -51,6 +56,7 @@ export interface UiState {
 interface StoredPreferences {
     panels?: Partial<PanelSizes>;
     tutorialDone?: boolean;
+    paramHints?: boolean;
 }
 
 const FALLBACK_VIEWPORT: Record<PanelAxis, number> = { x: 1440, y: 900 };
@@ -91,6 +97,15 @@ function saveTutorialDone(): void {
     StorageService.save(STORAGE_KEYS.PREFERENCES, { ...stored, tutorialDone: true });
 }
 
+function loadParamHints(): boolean {
+    return StorageService.load<StoredPreferences>(STORAGE_KEYS.PREFERENCES)?.paramHints !== false;
+}
+
+function saveParamHints(paramHints: boolean): void {
+    const stored = StorageService.load<StoredPreferences>(STORAGE_KEYS.PREFERENCES) ?? {};
+    StorageService.save(STORAGE_KEYS.PREFERENCES, { ...stored, paramHints });
+}
+
 function sameIds(left: string[], right: string[]): boolean {
     return left.length === right.length && left.every((id, index) => id === right[index]);
 }
@@ -108,6 +123,8 @@ export const useUiStore = create<UiState>((set, get) => ({
     probeWindowIds: [],
     heatmapProbeId: null,
     tutorialOpen: !isTutorialDone(),
+    helpBlockType: null,
+    paramHints: loadParamHints(),
     connectionSource: null,
 
     setMode: (mode) => set({ mode }),
@@ -163,6 +180,15 @@ export const useUiStore = create<UiState>((set, get) => ({
     finishTutorial: () => {
         saveTutorialDone();
         set({ tutorialOpen: false });
+    },
+
+    openBlockHelp: (componentType) => set({ helpBlockType: componentType }),
+    closeBlockHelp: () => set({ helpBlockType: null }),
+
+    toggleParamHints: () => {
+        const paramHints = !get().paramHints;
+        saveParamHints(paramHints);
+        set({ paramHints });
     },
 
     startConnection: (source) => set({ connectionSource: source }),

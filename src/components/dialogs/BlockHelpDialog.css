@@ -1,0 +1,350 @@
+.bhelp {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.bhelp-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.bhelp-icon {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: var(--panel-subtle-bg);
+    color: var(--panel-accent);
+    flex-shrink: 0;
+}
+
+.bhelp-head-main {
+    min-width: 0;
+}
+
+.bhelp-name {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--panel-text-1);
+}
+
+.bhelp-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 5px;
+}
+
+.bhelp-badge {
+    padding: 1px 7px;
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    background: var(--panel-subtle-bg);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--panel-text-4);
+}
+
+.bhelp-badge-wave {
+    letter-spacing: 0.6px;
+}
+
+.bhelp-badge-managed {
+    border-color: var(--panel-accent-line);
+    background: var(--panel-accent-soft);
+    color: var(--panel-accent);
+}
+
+.bhelp-section {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.bhelp-section-title {
+    margin: 0;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+    color: var(--panel-text-4);
+}
+
+.bhelp-text {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--panel-text-2);
+}
+
+.bhelp-note,
+.bhelp-loading {
+    margin: 0;
+    font-size: 11px;
+    color: var(--panel-text-5);
+}
+
+.bhelp-list {
+    margin: 0;
+    padding-left: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.bhelp-list li {
+    position: relative;
+    padding-left: 18px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--panel-text-2);
+}
+
+.bhelp-list li::before {
+    position: absolute;
+    left: 2px;
+    top: 0;
+    font-weight: 700;
+}
+
+.bhelp-list-good li::before {
+    content: '+';
+    color: var(--success, #22c55e);
+}
+
+.bhelp-list-bad li::before {
+    content: '!';
+    color: var(--danger);
+}
+
+.bhelp-limits {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.bhelp-limit {
+    display: grid;
+    grid-template-columns: minmax(120px, 0.9fr) minmax(60px, 1.1fr) 88px minmax(140px, 1.4fr);
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    background: var(--panel-subtle-bg);
+    font-size: 11px;
+}
+
+.bhelp-limit-bound {
+    background: var(--panel-accent-soft);
+}
+
+.bhelp-limit-name {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    color: var(--panel-text-3);
+    font-weight: 600;
+}
+
+.bhelp-limit-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bhelp-limit-slack {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    color: var(--panel-text-5);
+    font-variant-numeric: tabular-nums;
+}
+
+.bhelp-limit-bound .bhelp-limit-name {
+    color: var(--panel-accent);
+}
+
+.bhelp-limit-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--panel-border);
+    overflow: hidden;
+}
+
+.bhelp-limit-fill {
+    display: block;
+    height: 100%;
+    border-radius: 3px;
+    background: var(--panel-text-5);
+}
+
+.bhelp-limit-bound .bhelp-limit-fill {
+    background: var(--panel-accent);
+}
+
+.bhelp-limit-value {
+    text-align: right;
+    color: var(--panel-text-2);
+    font-variant-numeric: tabular-nums;
+}
+
+.bhelp-limit-formula {
+    display: flex;
+    flex-direction: column;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 10px;
+    color: var(--panel-text-4);
+    overflow: hidden;
+}
+
+.bhelp-limit-inputs {
+    color: var(--panel-text-5);
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    word-break: break-word;
+}
+
+.bhelp-param-group {
+    margin-top: 8px;
+}
+
+.bhelp-param-section {
+    display: block;
+    margin-bottom: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--panel-text-5);
+}
+
+.bhelp-params {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.bhelp-params td {
+    padding: 4px 6px;
+    border-top: 1px solid var(--panel-border);
+    vertical-align: top;
+    font-size: 11.5px;
+}
+
+.bhelp-param-name {
+    width: 30%;
+    color: var(--panel-text-2);
+}
+
+.bhelp-param-key {
+    display: block;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 10px;
+    color: var(--panel-text-5);
+}
+
+.bhelp-param-value {
+    width: 14%;
+    text-align: right;
+    color: var(--panel-text-1);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.bhelp-param-unit {
+    margin-left: 4px;
+    color: var(--panel-text-5);
+    font-size: 10px;
+}
+
+.bhelp-param-hint {
+    color: var(--panel-text-3);
+    line-height: 1.45;
+}
+
+.bhelp-param-range {
+    display: block;
+    margin-top: 2px;
+    font-size: 10px;
+    color: var(--panel-text-5);
+}
+
+.bhelp-ports {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 10px;
+    font-size: 11.5px;
+}
+
+.bhelp-port-label {
+    color: var(--panel-text-5);
+}
+
+.bhelp-port-list {
+    color: var(--panel-text-2);
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 11px;
+}
+
+@media (max-width: 720px) {
+    .bhelp-limit {
+        grid-template-columns: 1fr auto;
+    }
+
+    .bhelp-limit-bar,
+    .bhelp-limit-formula {
+        display: none;
+    }
+
+    .bhelp-params td {
+        font-size: 11px;
+    }
+}
+
+.bhelp-limit-tag {
+    align-self: flex-start;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: var(--panel-subtle-bg);
+    color: var(--panel-accent);
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.bhelp-siblings {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.bhelp-sibling {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 8px;
+    border: 1px solid var(--panel-border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--panel-text-3);
+    font-size: 10.5px;
+    cursor: pointer;
+}
+
+.bhelp-sibling:hover {
+    border-color: var(--panel-accent-line);
+    background: var(--panel-hover-bg);
+    color: var(--panel-text-1);
+}

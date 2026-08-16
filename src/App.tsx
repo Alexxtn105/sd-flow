@@ -14,6 +14,7 @@ import SaveDialog from './components/dialogs/SaveDialog';
 import LoadDialog from './components/dialogs/LoadDialog';
 import ConfirmDialog from './components/dialogs/ConfirmDialog';
 import ChallengeEditor from './components/dialogs/ChallengeEditor';
+import BlockHelpDialog from './components/dialogs/BlockHelpDialog';
 import Icon from './components/common/Icons/Icon';
 import Toast from './components/common/Toast/Toast';
 import type { ToastTone } from './components/common/Toast/Toast';
@@ -70,6 +71,8 @@ export default function App() {
     const inspectorOpen = useUiStore((state) => state.inspectorOpen);
     const toggleInspector = useUiStore((state) => state.toggleInspector);
     const tutorialOpen = useUiStore((state) => state.tutorialOpen);
+    const helpBlockType = useUiStore((state) => state.helpBlockType);
+    const closeBlockHelp = useUiStore((state) => state.closeBlockHelp);
     const dashboardOpen = useSimStore((state) => state.dashboardOpen);
     const editorOpen = useChallengeStore((state) => state.editorOpen);
     const editing = useChallengeStore((state) => state.editing);
@@ -325,6 +328,12 @@ export default function App() {
                 {editorOpen && (
                     <ErrorBoundary>
                         <ChallengeEditor item={editing} onClose={closeEditor} />
+                    </ErrorBoundary>
+                )}
+
+                {helpBlockType && (
+                    <ErrorBoundary>
+                        <BlockHelpDialog componentType={helpBlockType} onClose={closeBlockHelp} />
                     </ErrorBoundary>
                 )}
 

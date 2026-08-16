@@ -95,6 +95,7 @@ export default function SdEditor() {
     const pendingAdd = useUiStore((state) => state.pendingAdd);
     const clearPendingAdd = useUiStore((state) => state.clearPendingAdd);
     const toggleProbeWindow = useUiStore((state) => state.toggleProbeWindow);
+    const openBlockHelp = useUiStore((state) => state.openBlockHelp);
     const startConnection = useUiStore((state) => state.startConnection);
     const endConnection = useUiStore((state) => state.endConnection);
 
@@ -179,12 +180,21 @@ export default function SdEditor() {
             if (event.key === 'Delete' || event.key === 'Backspace') {
                 event.preventDefault();
                 deleteSelection();
+                return;
+            }
+
+            if (event.key === 'F1' || event.key === '?') {
+                if (selectedNodeIds.length !== 1) return;
+                const model = useGraphStore.getState().nodes.find((item) => item.id === selectedNodeIds[0]);
+                if (!model) return;
+                event.preventDefault();
+                openBlockHelp(model.data.componentType);
             }
         };
 
         document.addEventListener('keydown', handler);
         return () => document.removeEventListener('keydown', handler);
-    }, [deleteSelection, redo, undo]);
+    }, [deleteSelection, openBlockHelp, redo, selectedNodeIds, undo]);
 
     const openMenu = useCallback(
         (event: React.MouseEvent, node: Node) => {
@@ -279,6 +289,10 @@ export default function SdEditor() {
                     onDelete={(nodeId) => removeElements([nodeId], [])}
                     onDetach={(nodeId) => setNodeParent(nodeId, undefined)}
                     onOpenProbeWindow={toggleProbeWindow}
+                    onOpenHelp={(nodeId) => {
+                        const model = useGraphStore.getState().nodes.find((item) => item.id === nodeId);
+                        if (model) openBlockHelp(model.data.componentType);
+                    }}
                 />
             )}
         </div>

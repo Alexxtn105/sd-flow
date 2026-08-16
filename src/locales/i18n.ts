@@ -33,6 +33,7 @@ i18n.use(LanguageDetector)
         },
         defaultNS: 'common',
         fallbackLng: 'ru',
+        react: { useSuspense: false },
         supportedLngs: LANGUAGES.map((language) => language.code),
         nonExplicitSupportedLngs: true,
         interpolation: { escapeValue: false },

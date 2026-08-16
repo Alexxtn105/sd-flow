@@ -19,6 +19,7 @@ export default function Palette() {
     const width = useUiStore((state) => state.panels.palette);
     const togglePalette = useUiStore((state) => state.togglePalette);
     const requestAdd = useUiStore((state) => state.requestAdd);
+    const openBlockHelp = useUiStore((state) => state.openBlockHelp);
     const mode = useUiStore((state) => state.mode);
     const activeChallenge = useChallengeStore((state) => state.active);
 
@@ -133,6 +134,18 @@ export default function Palette() {
                 </div>
                 <span className="pal-block-name">{name}</span>
                 {locked && <Icon name="lock" size="small" className="pal-block-lock" />}
+                <button
+                    className="pal-block-help"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        openBlockHelp(component.id);
+                    }}
+                    title={`${t('palette.blockHelp')}: ${name}`}
+                    aria-label={`${t('palette.blockHelp')}: ${name}`}
+                    draggable={false}
+                >
+                    <Icon name="help_outline" size="small" />
+                </button>
             </div>
         );
     };

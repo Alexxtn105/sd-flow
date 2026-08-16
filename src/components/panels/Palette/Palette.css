@@ -482,3 +482,34 @@
         display: none;
     }
 }
+
+.pal-block-help {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-left: auto;
+    flex-shrink: 0;
+    padding: 0;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--panel-text-5);
+    opacity: 0.4;
+    cursor: pointer;
+    transition: opacity 100ms ease;
+}
+
+.pal-block:hover .pal-block-help {
+    opacity: 1;
+}
+
+.pal-block-help:hover {
+    background: var(--panel-subtle-bg);
+    color: var(--panel-accent);
+}
+
+.pal-block-locked .pal-block-help {
+    display: none;
+}

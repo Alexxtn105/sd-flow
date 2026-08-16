@@ -18,6 +18,7 @@ interface NodeContextMenuProps {
     onDelete: (nodeId: string) => void;
     onDetach: (nodeId: string) => void;
     onOpenProbeWindow: (nodeId: string) => void;
+    onOpenHelp: (nodeId: string) => void;
 }
 
 export default function NodeContextMenu({
@@ -27,6 +28,7 @@ export default function NodeContextMenu({
     onDelete,
     onDetach,
     onOpenProbeWindow,
+    onOpenHelp,
 }: NodeContextMenuProps) {
     const { t } = useTranslation();
     const ref = useRef<HTMLDivElement>(null);
@@ -52,6 +54,10 @@ export default function NodeContextMenu({
                     <span>{t('canvas.openProbeWindow')}</span>
                 </button>
             )}
+            <button className="ctx-item" onClick={() => run(onOpenHelp)}>
+                <Icon name="help_outline" size="small" />
+                <span>{t('canvas.blockHelp')}</span>
+            </button>
             <button className="ctx-item" onClick={() => run(onDuplicate)}>
                 <Icon name="content_copy" size="small" />
                 <span>{t('canvas.duplicate')}</span>

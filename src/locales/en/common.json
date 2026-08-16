@@ -251,7 +251,8 @@
         "blockLocked": "the challenge does not allow this block",
         "blocksGroup": "Blocks of group {{name}}",
         "legend": "Edges",
-        "legendTitle": "Traffic types"
+        "legendTitle": "Traffic types",
+        "blockHelp": "Block reference"
     },
     "legend": {
         "read": "Read",
@@ -269,7 +270,8 @@
         "duplicate": "Duplicate",
         "settings": "Parameters",
         "detachFromGroup": "Move out of group",
-        "openProbeWindow": "Probe window"
+        "openProbeWindow": "Probe window",
+        "blockHelp": "Block reference"
     },
     "inspector": {
         "title": "Inspector",
@@ -286,7 +288,32 @@
         "calls": "Call profiles",
         "policy": "Policy",
         "noParams": "This block has no editable parameters",
-        "noModel": "This block has no load model and stays out of the calculation"
+        "noModel": "This block has no load model and stays out of the calculation",
+        "help": "Block reference",
+        "edgeLabel": "Label",
+        "edgeLabelPlaceholder": "connection name",
+        "realistic": "Typical range",
+        "limits": "Allowed",
+        "hints": "Parameter hints"
+    },
+    "blockHelp": {
+        "title": "Block reference",
+        "summary": "What it is and when to use it",
+        "capacity": "What limits capacity",
+        "atDefaults": "At default parameters and a load of 5000 rps, 80% reads",
+        "bindsFirst": "binds first",
+        "practices": "Good practice",
+        "pitfalls": "Common mistakes",
+        "params": "Parameters",
+        "ports": "Ports",
+        "siblings": "Same group",
+        "range": "range",
+        "managed": "managed service",
+        "on": "on",
+        "off": "off",
+        "loading": "Loading reference…",
+        "missing": "No reference has been written for this block yet.",
+        "headroom": "headroom"
     },
     "resize": {
         "palette": "Palette width — drag to resize, double-click to reset",

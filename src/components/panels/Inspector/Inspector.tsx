@@ -3,31 +3,25 @@ import { useTranslation } from 'react-i18next';
 import Icon from '../../common/Icons/Icon';
 import ResizeHandle from '../../common/ResizeHandle/ResizeHandle';
 import registry from '../../../engine/ComponentRegistry';
-import type { ParamField, ParamSection, ParamValue } from '../../../engine/types/component';
+import type { ParamField, ParamValue } from '../../../engine/types/component';
 import type { EdgeKind } from '../../../engine/types/scheme';
+import useParamHelp from '../../../hooks/useParamHelp';
+import useReference from '../../../hooks/useReference';
 import { useGraphStore } from '../../../store/graphStore';
 import { useUiStore } from '../../../store/uiStore';
+import { groupParams } from '../../../utils/paramSections';
 import './Inspector.css';
-
-const SECTION_ORDER: ParamSection[] = [
-    'scale',
-    'performance',
-    'capacity',
-    'behaviour',
-    'consistency',
-    'data',
-    'reliability',
-    'topology',
-    'cost',
-];
 
 const EDGE_KINDS: EdgeKind[] = ['sync', 'async', 'replication', 'stream', 'cdc', 'batch'];
 
 export default function Inspector() {
-    const { t } = useTranslation(['common', 'params', 'blocks', 'groups']);
+    const { t } = useTranslation(['common', 'params', 'blocks', 'groups', 'hints']);
     const selectedNodeIds = useUiStore((state) => state.selectedNodeIds);
     const selectedEdgeIds = useUiStore((state) => state.selectedEdgeIds);
     const toggleInspector = useUiStore((state) => state.toggleInspector);
+    const openBlockHelp = useUiStore((state) => state.openBlockHelp);
+    const paramHints = useUiStore((state) => state.paramHints);
+    const toggleParamHints = useUiStore((state) => state.toggleParamHints);
     const width = useUiStore((state) => state.panels.inspector);
 
     const nodes = useGraphStore((state) => state.nodes);
@@ -36,36 +30,28 @@ export default function Inspector() {
     const updateNodeLabel = useGraphStore((state) => state.updateNodeLabel);
     const updateEdgeCall = useGraphStore((state) => state.updateEdgeCall);
     const updateEdgeKind = useGraphStore((state) => state.updateEdgeKind);
+    const updateEdgeLabel = useGraphStore((state) => state.updateEdgeLabel);
 
     const node = selectedNodeIds.length === 1 ? nodes.find((item) => item.id === selectedNodeIds[0]) : undefined;
     const edge = selectedEdgeIds.length === 1 ? edges.find((item) => item.id === selectedEdgeIds[0]) : undefined;
     const definition = node ? registry.get(node.data.componentType) : null;
 
-    const sections = useMemo(() => {
-        if (!node || !definition) return [];
-        const grouped = new Map<ParamSection, [string, ParamValue][]>();
+    useReference(['hints'], Boolean(node) && paramHints);
+    const paramHelp = useParamHelp();
 
-        for (const [key, value] of Object.entries(node.data.params)) {
-            const field: ParamField | undefined = definition.paramSchema[key];
-            const section = field?.section ?? 'behaviour';
-            const bucket = grouped.get(section) ?? [];
-            bucket.push([key, value]);
-            grouped.set(section, bucket);
-        }
+    const sections = useMemo(
+        () => (node && definition ? groupParams(node.data.params, definition.paramSchema) : []),
+        [definition, node],
+    );
 
-        return SECTION_ORDER.filter((section) => grouped.has(section)).map((section) => ({
-            section,
-            entries: grouped.get(section) ?? [],
-        }));
-    }, [definition, node]);
-
-    const renderField = (key: string, value: ParamValue) => {
-        if (!node || !definition) return null;
-        const field: ParamField | undefined = definition.paramSchema[key];
+    const renderField = (key: string, value: ParamValue, field: ParamField | undefined) => {
+        if (!node) return null;
+        const inputId = `ins-param-${key}`;
 
         if (field?.kind === 'boolean') {
             return (
                 <input
+                    id={inputId}
                     type="checkbox"
                     className="ins-checkbox"
                     checked={Boolean(value)}
@@ -77,6 +63,7 @@ export default function Inspector() {
         if (field?.kind === 'enum') {
             return (
                 <select
+                    id={inputId}
                     className="ins-input"
                     value={String(value)}
                     onChange={(event) => updateNodeParam(node.id, key, event.target.value)}
@@ -93,6 +80,7 @@ export default function Inspector() {
         if (field?.kind === 'number') {
             return (
                 <input
+                    id={inputId}
                     type="number"
                     className="ins-input"
                     value={Number(value)}
@@ -109,6 +97,7 @@ export default function Inspector() {
 
         return (
             <input
+                id={inputId}
                 type="text"
                 className="ins-input"
                 value={String(value)}
@@ -123,6 +112,15 @@ export default function Inspector() {
 
             <div className="ins-header">
                 <span className="ins-title">{t('inspector.title')}</span>
+                <button
+                    className={`ins-hints-toggle ${paramHints ? 'active' : ''}`}
+                    onClick={toggleParamHints}
+                    title={t('inspector.hints')}
+                    aria-label={t('inspector.hints')}
+                    aria-pressed={paramHints}
+                >
+                    <Icon name="lightbulb_outline" size="small" />
+                </button>
                 <button className="ins-close" onClick={toggleInspector} aria-label={t('dialog.close')}>
                     <Icon name="chevron_right" size="small" />
                 </button>
@@ -151,6 +149,14 @@ export default function Inspector() {
                                     {t(definition.group, { ns: 'groups', defaultValue: definition.group })}
                                 </span>
                             </div>
+                            <button
+                                className="ins-help-btn"
+                                onClick={() => openBlockHelp(definition.id)}
+                                title={t('inspector.help')}
+                                aria-label={t('inspector.help')}
+                            >
+                                <Icon name="help_outline" size="small" />
+                            </button>
                         </div>
 
                         <div className="ins-row">
@@ -170,14 +176,39 @@ export default function Inspector() {
                         {sections.map(({ section, entries }) => (
                             <section key={section} className="ins-section">
                                 <h3 className="ins-section-title">{t(`section.${section}`)}</h3>
-                                {entries.map(([key, value]) => {
-                                    const label = t(key, { ns: 'params', defaultValue: key });
+                                {entries.map(({ key, value, field }) => {
+                                    const help = paramHelp(key, field);
+                                    const span = help.realistic || help.limits;
+                                    const spanLabel = help.realistic
+                                        ? t('inspector.realistic')
+                                        : t('inspector.limits');
+
                                     return (
-                                        <div key={key} className="ins-row">
-                                            <label className="ins-label" title={`${label} · ${key}`}>
-                                                {label}
-                                            </label>
-                                            {renderField(key, value)}
+                                        <div key={key} className="ins-param">
+                                            <div className="ins-row">
+                                                <label
+                                                    className="ins-label"
+                                                    htmlFor={`ins-param-${key}`}
+                                                    title={`${help.name} · ${key}`}
+                                                >
+                                                    {help.name}
+                                                </label>
+                                                <span className="ins-field">
+                                                    {renderField(key, value, field)}
+                                                    <span className="ins-unit">{help.unit}</span>
+                                                </span>
+                                            </div>
+                                            {paramHints && (help.hint || span) && (
+                                                <p className="ins-hint">
+                                                    {help.hint}
+                                                    {span && (
+                                                        <span className="ins-hint-span">
+                                                            {spanLabel}: {span}
+                                                            {help.unit ? ` ${help.unit}` : ''}
+                                                        </span>
+                                                    )}
+                                                </p>
+                                            )}
                                         </div>
                                     );
                                 })}
@@ -217,8 +248,25 @@ export default function Inspector() {
                         </div>
 
                         <div className="ins-row">
-                            <label className="ins-label">{t('inspector.edgeKind')}</label>
+                            <label className="ins-label" htmlFor="ins-edge-label-input">
+                                {t('inspector.edgeLabel')}
+                            </label>
+                            <input
+                                id="ins-edge-label-input"
+                                type="text"
+                                className="ins-input"
+                                value={edge.data?.label ?? ''}
+                                placeholder={t('inspector.edgeLabelPlaceholder')}
+                                onChange={(event) => updateEdgeLabel(edge.id, event.target.value)}
+                            />
+                        </div>
+
+                        <div className="ins-row">
+                            <label className="ins-label" htmlFor="ins-edge-kind">
+                                {t('inspector.edgeKind')}
+                            </label>
                             <select
+                                id="ins-edge-kind"
                                 className="ins-input"
                                 value={edge.data?.kind ?? 'sync'}
                                 onChange={(event) => updateEdgeKind(edge.id, event.target.value as EdgeKind)}

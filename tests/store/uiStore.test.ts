@@ -150,3 +150,33 @@ describe('окна измерителей', () => {
         expect(useUiStore.getState().probeWindowIds).toEqual(['probe-1']);
     });
 });
+
+describe('справка по блоку', () => {
+    it('открывается по типу блока и закрывается', () => {
+        useUiStore.getState().openBlockHelp('redis');
+        expect(useUiStore.getState().helpBlockType).toBe('redis');
+
+        useUiStore.getState().openBlockHelp('postgres');
+        expect(useUiStore.getState().helpBlockType).toBe('postgres');
+
+        useUiStore.getState().closeBlockHelp();
+        expect(useUiStore.getState().helpBlockType).toBeNull();
+    });
+});
+
+describe('подсказки к параметрам', () => {
+    beforeEach(() => {
+        localStorage.clear();
+    });
+
+    it('включены по умолчанию и переживают перезагрузку выключенными', () => {
+        expect(useUiStore.getState().paramHints).toBe(true);
+
+        useUiStore.getState().toggleParamHints();
+        expect(useUiStore.getState().paramHints).toBe(false);
+        expect(StorageService.load<{ paramHints?: boolean }>(STORAGE_KEYS.PREFERENCES)?.paramHints).toBe(false);
+
+        useUiStore.getState().toggleParamHints();
+        expect(useUiStore.getState().paramHints).toBe(true);
+    });
+});

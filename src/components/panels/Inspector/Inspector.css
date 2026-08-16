@@ -281,3 +281,88 @@
         box-shadow: var(--shadow-xl);
     }
 }
+
+.ins-title {
+    margin-right: auto;
+}
+
+.ins-hints-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--panel-text-5);
+    cursor: pointer;
+}
+
+.ins-hints-toggle:hover {
+    background: var(--panel-hover-bg);
+    color: var(--panel-text-2);
+}
+
+.ins-hints-toggle.active {
+    color: var(--panel-accent);
+}
+
+.ins-help-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    margin-left: auto;
+    flex-shrink: 0;
+    border: 1px solid var(--panel-border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--panel-text-4);
+    cursor: pointer;
+}
+
+.ins-help-btn:hover {
+    background: var(--panel-hover-bg);
+    border-color: var(--panel-accent-line);
+    color: var(--panel-accent);
+}
+
+.ins-param {
+    padding-top: 2px;
+}
+
+.ins-field {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+}
+
+.ins-field .ins-input {
+    width: 82px;
+}
+
+.ins-unit {
+    min-width: 26px;
+    font-size: 9.5px;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    color: var(--panel-text-5);
+}
+
+.ins-hint {
+    margin: 1px 0 7px;
+    font-size: 10px;
+    line-height: 1.45;
+    color: var(--panel-text-4);
+    user-select: text;
+}
+
+.ins-hint-span {
+    display: block;
+    margin-top: 2px;
+    font-size: 9.5px;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    color: var(--panel-text-5);
+}

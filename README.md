@@ -17,6 +17,8 @@ Version 1.2 unblocked the wiring: server blocks got a second input port for cons
 and compatible ports light up while you drag a connection. Version 1.3 adds three practice modes on
 top of the challenge catalogue — **Interview**, **Incident** and **Golf** — plus a **challenge
 editor**: write your own task in YAML or JSON and run it through the same acceptance engine.
+Version 1.3.2 makes the catalogue explain itself: every block has a reference window, every
+parameter has a hint with its unit, and a connection can be given a name.
 
 * **Catalogue — 127 blocks in 14 groups: the whole planned catalogue**, MVP (44) plus V1 (65)
   plus V2 (18). A capacity model is filled in for 101 blocks — every block that carries traffic;
@@ -25,6 +27,11 @@ editor**: write your own task in YAML or JSON and run it through the same accept
 * **23 challenges** across levels 1–5, accepted by predicates, a Realism Gate, an anti-pattern
   linter, a seven-axis rubric and stars — plus **6 interview sessions, 10 incidents and 5 golf
   tasks** derived from them.
+* **A reference for every block**: what it is, what limits its capacity (the bars are computed by
+  the block's own model at default parameters, so they cannot drift from the engine), good
+  practice, common mistakes, a parameter table and links to the neighbours in its group — opened
+  from the palette, the inspector or the node's context menu. 127 articles and 666 parameter
+  hints per language, loaded on demand rather than shipped in the main bundle.
 * **16 scenarios**, ten of which run over time.
 * The computation is deterministic: the seed is derived from the scheme, the scenario and the
   model version; `Math.random()` is banned inside the engine.
@@ -199,7 +206,7 @@ npm run dev        # http://localhost:5173/sd-flow/
 | `npm run preview` | Local preview of the built bundle |
 | `npm run lint` | ESLint 9 (flat config) |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Vitest: 719 tests in 37 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, practice sets, the authoring format, locales, node names, sample schemes, demo schemes |
+| `npm test` | Vitest: 731 tests in 38 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, practice sets, the authoring format, locales, node names, block reference and parameter hints, sample schemes, demo schemes |
 
 Deployment is GitHub Actions on a push to `main`: lint → typecheck → tests → build → GitHub Pages.
 The app installs as a PWA and runs offline; a scheme can be shared as a link, the canvas exported
