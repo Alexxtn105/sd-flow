@@ -5,6 +5,8 @@ import { simulate } from '../../src/engine/sim/simulate';
 import { buildScheme } from '../helpers/scheme';
 import type { ComponentParams } from '../../src/engine/types/component';
 import type { SimResult } from '../../src/engine/sim/types';
+import ruCommon from '../../src/locales/ru/common.json';
+import enCommon from '../../src/locales/en/common.json';
 
 beforeAll(() => {
     registry.reset();
@@ -140,5 +142,118 @@ describe('слияние конфликтов', () => {
         );
 
         expect(rateOf(result, 'write-conflict')).toBe(0);
+    });
+});
+
+describe('отчёт о средствах смягчения', () => {
+    function codesOf(result: SimResult): string[] {
+        return result.consistency.mitigations.map((item) => item.code);
+    }
+
+    function mitigation(result: SimResult, code: string) {
+        return result.consistency.mitigations.find((item) => item.code === code);
+    }
+
+    it('кворум попадает в отчёт со своими числами и списком снятых аномалий', () => {
+        const found = mitigation(store('cassandra', {}), 'quorum');
+
+        expect(found).toBeDefined();
+        expect(found?.nodeIds).toEqual(['db']);
+        expect(found?.values).toEqual({ quorumR: 2, quorumW: 2, quorumN: 3 });
+        expect(found?.suppresses).toContain('stale-read');
+        expect(found?.suppresses).toContain('divergent-replicas');
+    });
+
+    it('липкие чтения и заявленная гарантия сессии перечисляются с параметрами', () => {
+        const result = store('postgres', {
+            ...REPLICATED,
+            stickyReadShare: 0.4,
+            consistencyModel: 'read-your-writes',
+        });
+
+        expect(mitigation(result, 'sticky-reads')?.values).toEqual({ stickyReadShare: 0.4 });
+        expect(mitigation(result, 'session-guarantee')?.values).toEqual({
+            consistencyModel: 'read-your-writes',
+        });
+    });
+
+    it('контроль конкуренции и уровень изоляции различаются', () => {
+        const locking = store('postgres', { concurrencyControl: 'pessimistic', isolationLevel: 'serializable' });
+
+        expect(mitigation(locking, 'concurrency-control')?.values).toEqual({
+            concurrencyControl: 'pessimistic',
+        });
+        expect(mitigation(locking, 'isolation')?.suppresses).toEqual([
+            'dirty-read',
+            'non-repeatable-read',
+            'phantom-read',
+        ]);
+        expect(codesOf(store('postgres', { concurrencyControl: 'none', isolationLevel: 'read-committed' })))
+            .not.toContain('concurrency-control');
+    });
+
+    it('CRDT объявляется отдельно от прочих контролей', () => {
+        expect(codesOf(store('postgres', { concurrencyControl: 'crdt' }))).toContain('crdt');
+        expect(codesOf(store('postgres', { concurrencyControl: 'crdt' }))).not.toContain('concurrency-control');
+    });
+
+    it('идемпотентный консьюмер и упорядоченный брокер попадают в отчёт', () => {
+        const result = simulate(
+            buildScheme({
+                nodes: [
+                    { id: 'client', type: 'client-web', params: { dau: 500000 } },
+                    { id: 'api', type: 'service' },
+                    { id: 'bus', type: 'kafka', params: { orderingScope: 'per-key' } },
+                    { id: 'worker', type: 'worker', params: { idempotent: true } },
+                ],
+                links: [
+                    { from: 'client', to: 'api' },
+                    { from: 'api', to: 'bus' },
+                    { from: 'bus', to: 'worker' },
+                ],
+            }),
+            { sampleCount: SAMPLES },
+        );
+
+        expect(mitigation(result, 'idempotency')?.nodeIds).toEqual(['worker']);
+        expect(mitigation(result, 'ordering')?.values).toEqual({ orderingScope: 'per-key' });
+    });
+
+    it('при выключенной модели аномалий отчёта нет', () => {
+        const scheme = buildScheme({
+            nodes: [
+                { id: 'client', type: 'client-web' },
+                { id: 'api', type: 'service' },
+                { id: 'db', type: 'postgres' },
+            ],
+            links: [
+                { from: 'client', to: 'api' },
+                { from: 'api', to: 'db' },
+            ],
+            settings: { consistencyModel: 'off' },
+        });
+
+        expect(simulate(scheme, { sampleCount: SAMPLES }).consistency.mitigations).toHaveLength(0);
+    });
+
+    it('каждый код средства переведён на оба языка', () => {
+        const codes = [
+            'quorum',
+            'sync-replication',
+            'sticky-reads',
+            'session-guarantee',
+            'concurrency-control',
+            'crdt',
+            'isolation',
+            'conflict-policy',
+            'idempotency',
+            'ordering',
+            'suppresses',
+        ];
+
+        for (const code of codes) {
+            expect(ruCommon.mitigation, `ru: mitigation.${code}`).toHaveProperty(code);
+            expect(enCommon.mitigation, `en: mitigation.${code}`).toHaveProperty(code);
+        }
     });
 });

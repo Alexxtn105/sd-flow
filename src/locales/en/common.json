@@ -394,7 +394,8 @@
             "consistency": "Consistency",
             "multiRegion": "Multi-region",
             "waterfall": "Latency waterfall",
-            "timeline": "Over time — {{scenario}}"
+            "timeline": "Over time — {{scenario}}",
+            "mitigations": "Mitigations"
         },
         "metric": {
             "rps": "Load",
@@ -411,7 +412,9 @@
             "ceilingRunning": "Sweeping…",
             "ceilingBound": "{{node}} · {{bound}} · ×{{factor}} of current traffic",
             "ceilingFree": "nothing saturates up to ×{{factor}} — no bottleneck",
-            "storageDetail": "growth {{growth}} {{unit}} · backups {{backup}} GB · idempotency keys {{idempotency}} GB"
+            "storageDetail": "growth {{growth}} {{unit}} · backups {{backup}} GB · idempotency keys {{idempotency}} GB",
+            "blocks": "Blocks",
+            "blocksDetail": "links {{links}} · unmodelled {{unmodelled}}"
         },
         "unit": {
             "rps": "req/s",
@@ -440,7 +443,8 @@
             "code": "Anomaly",
             "rate": "Rate",
             "share": "Share of ops",
-            "nodes": "Blocks"
+            "nodes": "Blocks",
+            "source": "Show how it was computed"
         },
         "region": {
             "mode": "Mode",
@@ -453,7 +457,8 @@
             "rpo": "RPO",
             "rto": "RTO",
             "againstTarget": "{{value}} {{unit}} against a {{target}} {{unit}} target"
-        }
+        },
+        "noAnomalies": "No anomalies found — below is what removed them."
     },
     "probe": {
         "explain": "How the number is derived",
@@ -618,6 +623,19 @@
         "phantom-read": "Phantom read",
         "upperBound": "upper-bound estimate"
     },
+    "mitigation": {
+        "quorum": "Quorum R + W > N: {{quorumR}} + {{quorumW}} > {{quorumN}}",
+        "sync-replication": "Linearizable on top of synchronous replication",
+        "sticky-reads": "Sticky reads: {{stickyReadSharePct}}% of sessions read from their own replica",
+        "session-guarantee": "Declared session guarantee: {{consistencyModel}}",
+        "concurrency-control": "Concurrency control: {{concurrencyControl}}",
+        "crdt": "CRDT: concurrent edits merge through the data type",
+        "isolation": "Isolation level: {{isolationLevel}}",
+        "conflict-policy": "Conflict resolution in the policy: {{conflictResolution}}",
+        "idempotency": "Idempotency key on the consumer",
+        "ordering": "Ordering guarantee: {{orderingScope}}",
+        "suppresses": "removes: {{list}}"
+    },
     "bound": {
         "authoritative-qps": "authoritative server limit",
         "blocking": "waiting on dependencies",
@@ -733,7 +751,8 @@
         },
         "importFailed": {
             "title": "Unsupported file",
-            "message": "This is not a SysDesign Flow scheme or the file is damaged. Check that you are importing JSON exported from the editor."
+            "not-a-scheme": "This is not a SysDesign Flow scheme or the file is damaged. Check that you are importing JSON exported from the editor.",
+            "future-version": "The file was saved by a newer scheme format. Reload the page: if that does not help, this build cannot read the file yet."
         }
     },
     "errorBoundary": {
@@ -752,6 +771,14 @@
         "copyFailed": "Could not copy the link to the clipboard",
         "opened": "Scheme opened from the link",
         "brokenLink": "The link is damaged: the scheme cannot be restored from it. Ask for a new one."
+    },
+    "storage": {
+        "migration": {
+            "model-behind": "The scheme was saved on model version {{saved}}, the current one is {{current}} — the numbers may have changed.",
+            "model-ahead": "The scheme was saved on a newer model version {{saved}}, this build has {{current}} — some parameters may not have applied.",
+            "unknown-blocks": "Dropped {{count}} blocks: those types are no longer in the catalogue ({{types}}).",
+            "dropped-links": "Dropped {{count}} links: their endpoints did not survive."
+        }
     },
     "export": {
         "png": "Export scheme to PNG",
@@ -982,6 +1009,7 @@
             "anomalies": "Rates of stale reads, conflicts, lost updates and duplicates are computed."
         },
         "consistencyLocked": "The challenge requires the «{{mode}}» mode and locks the switch.",
+        "consistencyDefault": "Remember as the default mode for new schemes",
         "pricing": "Pricing profile",
         "pricingProfile": {
             "aws-2026-q2": "Large cloud (AWS)",

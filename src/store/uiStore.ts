@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import StorageService, { STORAGE_KEYS } from '../services/storageService';
+import { DEFAULT_SETTINGS } from '../engine/types/scheme';
+import type { SchemeSettings } from '../engine/types/scheme';
 import { clampPanelSize, PANEL_BOUNDS, PANEL_KEYS } from '../utils/panelSize';
 import type { PanelAxis, PanelKey } from '../utils/panelSize';
 
@@ -32,6 +34,7 @@ export interface UiState {
     paramHints: boolean;
     heatmapOn: boolean;
     minimapOn: boolean;
+    defaultConsistencyModel: SchemeSettings['consistencyModel'];
     connectionSource: ConnectionSource | null;
     setMode: (mode: AppMode) => void;
     togglePalette: () => void;
@@ -55,6 +58,7 @@ export interface UiState {
     toggleParamHints: () => void;
     toggleHeatmap: () => void;
     toggleMinimap: () => void;
+    setDefaultConsistencyModel: (mode: SchemeSettings['consistencyModel']) => void;
     startConnection: (source: ConnectionSource) => void;
     endConnection: () => void;
 }
@@ -65,6 +69,7 @@ interface StoredPreferences {
     paramHints?: boolean;
     heatmapOn?: boolean;
     minimapOn?: boolean;
+    defaultConsistencyModel?: SchemeSettings['consistencyModel'];
 }
 
 const FALLBACK_VIEWPORT: Record<PanelAxis, number> = { x: 1440, y: 900 };
@@ -115,6 +120,13 @@ function loadMinimapOn(): boolean {
     return typeof stored === 'boolean' ? stored : viewport('x') > MINIMAP_MIN_VIEWPORT;
 }
 
+function loadDefaultConsistencyModel(): SchemeSettings['consistencyModel'] {
+    const stored = StorageService.load<StoredPreferences>(STORAGE_KEYS.PREFERENCES)?.defaultConsistencyModel;
+    return stored === 'off' || stored === 'attribute' || stored === 'anomalies'
+        ? stored
+        : DEFAULT_SETTINGS.consistencyModel;
+}
+
 function sameIds(left: string[], right: string[]): boolean {
     return left.length === right.length && left.every((id, index) => id === right[index]);
 }
@@ -137,6 +149,7 @@ export const useUiStore = create<UiState>((set, get) => ({
     paramHints: loadParamHints(),
     heatmapOn: loadHeatmapOn(),
     minimapOn: loadMinimapOn(),
+    defaultConsistencyModel: loadDefaultConsistencyModel(),
     connectionSource: null,
 
     setMode: (mode) => set({ mode }),
@@ -214,6 +227,11 @@ export const useUiStore = create<UiState>((set, get) => ({
         const minimapOn = !get().minimapOn;
         savePreference({ minimapOn });
         set({ minimapOn });
+    },
+
+    setDefaultConsistencyModel: (mode) => {
+        savePreference({ defaultConsistencyModel: mode });
+        set({ defaultConsistencyModel: mode });
     },
 
     toggleParamHints: () => {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import StorageService, { STORAGE_KEYS } from '../services/storageService';
-import { fromScheme, isScheme, toScheme } from '../services/schemeSerializer';
+import { fromScheme, toScheme } from '../services/schemeSerializer';
+import { migrateScheme } from '../services/schemeMigrations';
 import type { ParsedScheme } from '../services/schemeSerializer';
 import { useGraphStore } from '../store/graphStore';
 import { useSchemeStore } from '../store/schemeStore';
@@ -40,9 +41,9 @@ export function useAutoSave(enabled: boolean): AutoSaveApi {
     }, [enabled, revision]);
 
     const loadAutoSave = useCallback((): ParsedScheme | null => {
-        const raw = StorageService.load<unknown>(STORAGE_KEYS.AUTO_SAVE);
-        if (!isScheme(raw)) return null;
-        return fromScheme(raw);
+        const read = migrateScheme(StorageService.load<unknown>(STORAGE_KEYS.AUTO_SAVE));
+        if (!read.ok) return null;
+        return fromScheme(read.scheme);
     }, []);
 
     const clearAutoSave = useCallback(() => {

@@ -36,3 +36,23 @@
     line-height: 1.45;
     color: var(--panel-text-4);
 }
+
+.set-check {
+    display: flex;
+    gap: 7px;
+    align-items: center;
+    margin-top: 6px;
+    color: var(--panel-text-3);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.set-check input {
+    accent-color: var(--accent-primary);
+    cursor: pointer;
+}
+
+.set-check:has(input:disabled) {
+    color: var(--panel-text-5);
+    cursor: not-allowed;
+}

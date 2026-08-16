@@ -10,6 +10,7 @@ import type {
     SchemeViewport,
     Size,
 } from '../engine/types/scheme';
+import { migrateScheme } from './schemeMigrations';
 import { sortNodesForFlow } from '../store/graphStore';
 import type { SdEdge, SdNode } from '../store/graphStore';
 import { nodeDimensions } from '../utils/nodeSize';
@@ -137,7 +138,5 @@ export function fromScheme(scheme: SchemeV1): ParsedScheme {
 }
 
 export function isScheme(value: unknown): value is SchemeV1 {
-    if (typeof value !== 'object' || value === null) return false;
-    const candidate = value as Partial<SchemeV1>;
-    return candidate.version === 1 && Array.isArray(candidate.nodes) && Array.isArray(candidate.edges);
+    return migrateScheme(value).ok;
 }

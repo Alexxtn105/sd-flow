@@ -1,10 +1,13 @@
 import { create } from 'zustand';
 import StorageService, { STORAGE_KEYS } from '../services/storageService';
-import { fromScheme, isScheme, toScheme } from '../services/schemeSerializer';
+import { fromScheme, toScheme } from '../services/schemeSerializer';
+import { migrateScheme } from '../services/schemeMigrations';
+import type { MigrationReport } from '../services/schemeMigrations';
 import { nextId } from '../engine/ids';
 import { DEFAULT_SETTINGS } from '../engine/types/scheme';
 import type { SchemeMeta, SchemeSettings, SchemeV1 } from '../engine/types/scheme';
 import { useGraphStore } from './graphStore';
+import { useUiStore } from './uiStore';
 
 export interface StoredSchemeInfo {
     id: string;
@@ -48,11 +51,11 @@ export interface SchemeState {
     createNew: () => void;
     saveAs: (name: string) => boolean;
     save: () => boolean;
-    load: (id: string) => boolean;
+    load: (id: string) => MigrationReport | null;
     remove: (id: string) => void;
     setSetting: <K extends keyof SchemeSettings>(key: K, value: SchemeSettings[K]) => void;
     exportScheme: () => SchemeV1;
-    importScheme: (raw: unknown) => boolean;
+    importScheme: (raw: unknown) => MigrationReport | null;
 }
 
 export const useSchemeStore = create<SchemeState>((set, get) => ({
@@ -67,7 +70,11 @@ export const useSchemeStore = create<SchemeState>((set, get) => ({
 
     createNew: () => {
         useGraphStore.getState().clear();
-        set({ meta: createMeta(''), settings: { ...DEFAULT_SETTINGS }, savedRevision: useGraphStore.getState().revision });
+        set({
+            meta: createMeta(''),
+            settings: { ...DEFAULT_SETTINGS, consistencyModel: useUiStore.getState().defaultConsistencyModel },
+            savedRevision: useGraphStore.getState().revision,
+        });
     },
 
     saveAs: (name) => {
@@ -103,10 +110,13 @@ export const useSchemeStore = create<SchemeState>((set, get) => ({
 
     load: (id) => {
         const library = readLibrary();
-        const scheme = library[id];
-        if (!scheme) return false;
+        const stored = library[id];
+        if (!stored) return null;
 
-        const parsed = fromScheme(scheme);
+        const read = migrateScheme(stored);
+        if (!read.ok) return null;
+
+        const parsed = fromScheme(read.scheme);
         useGraphStore.getState().replaceGraph(parsed.nodes, parsed.edges);
         set({
             meta: parsed.meta,
@@ -114,7 +124,7 @@ export const useSchemeStore = create<SchemeState>((set, get) => ({
             savedRevision: useGraphStore.getState().revision,
             library: toInfo(library),
         });
-        return true;
+        return read.report;
     },
 
     remove: (id) => {
@@ -139,16 +149,17 @@ export const useSchemeStore = create<SchemeState>((set, get) => ({
     },
 
     importScheme: (raw) => {
-        if (!isScheme(raw)) return false;
+        const read = migrateScheme(raw);
+        if (!read.ok) return null;
 
-        const parsed = fromScheme(raw);
+        const parsed = fromScheme(read.scheme);
         useGraphStore.getState().replaceGraph(parsed.nodes, parsed.edges);
         set({
             meta: { ...parsed.meta, id: nextId('scheme') },
             settings: parsed.settings,
             savedRevision: useGraphStore.getState().revision,
         });
-        return true;
+        return read.report;
     },
 }));
 

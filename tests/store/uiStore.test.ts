@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import StorageService, { STORAGE_KEYS } from '../../src/services/storageService';
 import { isTutorialDone, useUiStore } from '../../src/store/uiStore';
+import { useSchemeStore } from '../../src/store/schemeStore';
+import { DEFAULT_SETTINGS } from '../../src/engine/types/scheme';
 import { clampPanelSize, PANEL_BOUNDS, PANEL_KEYS, resolvePanelMax } from '../../src/utils/panelSize';
 
 describe('clampPanelSize', () => {
@@ -251,5 +253,33 @@ describe('тепловая карта и фокус', () => {
 
         useUiStore.getState().focusNodes(['svc'], []);
         expect(useUiStore.getState().focusRequest).toBe(before + 2);
+    });
+});
+
+describe('модель согласованности по умолчанию', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        useUiStore.getState().setDefaultConsistencyModel(DEFAULT_SETTINGS.consistencyModel);
+    });
+
+    it('без настройки совпадает с умолчанием схемы', () => {
+        expect(useUiStore.getState().defaultConsistencyModel).toBe(DEFAULT_SETTINGS.consistencyModel);
+    });
+
+    it('запоминается в настройках между сессиями', () => {
+        useUiStore.getState().setDefaultConsistencyModel('attribute');
+
+        expect(useUiStore.getState().defaultConsistencyModel).toBe('attribute');
+        expect(StorageService.load(STORAGE_KEYS.PREFERENCES)).toMatchObject({
+            defaultConsistencyModel: 'attribute',
+        });
+    });
+
+    it('применяется к новой схеме, а не только к текущей', () => {
+        useUiStore.getState().setDefaultConsistencyModel('off');
+        useSchemeStore.getState().createNew();
+
+        expect(useSchemeStore.getState().settings.consistencyModel).toBe('off');
+        expect(useSchemeStore.getState().settings.pricingProfile).toBe(DEFAULT_SETTINGS.pricingProfile);
     });
 });

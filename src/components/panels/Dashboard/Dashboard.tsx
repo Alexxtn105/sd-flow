@@ -1,10 +1,10 @@
-import { useCallback, useState } from 'react';
+import { Fragment, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Icon from '../../common/Icons/Icon';
 import ResizeHandle from '../../common/ResizeHandle/ResizeHandle';
 import Waterfall from '../../common/Waterfall/Waterfall';
 import Timeline from './Timeline';
-import type { Finding } from '../../../engine/sim/types';
+import type { AnomalyRate, Finding, MitigationEffect } from '../../../engine/sim/types';
 import useNodeLabels from '../../../hooks/useNodeLabels';
 import { toScheme } from '../../../services/schemeSerializer';
 import { useGraphStore } from '../../../store/graphStore';
@@ -44,6 +44,18 @@ function percent(value: number, digits: number): string {
     return (value * 100).toFixed(digits);
 }
 
+function numericValues(values: Record<string, string | number>): Record<string, string | number> {
+    const formatted: Record<string, string | number> = {};
+
+    for (const [key, value] of Object.entries(values)) {
+        if (typeof value !== 'number') continue;
+        formatted[key] = formatNumber(value);
+        formatted[`${key}Pct`] = formatNumber(value * 100);
+    }
+
+    return formatted;
+}
+
 export default function Dashboard() {
     const { t } = useTranslation(['common', 'blocks', 'params']);
 
@@ -56,6 +68,7 @@ export default function Dashboard() {
     const ceiling = useSimStore((state) => state.ceiling);
     const ceilingRunning = useSimStore((state) => state.ceilingRunning);
     const [percentile, setPercentile] = useState<WaterfallPercentile>('p99');
+    const [openAnomaly, setOpenAnomaly] = useState<string | null>(null);
 
     const runSweep = useCallback(() => {
         const { nodes, edges } = useGraphStore.getState();
@@ -73,15 +86,11 @@ export default function Dashboard() {
         (finding: Finding): string => {
             const values: Record<string, string | number> = {
                 nodeNames: finding.nodeIds.map(labelOf).join(', '),
+                ...numericValues(finding.values),
             };
 
             for (const [key, value] of Object.entries(finding.values)) {
-                if (typeof value === 'number') {
-                    values[key] = formatNumber(value);
-                    values[`${key}Pct`] = formatNumber(value * 100);
-                    continue;
-                }
-
+                if (typeof value !== 'string') continue;
                 values[key] = key === 'boundBy' ? t(`bound.${value}`, { defaultValue: value }) : value;
             }
 
@@ -90,8 +99,25 @@ export default function Dashboard() {
         [labelOf, t],
     );
 
+    const mitigationText = useCallback(
+        (mitigation: MitigationEffect): string => {
+            const values: Record<string, string | number> = numericValues(mitigation.values);
+
+            for (const [key, value] of Object.entries(mitigation.values)) {
+                if (typeof value === 'string') values[key] = t(`enum.${value}`, { ns: 'params', defaultValue: value });
+            }
+
+            return t(`mitigation.${mitigation.code}`, { ...values, defaultValue: mitigation.code });
+        },
+        [t],
+    );
+
+    const anomalyKey = (item: AnomalyRate, index: number): string => `${item.code}-${index}`;
+
     const totals = result?.totals ?? null;
-    const anomalies = result && result.consistency.mode === 'anomalies' ? result.consistency.anomalies : [];
+    const consistency = result && result.consistency.mode === 'anomalies' ? result.consistency : null;
+    const anomalies = consistency?.anomalies ?? [];
+    const mitigations = consistency?.mitigations ?? [];
     const multiRegion = result?.multiRegion ?? null;
     const timeline = result?.timeline ?? null;
     const waterfalls = result?.waterfalls ?? [];
@@ -229,6 +255,16 @@ export default function Dashboard() {
                                         unit: t('dashboard.unit.minMonth'),
                                     })}
                                 />
+                                <Metric
+                                    label={t('dashboard.metric.blocks')}
+                                    value={formatNumber(Object.keys(result.nodes).length)}
+                                    hint={t('dashboard.metric.blocksDetail', {
+                                        links: Object.keys(result.edges).length,
+                                        unmodelled: Object.values(result.nodes).filter(
+                                            (node) => node.boundBy === 'unmodelled',
+                                        ).length,
+                                    })}
+                                />
                             </div>
                         </section>
 
@@ -347,9 +383,14 @@ export default function Dashboard() {
                             )}
                         </section>
 
-                        {anomalies.length > 0 && (
+                        {(anomalies.length > 0 || mitigations.length > 0) && (
                             <section className="dash-section dash-section-anomalies">
                                 <h3 className="dash-section-title">{t('dashboard.section.consistency')}</h3>
+
+                                {anomalies.length === 0 && (
+                                    <p className="dash-hint">{t('dashboard.noAnomalies')}</p>
+                                )}
+
                                 <div className="dash-table dash-table-anomalies">
                                     <div className="dash-row dash-row-head">
                                         <span>{t('dashboard.anomaly.code')}</span>
@@ -357,26 +398,106 @@ export default function Dashboard() {
                                         <span>{t('dashboard.anomaly.share')}</span>
                                         <span>{t('dashboard.anomaly.nodes')}</span>
                                     </div>
-                                    {anomalies.map((item, index) => (
-                                        <div key={`${item.code}-${index}`} className="dash-row">
-                                            <span className="dash-cell-name">
-                                                {t(`anomaly.${item.code}`, { defaultValue: item.code })}
-                                                {item.upperBound && (
-                                                    <span className="dash-cell-sub">
-                                                        {t('anomaly.upperBound')}
+                                    {anomalies.map((item, index) => {
+                                        const key = anomalyKey(item, index);
+                                        const open = openAnomaly === key;
+
+                                        return (
+                                            <Fragment key={key}>
+                                                <div className="dash-row">
+                                                    <button
+                                                        type="button"
+                                                        className="dash-cell-name dash-anomaly-name"
+                                                        aria-expanded={open}
+                                                        title={t('dashboard.anomaly.source')}
+                                                        onClick={() => setOpenAnomaly(open ? null : key)}
+                                                    >
+                                                        {t(`anomaly.${item.code}`, { defaultValue: item.code })}
+                                                        {item.upperBound && (
+                                                            <span className="dash-cell-sub">
+                                                                {t('anomaly.upperBound')}
+                                                            </span>
+                                                        )}
+                                                    </button>
+                                                    <span>
+                                                        {formatNumber(item.ratePerSec)}{' '}
+                                                        {t('dashboard.unit.opsSec')}
                                                     </span>
+                                                    <span>{percent(item.shareOfOperations, 3)}%</span>
+                                                    <button
+                                                        type="button"
+                                                        className="dash-cell-name dash-anomaly-nodes"
+                                                        onClick={() => focusNodes(item.nodeIds, [])}
+                                                    >
+                                                        {item.nodeIds.map(labelOf).join(', ')}
+                                                    </button>
+                                                </div>
+
+                                                {open && (
+                                                    <div className="dash-anomaly-source">
+                                                        <p className="dash-anomaly-formula">
+                                                            {item.explain.formula}
+                                                        </p>
+                                                        <dl className="dash-anomaly-inputs">
+                                                            {Object.entries(item.explain.inputs).map(
+                                                                ([name, value]) => (
+                                                                    <div key={name}>
+                                                                        <dt>{name}</dt>
+                                                                        <dd>
+                                                                            {typeof value === 'number'
+                                                                                ? formatNumber(value)
+                                                                                : t(`enum.${value}`, {
+                                                                                      ns: 'params',
+                                                                                      defaultValue: value,
+                                                                                  })}
+                                                                        </dd>
+                                                                    </div>
+                                                                ),
+                                                            )}
+                                                        </dl>
+                                                    </div>
                                                 )}
-                                            </span>
-                                            <span>
-                                                {formatNumber(item.ratePerSec)} {t('dashboard.unit.opsSec')}
-                                            </span>
-                                            <span>{percent(item.shareOfOperations, 3)}%</span>
-                                            <span className="dash-cell-name">
-                                                {item.nodeIds.map(labelOf).join(', ')}
-                                            </span>
-                                        </div>
-                                    ))}
+                                            </Fragment>
+                                        );
+                                    })}
                                 </div>
+
+                                {mitigations.length > 0 && (
+                                    <>
+                                        <h4 className="dash-subsection-title">
+                                            {t('dashboard.section.mitigations')}
+                                        </h4>
+                                        <ul className="dash-mitigations">
+                                            {mitigations.map((item, index) => (
+                                                <li key={`${item.code}-${index}`}>
+                                                    <button
+                                                        type="button"
+                                                        className="dash-mitigation"
+                                                        onClick={() => focusNodes(item.nodeIds, [])}
+                                                    >
+                                                        <span className="dash-mitigation-name">
+                                                            {mitigationText(item)}
+                                                        </span>
+                                                        <span className="dash-mitigation-nodes">
+                                                            {item.nodeIds.map(labelOf).join(', ')}
+                                                        </span>
+                                                        <span className="dash-mitigation-effect">
+                                                            {t('mitigation.suppresses', {
+                                                                list: item.suppresses
+                                                                    .map((code) =>
+                                                                        t(`anomaly.${code}`, {
+                                                                            defaultValue: code,
+                                                                        }),
+                                                                    )
+                                                                    .join(', '),
+                                                            })}
+                                                        </span>
+                                                    </button>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </>
+                                )}
                             </section>
                         )}
 

@@ -41,6 +41,8 @@ import {
     slugify,
 } from './services/fileService';
 import { renderSchemePng } from './services/imageExport';
+import { migrateScheme } from './services/schemeMigrations';
+import type { MigrationReport } from './services/schemeMigrations';
 import { buildMarkdownReport } from './services/reportExport';
 import { buildShareUrl, clearShareHash, decodeScheme, encodeScheme, isShareUrlTooLong, readSharePayload } from './services/shareLink';
 import './App.css';
@@ -99,6 +101,19 @@ export default function App() {
         setToast({ id: toastCounter.current, text, tone });
     }, []);
 
+    const notifyMigration = useCallback(
+        (report: MigrationReport | null): boolean => {
+            if (!report || report.notes.length === 0) return false;
+
+            showToast(
+                report.notes.map((note) => t(`storage.migration.${note.code}`, note.values)).join(' · '),
+                'warn',
+            );
+            return true;
+        },
+        [showToast, t],
+    );
+
     useEffect(() => {
         if (restored.current) return;
         restored.current = true;
@@ -109,8 +124,10 @@ export default function App() {
         if (payload) {
             clearShareHash();
             void decodeScheme(payload).then((shared) => {
-                if (shared && importScheme(shared)) {
-                    showToast(t('share.opened'));
+                const report = shared ? importScheme(shared) : null;
+
+                if (report) {
+                    if (!notifyMigration(report)) showToast(t('share.opened'));
                     return;
                 }
                 showToast(t('share.brokenLink'), 'error');
@@ -122,7 +139,7 @@ export default function App() {
         if (autoSaved && autoSaved.nodes.length > 0) {
             replaceGraph(autoSaved.nodes, autoSaved.edges);
         }
-    }, [importScheme, loadAutoSave, refreshLibrary, replaceGraph, showToast, t]);
+    }, [importScheme, loadAutoSave, notifyMigration, refreshLibrary, replaceGraph, showToast, t]);
 
     const guard = useCallback(
         (title: string, message: string, action: () => void) => {
@@ -158,11 +175,11 @@ export default function App() {
     const handlePick = useCallback(
         (id: string) => {
             guard(t('dialog.confirmLoad.title'), t('dialog.confirmLoad.message'), () => {
-                loadScheme(id);
+                notifyMigration(loadScheme(id));
                 dialogs.close();
             });
         },
-        [dialogs, guard, loadScheme, t],
+        [dialogs, guard, loadScheme, notifyMigration, t],
     );
 
     const handleRemove = useCallback(
@@ -185,14 +202,20 @@ export default function App() {
         const raw = await pickJsonFile();
         if (raw === null) return;
 
-        if (!importScheme(raw)) {
+        const read = migrateScheme(raw);
+
+        if (!read.ok) {
             setConfirmState({
                 title: t('dialog.importFailed.title'),
-                message: t('dialog.importFailed.message'),
+                message: t(`dialog.importFailed.${read.reason}`),
                 action: () => undefined,
             });
+            return;
         }
-    }, [importScheme, t]);
+
+        importScheme(read.scheme);
+        notifyMigration(read.report);
+    }, [importScheme, notifyMigration, t]);
 
     const handleShare = useCallback(async () => {
         const scheme = exportScheme();

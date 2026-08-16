@@ -185,9 +185,17 @@ export interface AnomalyRate {
     upperBound?: boolean;
 }
 
+export interface MitigationEffect {
+    code: string;
+    nodeIds: string[];
+    suppresses: string[];
+    values: Record<string, string | number>;
+}
+
 export interface ConsistencyResult {
     mode: 'off' | 'attribute' | 'anomalies';
     anomalies: AnomalyRate[];
+    mitigations: MitigationEffect[];
 }
 
 export interface RegionResult {

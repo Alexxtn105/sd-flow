@@ -1,9 +1,11 @@
 import { useTranslation } from 'react-i18next';
 import Dialog from '../common/Dialog/Dialog';
 import { PRICING_PROFILES } from '../../engine/sim/constants';
+import { DEFAULT_SETTINGS } from '../../engine/types/scheme';
 import type { SchemeSettings } from '../../engine/types/scheme';
 import { useChallengeStore } from '../../store/challengeStore';
 import { useSchemeStore } from '../../store/schemeStore';
+import { useUiStore } from '../../store/uiStore';
 import './SettingsDialog.css';
 
 const CONSISTENCY_MODES: SchemeSettings['consistencyModel'][] = ['off', 'attribute', 'anomalies'];
@@ -18,6 +20,8 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps) {
     const settings = useSchemeStore((state) => state.settings);
     const setSetting = useSchemeStore((state) => state.setSetting);
     const required = useChallengeStore((state) => state.active?.requiredConsistencyModel ?? null);
+    const defaultConsistencyModel = useUiStore((state) => state.defaultConsistencyModel);
+    const setDefaultConsistencyModel = useUiStore((state) => state.setDefaultConsistencyModel);
 
     const profiles = Object.values(PRICING_PROFILES);
     const profile = PRICING_PROFILES[settings.pricingProfile] ?? profiles[0];
@@ -49,6 +53,20 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps) {
                     ? t('settings.consistencyLocked', { mode: t(`settings.consistencyMode.${required}`) })
                     : t(`settings.consistencyHint.${settings.consistencyModel}`)}
             </p>
+
+            <label className="set-check">
+                <input
+                    type="checkbox"
+                    checked={defaultConsistencyModel === settings.consistencyModel}
+                    disabled={required !== null}
+                    onChange={(event) =>
+                        setDefaultConsistencyModel(
+                            event.target.checked ? settings.consistencyModel : DEFAULT_SETTINGS.consistencyModel,
+                        )
+                    }
+                />
+                {t('settings.consistencyDefault')}
+            </label>
 
             <div className="set-row">
                 <label className="set-label" htmlFor="set-pricing">

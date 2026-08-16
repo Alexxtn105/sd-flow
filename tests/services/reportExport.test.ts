@@ -145,7 +145,7 @@ function simResult(): SimResult {
         totals: totals(),
         findings: findings(),
         issues: [],
-        consistency: { mode: 'anomalies', anomalies: [] },
+        consistency: { mode: 'anomalies', anomalies: [], mitigations: [] },
         multiRegion: null,
     };
 

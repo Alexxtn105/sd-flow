@@ -3,7 +3,7 @@ import type { CompiledNode, CompiledTopology } from './compile';
 import { collisionProbability, concurrencyControlOf, effectiveKeys, rmwWindowSec } from './contention';
 import { explain } from './resources';
 import type { NodeRuntime, OperationFlow } from './solver';
-import type { AnomalyRate, ConsistencyResult } from './types';
+import type { AnomalyRate, ConsistencyResult, MitigationEffect } from './types';
 
 const READ_AFTER_WRITE_SHARE = 0.5;
 const READ_AFTER_WRITE_GAP_SEC = 1;
@@ -162,6 +162,10 @@ export interface ConsistencyOptions {
 
 const NO_PARTITION: ConsistencyOptions = { partitionSec: 0 };
 
+const STALE_FAMILY = ['stale-read', 'read-your-writes', 'monotonic-read'];
+const ISOLATION_FAMILY = ['dirty-read', 'non-repeatable-read', 'phantom-read'];
+const CONFLICT_FAMILY = ['write-conflict', 'lost-write-lww'];
+
 export function analyseConsistency(
     topology: CompiledTopology,
     runtimes: Map<string, NodeRuntime>,
@@ -169,9 +173,19 @@ export function analyseConsistency(
     mode: 'off' | 'attribute' | 'anomalies',
     options: ConsistencyOptions = NO_PARTITION,
 ): ConsistencyResult {
-    if (mode !== 'anomalies') return { mode, anomalies: [] };
+    if (mode !== 'anomalies') return { mode, anomalies: [], mitigations: [] };
 
     const anomalies: AnomalyRate[] = [];
+    const mitigations: MitigationEffect[] = [];
+
+    const mitigate = (
+        code: string,
+        nodeIds: string[],
+        suppresses: string[],
+        values: Record<string, string | number>,
+    ): void => {
+        mitigations.push({ code, nodeIds, suppresses, values });
+    };
     const partitionSec = Math.max(options.partitionSec, 0);
     const policy = topology.multiRegionPolicy;
     const conflictResolution = String(policy?.params.conflictResolution ?? 'lww');
@@ -189,6 +203,8 @@ export function analyseConsistency(
 
         const runtime = runtimes.get(node.id);
         if (!runtime || runtime.throughput <= 0) continue;
+
+        collectNodeMitigations(node, mitigate);
 
         const keys = effectiveKeys(node.params);
         const sigma = Number(node.params.replicaLagSigma ?? 0.8);
@@ -453,6 +469,12 @@ export function analyseConsistency(
         const idempotent = edge.policy.idempotent || consumer.params.idempotent === true;
         const consumerRuntime = runtimes.get(consumer.id);
 
+        if (idempotent) {
+            mitigate('idempotency', [consumer.id], ['duplicate-processing'], {
+                deliverySemantics: 'at-least-once',
+            });
+        }
+
         if (!idempotent) {
             const redeliveryRate =
                 (consumerRuntime?.queue.failureProbability ?? 0) + REBALANCE_REDELIVERY_RATE;
@@ -475,7 +497,14 @@ export function analyseConsistency(
         }
 
         const broker = topology.nodeById.get(edge.source);
-        if (!broker || preservesOrder(broker)) continue;
+        if (!broker) continue;
+
+        if (preservesOrder(broker)) {
+            mitigate('ordering', [broker.id], ['ordering-violation'], {
+                orderingScope: String(broker.params.orderingScope ?? broker.params.queueType ?? ''),
+            });
+            continue;
+        }
 
         const declaredConsumers = numericParam(broker.params, ['consumersPerGroup'], 1);
         const consumers =
@@ -514,5 +543,69 @@ export function analyseConsistency(
         }
     }
 
-    return { mode, anomalies };
+    collectPolicyMitigations(topology, mitigate);
+
+    return { mode, anomalies, mitigations };
+}
+
+type Mitigate = (
+    code: string,
+    nodeIds: string[],
+    suppresses: string[],
+    values: Record<string, string | number>,
+) => void;
+
+function collectNodeMitigations(node: CompiledNode, mitigate: Mitigate): void {
+    const params = node.params;
+
+    if (quorumIsStrong(params)) {
+        mitigate('quorum', [node.id], [...STALE_FAMILY, 'divergent-replicas'], {
+            quorumR: Number(params.quorumR ?? 0),
+            quorumW: Number(params.quorumW ?? 0),
+            quorumN: Number(params.quorumN ?? 0),
+        });
+    } else if (staleReadsEliminated(node)) {
+        mitigate('sync-replication', [node.id], STALE_FAMILY, {
+            replicationMode: String(params.replicationMode ?? ''),
+        });
+    }
+
+    const sticky = stickyReadShare(node);
+    if (sticky > 0) {
+        mitigate('sticky-reads', [node.id], ['read-your-writes', 'monotonic-read'], {
+            stickyReadShare: sticky,
+        });
+    }
+
+    if (readYourWritesGuaranteed(node)) {
+        mitigate('session-guarantee', [node.id], ['read-your-writes'], {
+            consistencyModel: 'read-your-writes',
+        });
+    }
+
+    if (monotonicGuaranteed(node)) {
+        mitigate('session-guarantee', [node.id], ['monotonic-read'], { consistencyModel: 'monotonic' });
+    }
+
+    const control = concurrencyControlOf(params);
+    if (control === 'crdt') {
+        mitigate('crdt', [node.id], ['lost-update', ...CONFLICT_FAMILY], { concurrencyControl: control });
+    } else if (control !== 'none') {
+        mitigate('concurrency-control', [node.id], ['lost-update'], { concurrencyControl: control });
+    }
+
+    const isolationLevel = String(params.isolationLevel ?? '');
+    if (isolationLevel.length > 0 && (ISOLATION_ANOMALIES[isolationLevel] ?? []).length === 0) {
+        mitigate('isolation', [node.id], ISOLATION_FAMILY, { isolationLevel });
+    }
+}
+
+function collectPolicyMitigations(topology: CompiledTopology, mitigate: Mitigate): void {
+    const policy = topology.multiRegionPolicy;
+    if (!policy || topology.regions.length < 2) return;
+
+    const resolution = String(policy.params.conflictResolution ?? '');
+    if (resolution === 'single-writer-per-key' || resolution === 'crdt') {
+        mitigate('conflict-policy', [policy.id], CONFLICT_FAMILY, { conflictResolution: resolution });
+    }
 }
