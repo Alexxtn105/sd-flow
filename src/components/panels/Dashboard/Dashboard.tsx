@@ -6,6 +6,9 @@ import Waterfall from '../../common/Waterfall/Waterfall';
 import Timeline from './Timeline';
 import type { Finding } from '../../../engine/sim/types';
 import useNodeLabels from '../../../hooks/useNodeLabels';
+import { toScheme } from '../../../services/schemeSerializer';
+import { useGraphStore } from '../../../store/graphStore';
+import { useSchemeStore } from '../../../store/schemeStore';
 import { useSimStore } from '../../../store/simStore';
 import { useUiStore } from '../../../store/uiStore';
 import { formatNumber } from '../../../utils/format';
@@ -50,7 +53,16 @@ export default function Dashboard() {
     const toggleDashboard = useSimStore((state) => state.toggleDashboard);
     const waterfallFlowId = useSimStore((state) => state.waterfallFlowId);
     const focusWaterfall = useSimStore((state) => state.focusWaterfall);
+    const ceiling = useSimStore((state) => state.ceiling);
+    const ceilingRunning = useSimStore((state) => state.ceilingRunning);
     const [percentile, setPercentile] = useState<WaterfallPercentile>('p99');
+
+    const runSweep = useCallback(() => {
+        const { nodes, edges } = useGraphStore.getState();
+        const { meta, settings } = useSchemeStore.getState();
+
+        useSimStore.getState().sweep(toScheme({ meta, nodes, edges, settings }));
+    }, []);
 
     const setSelection = useUiStore((state) => state.setSelection);
     const height = useUiStore((state) => state.panels.dashboard);
@@ -142,6 +154,42 @@ export default function Dashboard() {
                                         write: formatNumber(totals.writeRps),
                                     })}
                                 />
+                                <div className="dash-metric">
+                                    <span className="dash-metric-label">{t('dashboard.metric.ceiling')}</span>
+                                    {ceiling ? (
+                                        <>
+                                            <span className="dash-metric-value dash-tone-accent">
+                                                {formatNumber(ceiling.rps)}
+                                                <span className="dash-metric-unit">
+                                                    {t('dashboard.unit.rps')}
+                                                </span>
+                                            </span>
+                                            <span className="dash-metric-hint">
+                                                {ceiling.saturated
+                                                    ? t('dashboard.metric.ceilingBound', {
+                                                          node: labelOf(ceiling.nodeId ?? ''),
+                                                          bound: t(`bound.${ceiling.boundBy}`, {
+                                                              defaultValue: ceiling.boundBy,
+                                                          }),
+                                                          factor: formatNumber(ceiling.multiplier),
+                                                      })
+                                                    : t('dashboard.metric.ceilingFree', {
+                                                          factor: formatNumber(ceiling.multiplier),
+                                                      })}
+                                            </span>
+                                        </>
+                                    ) : (
+                                        <button
+                                            className="dash-sweep"
+                                            onClick={runSweep}
+                                            disabled={ceilingRunning || status === 'running'}
+                                        >
+                                            {ceilingRunning
+                                                ? t('dashboard.metric.ceilingRunning')
+                                                : t('dashboard.metric.ceilingFind')}
+                                        </button>
+                                    )}
+                                </div>
                                 <Metric
                                     label={t('dashboard.metric.costMonth')}
                                     value={formatNumber(totals.costMonth)}

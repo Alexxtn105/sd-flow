@@ -254,6 +254,28 @@
     text-overflow: ellipsis;
 }
 
+.dash-sweep {
+    margin-top: 3px;
+    padding: 4px 8px;
+    border: 1px solid var(--panel-accent-line);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--panel-accent);
+    font-size: 10.5px;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.dash-sweep:hover:not(:disabled) {
+    background: var(--panel-hover-bg);
+}
+
+.dash-sweep:disabled {
+    border-color: var(--panel-border);
+    color: var(--panel-text-5);
+    cursor: default;
+}
+
 .dash-tone-accent {
     color: var(--panel-accent);
 }

@@ -1,12 +1,17 @@
 import type { ChallengeRef } from '../data/practice';
 import type { ChallengeVerdict } from '../engine/challenges/types';
-import type { SimResult } from '../engine/sim/types';
+import type { CeilingResult, SimResult } from '../engine/sim/types';
 import type { SchemeV1 } from '../engine/types/scheme';
 
 export interface SimulationRequest {
     scheme: SchemeV1;
     scenario: string;
     sampleCount: number;
+}
+
+export interface CeilingRequest {
+    scheme: SchemeV1;
+    scenario: string;
 }
 
 export interface AcceptanceRequest {
@@ -16,7 +21,7 @@ export interface AcceptanceRequest {
     hintsUsed: number[];
 }
 
-type WorkerPayload = SimResult | ChallengeVerdict;
+type WorkerPayload = SimResult | ChallengeVerdict | CeilingResult | null;
 
 interface WorkerResponse {
     id: number;
@@ -49,8 +54,8 @@ function createWorker(): Worker | null {
             if (!request) return;
 
             pending.delete(id);
-            if (payload) request.resolve(payload);
-            else request.reject(new Error(error ?? 'unknown worker error'));
+            if (error !== undefined) request.reject(new Error(error));
+            else request.resolve(payload ?? null);
         };
 
         created.onerror = () => {
@@ -112,6 +117,19 @@ export function runSimulation(request: SimulationRequest): Promise<SimResult> {
     return send({ kind: 'simulate', ...request })
         .then((payload) => payload as SimResult)
         .catch(() => simulateInline(request));
+}
+
+async function ceilingInline(request: CeilingRequest): Promise<CeilingResult | null> {
+    const { findCeiling } = await import('../engine/sim/ceiling');
+    return findCeiling(request.scheme, { scenario: request.scenario });
+}
+
+export function runCeiling(request: CeilingRequest): Promise<CeilingResult | null> {
+    if (workerUnavailable) return ceilingInline(request);
+
+    return send({ kind: 'ceiling', ...request })
+        .then((payload) => payload as CeilingResult | null)
+        .catch(() => ceilingInline(request));
 }
 
 export function runAcceptance(request: AcceptanceRequest): Promise<ChallengeVerdict> {

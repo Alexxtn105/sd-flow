@@ -57,6 +57,8 @@ sd-flow/
 │   │   │   ├── probes.ts              ← показания 11 проб, водопад задержки по потоку
 │   │   │   ├── scenarios.ts           ← 16 сценариев, из них 10 transient
 │   │   │   ├── findings.ts            ← [7] RuleEngine
+│   │   │   ├── pipeline.ts            ← решатель + размещение подов одним вызовом
+│   │   │   ├── ceiling.ts             ← потолок схемы: бинарный поиск по трафику
 │   │   │   └── simulate.ts            ← оркестратор, отдаёт SimResult
 │   │   ├── challenges/                ← приёмка заданий, тоже без React и i18n
 │   │   │   ├── types.ts               ← Challenge, Requirement, ChallengeVerdict

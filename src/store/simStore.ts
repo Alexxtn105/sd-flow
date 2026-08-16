@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { DEFAULT_SAMPLE_COUNT, PREVIEW_SAMPLE_COUNT } from '../engine/sim/simulate';
-import type { SimResult } from '../engine/sim/types';
+import type { CeilingResult, SimResult } from '../engine/sim/types';
 import type { SchemeV1 } from '../engine/types/scheme';
-import { runSimulation } from '../services/simulationService';
+import { runCeiling, runSimulation } from '../services/simulationService';
 
 export type SimStatus = 'idle' | 'running' | 'ready' | 'error';
 
@@ -14,7 +14,10 @@ export interface SimState {
     preview: boolean;
     dashboardOpen: boolean;
     waterfallFlowId: string | null;
+    ceiling: CeilingResult | null;
+    ceilingRunning: boolean;
     run: (scheme: SchemeV1) => void;
+    sweep: (scheme: SchemeV1) => void;
     setScenario: (scenario: string) => void;
     setPreview: (preview: boolean) => void;
     toggleDashboard: () => void;
@@ -23,6 +26,7 @@ export interface SimState {
 }
 
 let latestRequest = 0;
+let latestSweep = 0;
 
 export const useSimStore = create<SimState>((set, get) => ({
     result: null,
@@ -32,19 +36,23 @@ export const useSimStore = create<SimState>((set, get) => ({
     preview: false,
     dashboardOpen: true,
     waterfallFlowId: null,
+    ceiling: null,
+    ceilingRunning: false,
 
     run: (scheme) => {
         const { scenario, preview } = get();
 
         if (scheme.nodes.length === 0) {
             latestRequest += 1;
-            set({ result: null, status: 'idle', error: null });
+            latestSweep += 1;
+            set({ result: null, status: 'idle', error: null, ceiling: null, ceilingRunning: false });
             return;
         }
 
         latestRequest += 1;
+        latestSweep += 1;
         const requestId = latestRequest;
-        set({ status: 'running', error: null });
+        set({ status: 'running', error: null, ceiling: null, ceilingRunning: false });
 
         runSimulation({
             scheme,
@@ -61,13 +69,32 @@ export const useSimStore = create<SimState>((set, get) => ({
             });
     },
 
+    sweep: (scheme) => {
+        if (scheme.nodes.length === 0) return;
+
+        latestSweep += 1;
+        const sweepId = latestSweep;
+        set({ ceilingRunning: true });
+
+        runCeiling({ scheme, scenario: get().scenario })
+            .then((ceiling) => {
+                if (sweepId !== latestSweep) return;
+                set({ ceiling, ceilingRunning: false });
+            })
+            .catch(() => {
+                if (sweepId !== latestSweep) return;
+                set({ ceiling: null, ceilingRunning: false });
+            });
+    },
+
     setScenario: (scenario) => set({ scenario }),
     setPreview: (preview) => set({ preview }),
     toggleDashboard: () => set((state) => ({ dashboardOpen: !state.dashboardOpen })),
     focusWaterfall: (flowId) => set({ waterfallFlowId: flowId, dashboardOpen: true }),
     reset: () => {
         latestRequest += 1;
-        set({ result: null, status: 'idle', error: null });
+        latestSweep += 1;
+        set({ result: null, status: 'idle', error: null, ceiling: null, ceilingRunning: false });
     },
 }));
 

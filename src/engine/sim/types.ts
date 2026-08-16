@@ -247,6 +247,18 @@ export interface Timeline {
     recoveredAtSec: number | null;
 }
 
+export interface CeilingResult {
+    scenario: string;
+    rps: number;
+    multiplier: number;
+    baselineRps: number;
+    saturated: boolean;
+    nodeId: string | null;
+    componentType: string;
+    boundBy: string;
+    utilization: number;
+}
+
 export interface Totals {
     rps: number;
     readRps: number;

@@ -2,7 +2,6 @@ import { MODEL_VERSION } from '../types/scheme';
 import type { SchemeV1 } from '../types/scheme';
 import { computeAvailability } from './availability';
 import { compileTopology } from './compile';
-import { planClusterPods } from './clusters';
 import { pricingFor } from './constants';
 import { analyseConsistency } from './consistency';
 import { computeCost } from './cost';
@@ -14,7 +13,7 @@ import { rollUpLatency } from './latency';
 import { analyseMultiRegion } from './multiRegion';
 import { collectProbes, readProbes, withoutProbes } from './probes';
 import { createRng, hashString } from './rng';
-import { solveFlows } from './solver';
+import { solveScheme } from './pipeline';
 import { runTransient } from './transient';
 import { emptyCost } from './resources';
 import type { EdgeResult, NodeResult, SimResult, Totals } from './types';
@@ -69,21 +68,10 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
         serviceScale: setup.serviceScale,
     };
 
-    const unconstrained = solveFlows(topology, flows, solveOptions);
-    const placement = planClusterPods(
-        topology,
-        new Map([...unconstrained.nodes].map(([nodeId, runtime]) => [nodeId, runtime.desiredInstances])),
-    );
-
-    const solved = placement.clamped
-        ? solveFlows(topology, flows, {
-              ...solveOptions,
-              instanceOverride: placement.instanceOverride,
-              warmStart: unconstrained.nodes,
-          })
-        : unconstrained;
-
-    const converged = unconstrained.converged && solved.converged;
+    const run = solveScheme(topology, flows, solveOptions);
+    const solved = run.runtime;
+    const placement = run.placement;
+    const converged = run.converged;
 
     const pricing = pricingFor(scheme.settings.pricingProfile);
     const derived = deriveNodes(topology, solved.nodes, solved.edges);
@@ -218,7 +206,7 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
         seed,
         computeMs: 0,
         converged,
-        iterations: unconstrained.iterations + (placement.clamped ? solved.iterations : 0),
+        iterations: run.iterations,
         nodes,
         edges,
         flows: flowResults,

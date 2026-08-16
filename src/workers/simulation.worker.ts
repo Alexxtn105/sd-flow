@@ -2,6 +2,7 @@ import { resolveChallenge } from '../data/practice';
 import type { ChallengeRef } from '../data/practice';
 import { acceptChallenge } from '../engine/challenges/accept';
 import initComponents from '../engine/initComponents';
+import { findCeiling } from '../engine/sim/ceiling';
 import { simulate } from '../engine/sim/simulate';
 import type { SchemeV1 } from '../engine/types/scheme';
 
@@ -13,6 +14,13 @@ interface SimulationRequestMessage {
     sampleCount: number;
 }
 
+interface CeilingRequestMessage {
+    id: number;
+    kind: 'ceiling';
+    scheme: SchemeV1;
+    scenario: string;
+}
+
 interface AcceptanceRequestMessage {
     id: number;
     kind: 'accept';
@@ -22,7 +30,7 @@ interface AcceptanceRequestMessage {
     hintsUsed: number[];
 }
 
-type RequestMessage = SimulationRequestMessage | AcceptanceRequestMessage;
+type RequestMessage = SimulationRequestMessage | AcceptanceRequestMessage | CeilingRequestMessage;
 
 initComponents();
 
@@ -40,6 +48,14 @@ self.onmessage = (event: MessageEvent<RequestMessage>) => {
             });
 
             self.postMessage({ id: request.id, payload: verdict });
+            return;
+        }
+
+        if (request.kind === 'ceiling') {
+            self.postMessage({
+                id: request.id,
+                payload: findCeiling(request.scheme, { scenario: request.scenario }),
+            });
             return;
         }
 

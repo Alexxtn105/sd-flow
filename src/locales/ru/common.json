@@ -388,7 +388,12 @@
             "availability": "Доступность",
             "readWrite": "чтение {{read}} · запись {{write}}",
             "growth": "прирост {{value}} {{unit}}",
-            "errorBudget": "бюджет ошибок {{value}} {{unit}}"
+            "errorBudget": "бюджет ошибок {{value}} {{unit}}",
+            "ceiling": "Потолок",
+            "ceilingFind": "Найти потолок",
+            "ceilingRunning": "Ищем потолок…",
+            "ceilingBound": "{{node}} · {{bound}} · ×{{factor}} к текущему трафику",
+            "ceilingFree": "ничто не упирается до ×{{factor}} — узкого места нет"
         },
         "unit": {
             "rps": "запр./с",

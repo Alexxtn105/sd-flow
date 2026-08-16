@@ -23,7 +23,7 @@
 | `[ ]` | FR-SIM-7 | P0 | Резервированная группа считается как «упадут все» — `(1−A)^n` вместо биномиальной суммы «k из n» (§10) | `sim/availability.ts` |
 | `[ ]` | FR-SIM-7 | P0 | Нет поправки на failover `A_eff = A − failuresPerYear·(mttr+failoverSec)/31 536 000`: параметров `failuresPerYear`/`mttrSec` нет ни у одного блока | `sim/availability.ts`, `components/*` |
 | `[ ]` | FR-SIM-7 | P0 | «Критический путь» = все достижимые узлы, поэтому параллельные ветви перемножаются как последовательные | `sim/availability.ts` |
-| `[ ]` | FR-SIM-10 | P0 | Capacity sweep: бинарного поиска потолка нет вообще, кнопки «Найти потолок» нет. Обещан в TL;DR и §6.1 PRD | `sim/`, `Header`, `Dashboard` |
+| `[x]` | FR-SIM-10 | P0 | ~~Capacity sweep~~ — `sim/ceiling.ts`: удвоение вверх до насыщения плюс 12 шагов деления пополам, ответ с узлом-ограничителем и его `boundBy`; кнопка «Найти потолок» в доке, расчёт в воркере. Описан в `docs/02-simulation.md` §4.1 | `sim/ceiling.ts`, `Dashboard` |
 | `[ ]` | FR-SIM-13 | P0 | Отмена устаревших расчётов: `terminate`/`AbortSignal` не используются, воркер досчитывает мусор, запись в `pending` не удаляется — утечка отложенных промисов | `services/simulationService.ts` |
 | `[ ]` | FR-SIM-15 | P0 | Гео-маршрутизация §3.4 отсутствует целиком: `Flow.geo`, `routingPolicy` (`latency`/`geo`/`weighted`/`failover`), `geoMapping`, `stickyRegion` не читаются ни одним файлом `sim/`. `trafficShare` — постфактум-доля от весов нарисованных рёбер, а не раздельный λ на регион | `sim/multiRegion.ts`, `sim/solver.ts`, `components/edge.ts` |
 | `[ ]` | FR-SIM-16 | P0 | Режимы `read-local-write-global`, `active-passive`, `sharded-by-geo` — мёртвые значения enum: ветвление есть только по `active-active`. Записи не маршрутизируются в `writeRegion`, межрегиональный RTT к записи не добавляется | `sim/consistency.ts`, `sim/multiRegion.ts`, `components/topology.ts` |
@@ -84,7 +84,7 @@
 
 | | ID | При. | Что не сделано | Где |
 |---|---|---|---|---|
-| `[ ]` | FR-DSH-1 | P0 | «Потолок» системы в доке (следствие FR-SIM-10); число блоков живёт в подвале, а не в доке | `panels/Dashboard/Dashboard.tsx` |
+| `[~]` | FR-DSH-1 | P0 | Потолок в доке появился (FR-SIM-10). Осталось: число блоков живёт в подвале, а не в доке | `panels/Dashboard/Dashboard.tsx` |
 | `[ ]` | FR-DSH-2 | P0 | Клик по находке не подсвечивает узел на холсте и не ведёт к нему камеру — меняется только инспектор | `panels/Dashboard`, `store/graphStore.ts` |
 | `[ ]` | FR-DSH-3 | P0 | Глобальный переключатель тепловой карты: тумблер спрятан внутри окна пробы `probe-heatmap` | `layout/Header`, `store/uiStore.ts` |
 | `[ ]` | FR-DSH-6 | P1 | Разбивка стоимости по компонентам и статьям (treemap или бары): данные посчитаны, в доке только сумма | `panels/Dashboard` |
