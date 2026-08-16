@@ -48,6 +48,23 @@ time in tabs, collapsed), any group folds into a card with aggregate edges, and 
 works: a mirror region instantiates the prototype's contents, receives its edits and unlinks with
 one button.
 
+Version 1.6 is a recalculation pass driven by the model review
+([docs/07-model-review.md](docs/07-model-review.md)): 27 of the 29 defects found are closed. The
+read/write mix no longer stops at the client but is inherited along the chain: splitting reads to a
+replica and writes to a primary stopped doubling the traffic, and an edge gained an
+Inherited/Manual mode. Edge flows now live between solver passes, so a cycle's back edge is not
+lost, multi-region became symmetric, and a replicated write no longer circles between regions. The
+latency walk follows the traffic the solver actually routed, and a far region costs a **detour** —
+the difference to the nearest one instead of nothing. An outage stopped being profitable: a downed
+node turns lost traffic into errors, charges the caller a timeout, keeps its data and its bill, and
+`az-failure` bites even without a drawn availability-zone block. A cache shows exactly the hit ratio
+it absorbs, and TTL is computed on the same Zipf distribution as the hit itself (a cache holding
+10M keys with a 300 s TTL yields 0.66, not 0.02). Egress is billed for any entry block, pods in a
+cluster are paid for once, and acceptance judges the design under canonical conditions — the seed
+and the pricing profile from the panel no longer move the verdict. In the inspector every link
+parameter now has a hint, sliders for integer parameters stopped producing fractional instances,
+and the default interface language is English.
+
 * **Catalogue — 127 blocks in 14 groups: the whole planned catalogue**, MVP (44) plus V1 (65)
   plus V2 (18). A capacity model is filled in for 101 blocks — every block that carries traffic;
   clients have none by construction (they are sources), and containers, links and probes never
@@ -252,7 +269,7 @@ The documentation is written in Russian; this README is the English entry point.
 | [docs/03-connections.md](docs/03-connections.md) | Connections: read/write/mixed, sync/async, traffic visualisation |
 | [docs/04-challenges.md](docs/04-challenges.md) | Challenges mode and the acceptance algorithm, a catalogue of 28 tasks (23 implemented), the practice sets, the challenge editor and its YAML subset, the "YouTube" walkthrough |
 | [docs/05-architecture.md](docs/05-architecture.md) | Technical architecture, repository structure, code reuse plan, ADRs |
-| [docs/07-model-review.md](docs/07-model-review.md) | Model review of 1.5.0: where the simulation is wrong — 29 defects with checkboxes, reproduction numbers and the repair order |
+| [docs/07-model-review.md](docs/07-model-review.md) | Model review: where the simulation was wrong — 29 defects with checkboxes, reproduction numbers and the repair order; 27 closed in 1.6 |
 
 **Decisions taken (2026-08-14):**
 
