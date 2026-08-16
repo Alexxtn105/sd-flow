@@ -56,6 +56,36 @@ describe('сериализация схемы', () => {
         expect(region?.height).toBe(420);
     });
 
+    it('вложенные контейнеры сохраняют свои размеры каждый', () => {
+        const store = useGraphStore.getState();
+        const region = store.addComponent('region', { x: 0, y: 0 }) ?? '';
+        const az = useGraphStore.getState().addComponent('az', { x: 20, y: 60 }, region) ?? '';
+        const vpc = useGraphStore.getState().addComponent('vpc', { x: 900, y: 0 }) ?? '';
+
+        for (const [id, width, height] of [
+            [region, 900, 700],
+            [az, 400, 500],
+            [vpc, 720, 520],
+        ] as const) {
+            useGraphStore.getState().beginTransaction();
+            useGraphStore.getState().onNodesChange([
+                { id, type: 'dimensions', dimensions: { width, height }, setAttributes: true },
+            ]);
+            useGraphStore.getState().commitTransaction();
+        }
+
+        const { nodes, edges } = useGraphStore.getState();
+        const parsed = fromScheme(toScheme({ meta: META, nodes, edges }));
+        const sizeOf = (id: string) => {
+            const node = parsed.nodes.find((item) => item.id === id);
+            return { width: node?.width, height: node?.height, parentId: node?.parentId };
+        };
+
+        expect(sizeOf(region)).toEqual({ width: 900, height: 700, parentId: undefined });
+        expect(sizeOf(az)).toEqual({ width: 400, height: 500, parentId: region });
+        expect(sizeOf(vpc)).toEqual({ width: 720, height: 520, parentId: undefined });
+    });
+
     it('размер контейнера переживает растягивание мышью, сохранение и открытие', () => {
         buildGraph();
         const regionId = useGraphStore.getState().nodes.find((node) => node.type === 'group')?.id ?? '';

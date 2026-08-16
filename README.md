@@ -27,7 +27,8 @@ failover, consistency mitigations, backup volume, cancellation of a stale comput
 inspector, and copy/paste on the canvas. The headline model change is that **a slow dependency now
 occupies the caller's pool**: while the database is thinking, the worker slot is held, so the
 caller's capacity drops and the cascade arrives as ρ, not only as errors. The minimap is now a
-switch in the canvas controls — off by default on a phone.
+switch in the canvas controls — off by default on a phone. Version 1.4.1 corrects the tail of a
+wide parallel fan-out and keeps a resized container size in the saved scheme.
 
 * **Catalogue — 127 blocks in 14 groups: the whole planned catalogue**, MVP (44) plus V1 (65)
   plus V2 (18). A capacity model is filled in for 101 blocks — every block that carries traffic;
@@ -215,7 +216,7 @@ npm run dev        # http://localhost:5173/sd-flow/
 | `npm run preview` | Local preview of the built bundle |
 | `npm run lint` | ESLint 9 (flat config) |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Vitest: 793 tests in 45 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, practice sets, the authoring format, locales, node names, block reference and parameter hints, sample schemes, demo schemes |
+| `npm test` | Vitest: 799 tests in 46 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, practice sets, the authoring format, locales, node names, block reference and parameter hints, sample schemes, demo schemes |
 
 Deployment is GitHub Actions on a push to `main`: lint → typecheck → tests → build → GitHub Pages.
 The app installs as a PWA and runs offline; a scheme can be shared as a link, the canvas exported
