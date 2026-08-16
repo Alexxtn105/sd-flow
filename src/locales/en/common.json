@@ -324,6 +324,7 @@
         "portsOut": "Out",
         "edge": "Edge",
         "edgeKind": "Kind",
+        "edgeProtocol": "Payload type",
         "calls": "Call profiles",
         "policy": "Policy",
         "noParams": "This block has no editable parameters",
@@ -403,6 +404,24 @@
         "stream": "Stream",
         "cdc": "CDC",
         "batch": "Batch"
+    },
+    "protocol": {
+        "http": "HTTP",
+        "grpc": "gRPC",
+        "ws": "WebSocket",
+        "dns": "DNS",
+        "sql": "SQL",
+        "nosql": "NoSQL",
+        "redis": "Redis",
+        "search": "Search",
+        "olap": "OLAP",
+        "kafka": "Kafka",
+        "amqp": "AMQP",
+        "sqs": "SQS",
+        "s3": "S3",
+        "stream": "Stream",
+        "telemetry": "Telemetry",
+        "internal": "Internal"
     },
     "op": {
         "read": "Read",

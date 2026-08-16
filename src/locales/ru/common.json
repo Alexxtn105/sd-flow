@@ -324,6 +324,7 @@
         "portsOut": "Выход",
         "edge": "Связь",
         "edgeKind": "Характер",
+        "edgeProtocol": "Тип нагрузки",
         "calls": "Профили вызова",
         "policy": "Политика",
         "noParams": "У блока нет настраиваемых параметров",
@@ -403,6 +404,24 @@
         "stream": "Поток",
         "cdc": "CDC",
         "batch": "Батч"
+    },
+    "protocol": {
+        "http": "HTTP",
+        "grpc": "gRPC",
+        "ws": "WebSocket",
+        "dns": "DNS",
+        "sql": "SQL",
+        "nosql": "NoSQL",
+        "redis": "Redis",
+        "search": "Поиск",
+        "olap": "OLAP",
+        "kafka": "Kafka",
+        "amqp": "AMQP",
+        "sqs": "SQS",
+        "s3": "S3",
+        "stream": "Поток",
+        "telemetry": "Телеметрия",
+        "internal": "Внутренний"
     },
     "op": {
         "read": "Чтение",

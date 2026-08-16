@@ -5,8 +5,8 @@ import type { ParamField } from '../../src/engine/types/component';
 import ruCommon from '../../src/locales/ru/common.json';
 import enCommon from '../../src/locales/en/common.json';
 
-const linear: ParamField = { kind: 'number', min: 0, max: 100 };
-const logarithmic: ParamField = { kind: 'number', min: 1, max: 1_000_000 };
+const linear: ParamField = { kind: 'number', section: 'scale', min: 0, max: 100 };
+const logarithmic: ParamField = { kind: 'number', section: 'scale', min: 1, max: 1_000_000 };
 
 describe('значение по умолчанию', () => {
     it('узнаёт нетронутый параметр', () => {

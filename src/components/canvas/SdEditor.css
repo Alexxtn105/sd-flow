@@ -68,6 +68,16 @@
     text-overflow: ellipsis;
 }
 
+.sd-edge-label-protocol {
+    padding: 0 4px;
+    border-radius: 3px;
+    background: var(--panel-hover-bg);
+    color: var(--text-secondary);
+    font-size: 9px;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    letter-spacing: 0.2px;
+}
+
 .sd-edge-label-name ~ .sd-edge-label-rps {
     padding-left: 6px;
     border-left: 1px solid var(--border-primary);

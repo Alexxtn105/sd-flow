@@ -99,15 +99,19 @@ function TrafficEdgeView({
     const width = selected ? baseWidth + 1 : baseWidth;
 
     const name = data?.label ?? '';
+    const protocol = data?.protocol ?? '';
     const showMetrics = xray && metrics != null && metrics.rps > 0;
     const label =
-        readable && (name || showMetrics) ? (
+        readable && (name || protocol || showMetrics) ? (
             <EdgeLabelRenderer>
                 <div
                     className="sd-edge-label nodrag nopan"
                     style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
                 >
                     {name && <span className="sd-edge-label-name">{name}</span>}
+                    {protocol && (
+                        <span className="sd-edge-label-protocol">{t(`protocol.${protocol}`)}</span>
+                    )}
                     {showMetrics && metrics && (
                         <>
                             <span className="sd-edge-label-rps">

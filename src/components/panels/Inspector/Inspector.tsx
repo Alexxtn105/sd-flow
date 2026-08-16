@@ -12,8 +12,9 @@ import {
     supportsInstancePreset,
 } from '../../../engine/instancePresets';
 import type { InstancePreset } from '../../../engine/instancePresets';
+import { protocolOptions } from '../../../engine/ports';
 import { clientRpsOf, dauForRps } from '../../../engine/sim/flows';
-import type { ComponentParams } from '../../../engine/types/component';
+import type { ComponentParams, Protocol } from '../../../engine/types/component';
 import type { EdgeKind } from '../../../engine/types/scheme';
 import useParamHelp from '../../../hooks/useParamHelp';
 import useReference from '../../../hooks/useReference';
@@ -53,6 +54,7 @@ export default function Inspector() {
     const updateNodeLabel = useGraphStore((state) => state.updateNodeLabel);
     const updateEdgeCall = useGraphStore((state) => state.updateEdgeCall);
     const updateEdgeKind = useGraphStore((state) => state.updateEdgeKind);
+    const updateEdgeProtocol = useGraphStore((state) => state.updateEdgeProtocol);
     const updateEdgeLabel = useGraphStore((state) => state.updateEdgeLabel);
 
     const node = selectedNodeIds.length === 1 ? nodes.find((item) => item.id === selectedNodeIds[0]) : undefined;
@@ -67,6 +69,21 @@ export default function Inspector() {
         () => (node && definition ? groupParams(node.data.params, definition.paramSchema) : []),
         [definition, node],
     );
+
+    const edgeProtocols = useMemo(() => {
+        if (!edge) return [];
+
+        const source = nodes.find((item) => item.id === edge.source);
+        const target = nodes.find((item) => item.id === edge.target);
+        if (!source || !target) return [];
+
+        return protocolOptions(
+            source.data.componentType,
+            edge.sourceHandle ?? '',
+            target.data.componentType,
+            edge.targetHandle ?? '',
+        );
+    }, [edge, nodes]);
 
     const defaults: ComponentParams = definition ? registry.getDefaultParams(definition.id) : {};
     const presetSupported = definition !== null && supportsInstancePreset(defaults);
@@ -398,6 +415,28 @@ export default function Inspector() {
                                 ))}
                             </select>
                         </div>
+
+                        {edgeProtocols.length > 0 && (
+                            <div className="ins-row">
+                                <label className="ins-label" htmlFor="ins-edge-protocol">
+                                    {t('inspector.edgeProtocol')}
+                                </label>
+                                <select
+                                    id="ins-edge-protocol"
+                                    className="ins-input"
+                                    value={edge.data?.protocol ?? edgeProtocols[0]}
+                                    onChange={(event) =>
+                                        updateEdgeProtocol(edge.id, event.target.value as Protocol)
+                                    }
+                                >
+                                    {edgeProtocols.map((protocol) => (
+                                        <option key={protocol} value={protocol}>
+                                            {t(`protocol.${protocol}`)}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
 
                         <section className="ins-section">
                             <h3 className="ins-section-title">{t('inspector.calls')}</h3>

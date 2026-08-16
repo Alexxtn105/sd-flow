@@ -1,4 +1,4 @@
-import type { ComponentParams, ComponentTypeId } from './component';
+import type { ComponentParams, ComponentTypeId, Protocol } from './component';
 
 export type CallOperation = 'read' | 'write' | 'delete' | 'scan' | 'publish' | 'consume' | 'transfer';
 
@@ -50,6 +50,7 @@ export interface SchemeEdge {
     sourceHandle: string;
     targetHandle: string;
     kind: EdgeKind;
+    protocol?: Protocol;
     calls: CallProfile[];
     policy: EdgePolicy;
     label?: string;

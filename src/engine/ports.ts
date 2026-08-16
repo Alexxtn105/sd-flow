@@ -9,6 +9,19 @@ export function findPort(type: ComponentTypeId, direction: 'in' | 'out', portId:
     return registry.getPorts(type)[direction].find((port) => port.id === portId) ?? null;
 }
 
+export function protocolOptions(
+    sourceType: ComponentTypeId,
+    sourcePortId: string,
+    targetType: ComponentTypeId,
+    targetPortId: string,
+): Protocol[] {
+    const source = findPort(sourceType, 'out', sourcePortId);
+    const target = findPort(targetType, 'in', targetPortId);
+    if (!source || !target) return [];
+
+    return source.protocols.filter((protocol) => target.protocols.includes(protocol));
+}
+
 export function isConnectionAllowed(
     sourceType: ComponentTypeId,
     sourcePortId: string,

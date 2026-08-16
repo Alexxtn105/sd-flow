@@ -1,4 +1,6 @@
 import registry from '../engine/ComponentRegistry';
+import { protocolOptions } from '../engine/ports';
+import type { ComponentTypeId } from '../engine/types/component';
 import { DEFAULT_POLICY, DEFAULT_SETTINGS, MODEL_VERSION } from '../engine/types/scheme';
 import type { SchemeEdge, SchemeMeta, SchemeNode, SchemeV1, SchemeViewport } from '../engine/types/scheme';
 
@@ -87,11 +89,20 @@ function normalizeNode(node: SchemeNode): SchemeNode {
     };
 }
 
-function normalizeEdge(edge: SchemeEdge): SchemeEdge {
+function normalizeEdge(edge: SchemeEdge, typeById: Map<string, ComponentTypeId>): SchemeEdge {
+    const source = typeById.get(edge.source);
+    const target = typeById.get(edge.target);
+    const known =
+        source && target
+            ? protocolOptions(source, edge.sourceHandle ?? '', target, edge.targetHandle ?? '')
+            : [];
+    const protocol = edge.protocol && known.includes(edge.protocol) ? edge.protocol : known[0];
+
     return {
         ...edge,
         id: edge.id ?? `${edge.source}-${edge.target}`,
         kind: edge.kind ?? 'sync',
+        ...(protocol ? { protocol } : {}),
         calls: Array.isArray(edge.calls) ? edge.calls : [],
         policy: { ...DEFAULT_POLICY, ...(edge.policy ?? {}) },
         sourceHandle: edge.sourceHandle ?? '',
@@ -126,6 +137,7 @@ export function migrateScheme(raw: unknown): SchemeRead {
     const declared = raw.nodes.filter(isNodeLike);
     const known = declared.filter((node) => registry.has(node.type));
     const keptIds = new Set(known.map((node) => node.id));
+    const typeById = new Map(known.map((node) => [node.id, node.type]));
     const links = raw.edges
         .filter(isEdgeLike)
         .filter((edge) => keptIds.has(edge.source) && keptIds.has(edge.target));
@@ -153,7 +165,7 @@ export function migrateScheme(raw: unknown): SchemeRead {
             modelVersion: MODEL_VERSION,
             meta: metaOf(raw.meta),
             nodes: known.map(normalizeNode),
-            edges: links.map(normalizeEdge),
+            edges: links.map((edge) => normalizeEdge(edge, typeById)),
             settings: { ...DEFAULT_SETTINGS, ...(isRecord(raw.settings) ? raw.settings : {}) },
             ui: { viewport, xray: ui.xray === true },
         },

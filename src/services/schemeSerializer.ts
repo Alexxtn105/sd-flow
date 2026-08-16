@@ -57,6 +57,7 @@ export function toScheme(input: SerializeInput): SchemeV1 {
             sourceHandle: edge.sourceHandle ?? '',
             targetHandle: edge.targetHandle ?? '',
             kind: edge.data?.kind ?? 'sync',
+            ...(edge.data?.protocol ? { protocol: edge.data.protocol } : {}),
             calls: edge.data?.calls ?? [],
             policy: edge.data?.policy ?? { ...DEFAULT_POLICY },
             ...(edge.data?.label ? { label: edge.data.label } : {}),
@@ -100,6 +101,7 @@ function toFlowEdge(edge: SchemeEdge): SdEdge {
         type: 'traffic',
         data: {
             kind: edge.kind,
+            ...(edge.protocol ? { protocol: edge.protocol } : {}),
             calls: edge.calls,
             policy: edge.policy,
             label: edge.label ?? '',

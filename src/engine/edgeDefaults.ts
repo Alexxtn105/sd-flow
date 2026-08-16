@@ -1,5 +1,5 @@
 import registry from './ComponentRegistry';
-import { findPort } from './ports';
+import { findPort, protocolOptions } from './ports';
 import { nextId } from './ids';
 import { DEFAULT_POLICY } from './types/scheme';
 import type { CallProfile, EdgeKind, SchemeEdge } from './types/scheme';
@@ -97,6 +97,12 @@ export interface EdgeEndpoints {
 
 export function createDefaultEdge(endpoints: EdgeEndpoints): SchemeEdge {
     const { kind, calls, pull } = shapeFor(endpoints.sourceType, endpoints.sourceHandle, endpoints.targetType);
+    const protocols = protocolOptions(
+        endpoints.sourceType,
+        endpoints.sourceHandle,
+        endpoints.targetType,
+        endpoints.targetHandle,
+    );
 
     return {
         id: nextId('edge'),
@@ -105,6 +111,7 @@ export function createDefaultEdge(endpoints: EdgeEndpoints): SchemeEdge {
         sourceHandle: endpoints.sourceHandle,
         targetHandle: endpoints.targetHandle,
         kind,
+        ...(protocols.length > 0 ? { protocol: protocols[0] } : {}),
         calls,
         policy: { ...DEFAULT_POLICY },
         pull,

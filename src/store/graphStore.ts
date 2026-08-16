@@ -8,7 +8,13 @@ import { applySourcePayload, createDefaultEdge } from '../engine/edgeDefaults';
 import { nextId } from '../engine/ids';
 import { isConnectionAllowed } from '../engine/ports';
 import { mirrorGraph } from '../services/mirrorRegions';
-import type { ComponentParams, ComponentShape, ComponentTypeId, ParamValue } from '../engine/types/component';
+import type {
+    ComponentParams,
+    ComponentShape,
+    ComponentTypeId,
+    ParamValue,
+    Protocol,
+} from '../engine/types/component';
 import type { CallProfile, EdgeKind, EdgePolicy } from '../engine/types/scheme';
 import { CONTAINER_SIZE } from '../utils/nodeSize';
 
@@ -28,6 +34,7 @@ export type SdEdge = Edge<SdEdgeData>;
 
 export interface SdEdgeData extends Record<string, unknown> {
     kind: EdgeKind;
+    protocol?: Protocol;
     calls: CallProfile[];
     policy: EdgePolicy;
     label: string;
@@ -63,6 +70,7 @@ export interface GraphState extends GraphSnapshot {
     updateNodeLabel: (nodeId: string, label: string) => void;
     updateEdgeCall: (edgeId: string, callId: string, share: number) => void;
     updateEdgeKind: (edgeId: string, kind: EdgeKind) => void;
+    updateEdgeProtocol: (edgeId: string, protocol: Protocol) => void;
     updateEdgeLabel: (edgeId: string, label: string) => void;
     setNodeParent: (nodeId: string, parentId: string | undefined, position?: XYPosition) => void;
     duplicateNode: (nodeId: string) => void;
@@ -256,6 +264,7 @@ export const useGraphStore = create<GraphState>((set, get) => {
                 type: 'traffic',
                 data: {
                     kind: scheme.kind,
+                    ...(scheme.protocol ? { protocol: scheme.protocol } : {}),
                     calls: scheme.calls,
                     policy: scheme.policy,
                     label: scheme.label ?? '',
@@ -308,6 +317,13 @@ export const useGraphStore = create<GraphState>((set, get) => {
             mutate((draft) => {
                 const edge = draft.edges.find((item) => item.id === edgeId);
                 if (edge?.data) edge.data.kind = kind;
+            });
+        },
+
+        updateEdgeProtocol: (edgeId, protocol) => {
+            mutate((draft) => {
+                const edge = draft.edges.find((item) => item.id === edgeId);
+                if (edge?.data) edge.data.protocol = protocol;
             });
         },
 
