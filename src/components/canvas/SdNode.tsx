@@ -47,6 +47,7 @@ function SdNodeView({ id, data, selected }: NodeProps<SdNodeType>) {
     const updateNodeParam = useGraphStore((state) => state.updateNodeParam);
     const metrics = useNodeResult(id);
     const heatmapProbeId = useUiStore((state) => state.heatmapProbeId);
+    const heatmapOn = useUiStore((state) => state.heatmapOn);
     const heatmap = useSimStore((state) =>
         heatmapProbeId ? (state.result?.probes[heatmapProbeId]?.heatmap ?? null) : null,
     );
@@ -141,11 +142,11 @@ function SdNodeView({ id, data, selected }: NodeProps<SdNodeType>) {
     const loadLevel = bounded ? utilizationLevel(metrics.utilization) : 'idle';
     const projected = heatmap ? heatValueOf(heatmap, id) : null;
     const level = heatmap && projected !== null ? heatLevel(projected, heatmap) : loadLevel;
-    const tinted = projected !== null || showMetrics;
+    const tinted = heatmapOn && (projected !== null || showMetrics);
 
     return (
         <div
-            className={`sd-node sd-node-${definition.group} ${selected ? 'selected' : ''} ${tinted ? `sd-node-load-${level}` : ''} ${projected !== null ? 'sd-node-heat' : ''}`}
+            className={`sd-node sd-node-${definition.group} ${selected ? 'selected' : ''} ${tinted ? `sd-node-load-${level}` : ''} ${heatmapOn && projected !== null ? 'sd-node-heat' : ''}`}
         >
             {renderHandles(definition.ports.in, Position.Left, 'target', compatibility)}
 

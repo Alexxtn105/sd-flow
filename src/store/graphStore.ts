@@ -56,6 +56,7 @@ export interface GraphState extends GraphSnapshot {
     onEdgesChange: (changes: EdgeChange<SdEdge>[]) => void;
     addComponent: (type: ComponentTypeId, position: XYPosition, parentId?: string) => string | null;
     connect: (connection: Connection) => void;
+    selectOnly: (nodeIds: string[], edgeIds: string[]) => void;
     isValidConnection: (connection: Connection | Edge) => boolean;
     updateNodeParam: (nodeId: string, key: string, value: ParamValue) => void;
     updateNodeLabel: (nodeId: string, label: string) => void;
@@ -300,6 +301,19 @@ export const useGraphStore = create<GraphState>((set, get) => {
                     delete node.extent;
                 }
             });
+        },
+
+        selectOnly: (nodeIds, edgeIds) => {
+            const nodes = new Set(nodeIds);
+            const edges = new Set(edgeIds);
+
+            mutate(
+                (draft) => {
+                    draft.nodes = draft.nodes.map((node) => ({ ...node, selected: nodes.has(node.id) }));
+                    draft.edges = draft.edges.map((edge) => ({ ...edge, selected: edges.has(edge.id) }));
+                },
+                { history: false, documentChange: false },
+            );
         },
 
         duplicateNode: (nodeId) => {

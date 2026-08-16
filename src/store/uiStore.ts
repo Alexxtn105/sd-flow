@@ -23,12 +23,14 @@ export interface UiState {
     panels: PanelSizes;
     selectedNodeIds: string[];
     selectedEdgeIds: string[];
+    focusRequest: number;
     pendingAdd: string | null;
     probeWindowIds: string[];
     heatmapProbeId: string | null;
     tutorialOpen: boolean;
     helpBlockType: string | null;
     paramHints: boolean;
+    heatmapOn: boolean;
     connectionSource: ConnectionSource | null;
     setMode: (mode: AppMode) => void;
     togglePalette: () => void;
@@ -39,6 +41,7 @@ export interface UiState {
     resetPanelSize: (key: PanelKey) => void;
     persistPanels: () => void;
     setSelection: (nodeIds: string[], edgeIds: string[]) => void;
+    focusNodes: (nodeIds: string[], edgeIds: string[]) => void;
     requestAdd: (componentType: string) => void;
     clearPendingAdd: () => void;
     toggleProbeWindow: (probeId: string) => void;
@@ -49,6 +52,7 @@ export interface UiState {
     openBlockHelp: (componentType: string) => void;
     closeBlockHelp: () => void;
     toggleParamHints: () => void;
+    toggleHeatmap: () => void;
     startConnection: (source: ConnectionSource) => void;
     endConnection: () => void;
 }
@@ -57,6 +61,7 @@ interface StoredPreferences {
     panels?: Partial<PanelSizes>;
     tutorialDone?: boolean;
     paramHints?: boolean;
+    heatmapOn?: boolean;
 }
 
 const FALLBACK_VIEWPORT: Record<PanelAxis, number> = { x: 1440, y: 900 };
@@ -101,6 +106,15 @@ function loadParamHints(): boolean {
     return StorageService.load<StoredPreferences>(STORAGE_KEYS.PREFERENCES)?.paramHints === true;
 }
 
+function loadHeatmapOn(): boolean {
+    return StorageService.load<StoredPreferences>(STORAGE_KEYS.PREFERENCES)?.heatmapOn !== false;
+}
+
+function saveHeatmapOn(heatmapOn: boolean): void {
+    const stored = StorageService.load<StoredPreferences>(STORAGE_KEYS.PREFERENCES) ?? {};
+    StorageService.save(STORAGE_KEYS.PREFERENCES, { ...stored, heatmapOn });
+}
+
 function saveParamHints(paramHints: boolean): void {
     const stored = StorageService.load<StoredPreferences>(STORAGE_KEYS.PREFERENCES) ?? {};
     StorageService.save(STORAGE_KEYS.PREFERENCES, { ...stored, paramHints });
@@ -119,12 +133,14 @@ export const useUiStore = create<UiState>((set, get) => ({
     panels: loadPanels(),
     selectedNodeIds: [],
     selectedEdgeIds: [],
+    focusRequest: 0,
     pendingAdd: null,
     probeWindowIds: [],
     heatmapProbeId: null,
     tutorialOpen: !isTutorialDone(),
     helpBlockType: null,
     paramHints: loadParamHints(),
+    heatmapOn: loadHeatmapOn(),
     connectionSource: null,
 
     setMode: (mode) => set({ mode }),
@@ -152,6 +168,13 @@ export const useUiStore = create<UiState>((set, get) => ({
         if (sameIds(selectedNodeIds, nodeIds) && sameIds(selectedEdgeIds, edgeIds)) return;
         set({ selectedNodeIds: nodeIds, selectedEdgeIds: edgeIds });
     },
+    focusNodes: (nodeIds, edgeIds) =>
+        set((state) => ({
+            selectedNodeIds: nodeIds,
+            selectedEdgeIds: edgeIds,
+            focusRequest: state.focusRequest + 1,
+        })),
+
     requestAdd: (componentType) => set({ pendingAdd: componentType }),
     clearPendingAdd: () => set({ pendingAdd: null }),
 
@@ -184,6 +207,12 @@ export const useUiStore = create<UiState>((set, get) => ({
 
     openBlockHelp: (componentType) => set({ helpBlockType: componentType }),
     closeBlockHelp: () => set({ helpBlockType: null }),
+
+    toggleHeatmap: () => {
+        const heatmapOn = !get().heatmapOn;
+        saveHeatmapOn(heatmapOn);
+        set({ heatmapOn });
+    },
 
     toggleParamHints: () => {
         const paramHints = !get().paramHints;

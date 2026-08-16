@@ -70,7 +70,7 @@ export default function SdEditor() {
     const { t } = useTranslation();
     const { isDarkTheme } = useThemeContext();
     const isTouch = useTouchContext();
-    const { screenToFlowPosition } = useReactFlow();
+    const { fitView, screenToFlowPosition } = useReactFlow();
     const wrapperRef = useRef<HTMLDivElement>(null);
     const [menuTarget, setMenuTarget] = useState<ContextMenuTarget | null>(null);
 
@@ -90,6 +90,8 @@ export default function SdEditor() {
     const redo = useGraphStore((state) => state.redo);
 
     const setSelection = useUiStore((state) => state.setSelection);
+    const focusRequest = useUiStore((state) => state.focusRequest);
+    const selectOnly = useGraphStore((state) => state.selectOnly);
     const selectedNodeIds = useUiStore((state) => state.selectedNodeIds);
     const selectedEdgeIds = useUiStore((state) => state.selectedEdgeIds);
     const pendingAdd = useUiStore((state) => state.pendingAdd);
@@ -157,6 +159,18 @@ export default function SdEditor() {
         addToCenter(pendingAdd);
         clearPendingAdd();
     }, [addToCenter, clearPendingAdd, pendingAdd]);
+
+    useEffect(() => {
+        if (focusRequest === 0 || selectedNodeIds.length === 0) return;
+
+        selectOnly(selectedNodeIds, selectedEdgeIds);
+        void fitView({
+            nodes: selectedNodeIds.map((id) => ({ id })),
+            duration: 350,
+            padding: 0.45,
+            maxZoom: 1.3,
+        });
+    }, [fitView, focusRequest, selectOnly, selectedEdgeIds, selectedNodeIds]);
 
     const deleteSelection = useCallback(() => {
         removeElements(selectedNodeIds, selectedEdgeIds);

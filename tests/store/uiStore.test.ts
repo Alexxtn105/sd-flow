@@ -180,3 +180,32 @@ describe('описания параметров', () => {
         expect(useUiStore.getState().paramHints).toBe(false);
     });
 });
+
+describe('тепловая карта и фокус', () => {
+    beforeEach(() => {
+        localStorage.clear();
+    });
+
+    it('заливка включена по умолчанию и переживает перезагрузку выключенной', () => {
+        expect(useUiStore.getState().heatmapOn).toBe(true);
+
+        useUiStore.getState().toggleHeatmap();
+        expect(useUiStore.getState().heatmapOn).toBe(false);
+        expect(StorageService.load<{ heatmapOn?: boolean }>(STORAGE_KEYS.PREFERENCES)?.heatmapOn).toBe(false);
+
+        useUiStore.getState().toggleHeatmap();
+        expect(useUiStore.getState().heatmapOn).toBe(true);
+    });
+
+    it('запрос фокуса меняет выделение и увеличивает счётчик', () => {
+        const before = useUiStore.getState().focusRequest;
+
+        useUiStore.getState().focusNodes(['svc'], []);
+
+        expect(useUiStore.getState().selectedNodeIds).toEqual(['svc']);
+        expect(useUiStore.getState().focusRequest).toBe(before + 1);
+
+        useUiStore.getState().focusNodes(['svc'], []);
+        expect(useUiStore.getState().focusRequest).toBe(before + 2);
+    });
+});

@@ -55,6 +55,8 @@ export default function Header({
     const setMode = useUiStore((state) => state.setMode);
     const xray = useUiStore((state) => state.xray);
     const toggleXray = useUiStore((state) => state.toggleXray);
+    const heatmapOn = useUiStore((state) => state.heatmapOn);
+    const toggleHeatmap = useUiStore((state) => state.toggleHeatmap);
     const startTutorial = useUiStore((state) => state.startTutorial);
     const undo = useGraphStore((state) => state.undo);
     const redo = useGraphStore((state) => state.redo);
@@ -190,6 +192,14 @@ export default function Header({
                         </option>
                     ))}
                 </select>
+                <button
+                    className={`hdr-btn ${heatmapOn ? 'active' : ''}`}
+                    onClick={toggleHeatmap}
+                    title={t('header.heatmap')}
+                    aria-pressed={heatmapOn}
+                >
+                    <Icon name="thermostat" size="small" />
+                </button>
                 <button className="hdr-btn" onClick={onSettings} title={t('settings.title')}>
                     <Icon name="tune" size="small" />
                 </button>

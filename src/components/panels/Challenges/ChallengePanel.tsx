@@ -88,7 +88,7 @@ export default function ChallengePanel() {
     const width = useUiStore((state) => state.panels.challenge);
     const collapsed = useUiStore((state) => state.challengeCollapsed);
     const togglePanel = useUiStore((state) => state.toggleChallengePanel);
-    const setSelection = useUiStore((state) => state.setSelection);
+    const focusNodes = useUiStore((state) => state.focusNodes);
 
     const track = useChallengeStore((state) => state.track);
     const setTrack = useChallengeStore((state) => state.setTrack);
@@ -258,7 +258,7 @@ export default function ChallengePanel() {
         [refreshAuthored],
     );
 
-    const highlight = useCallback((nodeIds: string[]) => setSelection(nodeIds, []), [setSelection]);
+    const highlight = useCallback((nodeIds: string[]) => focusNodes(nodeIds, []), [focusNodes]);
 
     const showButton = (nodeIds: string[]) => {
         if (nodeIds.length === 0) return null;

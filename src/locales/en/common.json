@@ -19,7 +19,8 @@
         "darkTheme": "Dark theme",
         "xray": "X-ray: traffic labels on edges",
         "source": "Source code",
-        "samples": "Sample schemes"
+        "samples": "Sample schemes",
+        "heatmap": "Utilisation heatmap"
     },
     "mode": {
         "sandbox": "Sandbox",

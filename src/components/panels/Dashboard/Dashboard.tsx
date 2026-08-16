@@ -64,7 +64,7 @@ export default function Dashboard() {
         useSimStore.getState().sweep(toScheme({ meta, nodes, edges, settings }));
     }, []);
 
-    const setSelection = useUiStore((state) => state.setSelection);
+    const focusNodes = useUiStore((state) => state.focusNodes);
     const height = useUiStore((state) => state.panels.dashboard);
 
     const labelOf = useNodeLabels();
@@ -335,7 +335,7 @@ export default function Dashboard() {
                                             <button
                                                 type="button"
                                                 className={`dash-finding dash-finding-${finding.severity}`}
-                                                onClick={() => setSelection(finding.nodeIds, finding.edgeIds)}
+                                                onClick={() => focusNodes(finding.nodeIds, finding.edgeIds)}
                                             >
                                                 <span className="dash-finding-dot" />
                                                 <span className="dash-finding-text">{findingText(finding)}</span>
