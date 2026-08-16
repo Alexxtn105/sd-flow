@@ -11,7 +11,7 @@ import type {
     ScenarioRun,
 } from './types';
 
-const WEIGHTS: Record<RubricAxis, number> = {
+export const RUBRIC_WEIGHTS: Record<RubricAxis, number> = {
     resilience: 25,
     'data-correctness': 15,
     economy: 20,
@@ -20,6 +20,8 @@ const WEIGHTS: Record<RubricAxis, number> = {
     headroom: 5,
     bonus: 5,
 };
+
+export const RUBRIC_AXES = Object.keys(RUBRIC_WEIGHTS) as RubricAxis[];
 
 const TARGET_UTILIZATION = 0.5;
 const OVER_PROVISIONED_UTILIZATION = 0.15;
@@ -89,7 +91,7 @@ function resilienceScore(input: RubricInput): AxisScore {
 
     return {
         axis: 'resilience',
-        weight: WEIGHTS.resilience,
+        weight: RUBRIC_WEIGHTS.resilience,
         score: (parts.reduce((sum, part) => sum + part, 0) / parts.length) * 100,
         values: { availability: actual, availabilityTarget: target, spof: spofCount },
     };
@@ -106,7 +108,7 @@ function dataCorrectnessScore(input: RubricInput): AxisScore | null {
 
     return {
         axis: 'data-correctness',
-        weight: WEIGHTS['data-correctness'],
+        weight: RUBRIC_WEIGHTS['data-correctness'],
         score: share(met, relevant.length) * 100,
         values: { met, total: relevant.length },
     };
@@ -123,7 +125,7 @@ function economyScore(input: RubricInput): AxisScore | null {
 
     return {
         axis: 'economy',
-        weight: WEIGHTS.economy,
+        weight: RUBRIC_WEIGHTS.economy,
         score,
         values: { costMonth: cost, referenceCostMonth: input.reference.costMonth },
     };
@@ -142,7 +144,7 @@ function simplicityScore(input: RubricInput): AxisScore {
 
     return {
         axis: 'simplicity',
-        weight: WEIGHTS.simplicity,
+        weight: RUBRIC_WEIGHTS.simplicity,
         score,
         values: { nodes: placed.length, unused, deepChains },
     };
@@ -151,7 +153,7 @@ function simplicityScore(input: RubricInput): AxisScore {
 function practicesScore(input: RubricInput): AxisScore {
     return {
         axis: 'practices',
-        weight: WEIGHTS.practices,
+        weight: RUBRIC_WEIGHTS.practices,
         score: clamp(input.lint.practiceScore, 0, 100),
         values: { positives: input.lint.positives.length, antipatterns: input.lint.antipatterns.length },
     };
@@ -174,7 +176,7 @@ function headroomScore(input: RubricInput): AxisScore | null {
 
     return {
         axis: 'headroom',
-        weight: WEIGHTS.headroom,
+        weight: RUBRIC_WEIGHTS.headroom,
         score: overProvisioned ? Math.min(base, OVER_PROVISIONED_SCORE) : base,
         values: { medianUtilization: middle, overProvisioned: overProvisioned ? 1 : 0 },
     };
@@ -187,7 +189,7 @@ function bonusScore(input: RubricInput): AxisScore | null {
 
     return {
         axis: 'bonus',
-        weight: WEIGHTS.bonus,
+        weight: RUBRIC_WEIGHTS.bonus,
         score: share(met, input.bonusObjectives.length) * 100,
         values: { met, total: input.bonusObjectives.length },
     };

@@ -66,7 +66,8 @@
             "rubric": "Rubric",
             "penalties": "Penalties",
             "comparison": "Diff against references",
-            "solutions": "Reference solutions"
+            "solutions": "Reference solutions",
+            "scoring": "What is scored"
         },
         "comparison": {
             "caption": "Every row is one axis; the delta under a reference value is “yours minus the reference”, so green means your scheme wins on that axis.",
@@ -235,6 +236,25 @@
             "sync-call-to-slow-op": "A synchronous call to an operation taking {{responseSec}} s against a threshold of {{thresholdSec}} s. Answer the user immediately and hand the work to a queue.",
             "unbounded-queue": "An unbounded buffer ({{nodes}} blocks): the queue grows until memory runs out. Set a depth limit and an alert on lag.",
             "write-through-no-persistence": "A cache acts as the source of truth without persistence ({{caches}} caches). A restart wipes the data — write to durable storage."
+        },
+        "scoringIntro": "Submission scores seven rubric axes; the weight of each axis in the total is in brackets.",
+        "scoringPenalties": "Penalties are subtracted from the score: for hints and for editing parameters the challenge froze.",
+        "contribution": "{{node}} — {{value}} ({{share}}%)",
+        "axisHint": {
+            "resilience": "Availability against the target, absence of single points of failure, behaviour in failure scenarios.",
+            "data-correctness": "Consistency anomalies, idempotency, RPO and RTO requirements.",
+            "economy": "Monthly cost against the budget and against the reference solution.",
+            "simplicity": "Block count and synchronous chain depth: an extra hop costs both money and p99.",
+            "practices": "Positive lint rules against antipatterns.",
+            "headroom": "Load headroom: the target utilisation is about half of capacity.",
+            "bonus": "Optional objectives and scenarios taken on top of the required ones."
+        },
+        "progress": {
+            "export": "Export progress to a file",
+            "import": "Import progress from a file",
+            "exported": "Progress exported to a file.",
+            "imported": "Progress imported: the better of the two sets was kept.",
+            "failed": "This is not a SysDesign Flow progress file."
         }
     },
     "palette": {

@@ -7,6 +7,13 @@ import type { Challenge, ChallengeProgress, ChallengeVerdict } from '../engine/c
 import type { SchemeV1 } from '../engine/types/scheme';
 import { loadAuthored } from '../services/authoredChallenges';
 import type { AuthoredChallenge } from '../services/authoredChallenges';
+import {
+    buildProgressBundle,
+    mergeChallengeProgress,
+    mergePracticeRecords,
+    readProgressBundle,
+} from '../services/progressTransfer';
+import type { ProgressBundle } from '../services/progressTransfer';
 import { runAcceptance } from '../services/simulationService';
 import StorageService, { STORAGE_KEYS } from '../services/storageService';
 import { useGraphStore } from './graphStore';
@@ -48,6 +55,8 @@ export interface ChallengeState {
     submit: (scheme: SchemeV1) => void;
     tick: () => void;
     refreshAuthored: () => void;
+    exportProgress: () => ProgressBundle;
+    importProgress: (raw: unknown) => boolean;
 }
 
 const SECONDS_PER_MINUTE = 60;
@@ -232,4 +241,21 @@ export const useChallengeStore = create<ChallengeState>((set, get) => ({
     },
 
     refreshAuthored: () => set({ authored: loadAuthored() }),
+
+    exportProgress: () =>
+        buildProgressBundle(get().progress, get().practice, new Date().toISOString()),
+
+    importProgress: (raw) => {
+        const bundle = readProgressBundle(raw);
+        if (!bundle) return false;
+
+        const progress = mergeChallengeProgress(get().progress, bundle.challenges);
+        const practice = mergePracticeRecords(get().practice, bundle.practice);
+
+        set({ progress, practice });
+        StorageService.save(STORAGE_KEYS.CHALLENGES, progress);
+        StorageService.save(STORAGE_KEYS.PRACTICE, practice);
+
+        return true;
+    },
 }));

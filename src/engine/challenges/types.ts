@@ -193,6 +193,12 @@ export interface Challenge {
 
 export type RequirementStatus = 'met' | 'unmet' | 'unknown';
 
+export interface RequirementContribution {
+    nodeId: string;
+    value: number;
+    share: number;
+}
+
 export interface RequirementEvaluation {
     id: string;
     kind: RequirementKind;
@@ -205,6 +211,7 @@ export interface RequirementEvaluation {
     headroom: number | null;
     nodeIds: string[];
     values: Record<string, string | number>;
+    contributions: RequirementContribution[];
 }
 
 export interface RealismViolation {

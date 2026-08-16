@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Icon from '../../common/Icons/Icon';
 import ResizeHandle from '../../common/ResizeHandle/ResizeHandle';
@@ -8,6 +8,7 @@ import { golfById, incidentById, interviewById } from '../../../data/practice';
 import { referenceSchemeName } from '../../../data/sampleSchemes';
 import { evaluateLive } from '../../../engine/challenges/accept';
 import { golfMedal } from '../../../engine/practice/derive';
+import { RUBRIC_AXES, RUBRIC_WEIGHTS } from '../../../engine/challenges/rubric';
 import { compileTopology } from '../../../engine/sim/compile';
 import type {
     AxisScore,
@@ -24,6 +25,7 @@ import type {
 } from '../../../engine/challenges/types';
 import useLocalized from '../../../hooks/useLocalized';
 import useNodeLabels from '../../../hooks/useNodeLabels';
+import { downloadJson, pickJsonFile } from '../../../services/fileService';
 import { parseChallengeSource } from '../../../services/authoredChallenges';
 import type { AuthoredChallenge } from '../../../services/authoredChallenges';
 import { removeAuthored } from '../../../services/authoredChallenges';
@@ -90,6 +92,7 @@ export default function ChallengePanel() {
     const togglePanel = useUiStore((state) => state.toggleChallengePanel);
     const focusNodes = useUiStore((state) => state.focusNodes);
 
+    const [transfer, setTransfer] = useState<'exported' | 'imported' | 'failed' | null>(null);
     const track = useChallengeStore((state) => state.track);
     const setTrack = useChallengeStore((state) => state.setTrack);
     const activeRef = useChallengeStore((state) => state.ref);
@@ -228,6 +231,18 @@ export default function ChallengePanel() {
         submit(useSchemeStore.getState().exportScheme());
     }, [submit]);
 
+    const handleExportProgress = useCallback(() => {
+        downloadJson('sd-flow-progress', useChallengeStore.getState().exportProgress());
+        setTransfer('exported');
+    }, []);
+
+    const handleImportProgress = useCallback(async () => {
+        const raw = await pickJsonFile();
+        if (raw === null) return;
+
+        setTransfer(useChallengeStore.getState().importProgress(raw) ? 'imported' : 'failed');
+    }, []);
+
     const loadSolution = useCallback(
         (item: Challenge, solution: ReferenceSolution) => {
             const scheme = solution.build();
@@ -307,6 +322,19 @@ export default function ChallengePanel() {
                     {!met && (
                         <span className="chl-req-reason">
                             {t(`challenge.reason.${evaluation.reason}`, { defaultValue: evaluation.reason })}
+                        </span>
+                    )}
+                    {evaluation.contributions.length > 0 && (
+                        <span className="chl-req-parts">
+                            {evaluation.contributions.map((part) => (
+                                <span key={part.nodeId} className="chl-req-part">
+                                    {t('challenge.contribution', {
+                                        node: labelOf(part.nodeId),
+                                        value: measure(part.value, evaluation.unit),
+                                        share: formatNumber(part.share * 100),
+                                    })}
+                                </span>
+                            ))}
                         </span>
                     )}
                 </div>
@@ -652,6 +680,23 @@ export default function ChallengePanel() {
                 </section>
             )}
 
+            <details className="chl-scoring">
+                <summary className="chl-section-title">{t('challenge.section.scoring')}</summary>
+                <p className="chl-hint-text">{t('challenge.scoringIntro')}</p>
+                <ul className="chl-scoring-list">
+                    {RUBRIC_AXES.map((axis) => (
+                        <li key={axis} className="chl-scoring-item">
+                            <span className="chl-scoring-name">{t(`challenge.axis.${axis}`)}</span>
+                            <span className="chl-scoring-weight">
+                                {t('challenge.axisWeight', { value: RUBRIC_WEIGHTS[axis] })}
+                            </span>
+                            <span className="chl-scoring-hint">{t(`challenge.axisHint.${axis}`)}</span>
+                        </li>
+                    ))}
+                </ul>
+                <p className="chl-hint-text">{t('challenge.scoringPenalties')}</p>
+            </details>
+
             {status === 'error' && <p className="chl-error">{t('challenge.failed', { message: error ?? '' })}</p>}
 
             <button
@@ -899,8 +944,30 @@ export default function ChallengePanel() {
                             </option>
                         ))}
                     </select>
+
+                    <button
+                        type="button"
+                        className="chl-icon-btn"
+                        onClick={handleExportProgress}
+                        title={t('challenge.progress.export')}
+                        aria-label={t('challenge.progress.export')}
+                    >
+                        <Icon name="file_download" size="small" />
+                    </button>
+
+                    <button
+                        type="button"
+                        className="chl-icon-btn"
+                        onClick={handleImportProgress}
+                        title={t('challenge.progress.import')}
+                        aria-label={t('challenge.progress.import')}
+                    >
+                        <Icon name="file_upload" size="small" />
+                    </button>
                 </div>
             )}
+
+            {transfer && <p className="chl-transfer">{t(`challenge.progress.${transfer}`)}</p>}
 
             {!challenge && renderTrack()}
             {challenge && verdict === null && renderActive(challenge)}

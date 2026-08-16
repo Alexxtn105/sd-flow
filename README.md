@@ -38,7 +38,9 @@ take up storage with a 24-hour TTL, and the **split-brain** scenario lets replic
 sides of the partition and prices the merge. In the dashboard an anomaly unfolds into the formula it
 was computed from, and the table is followed by what the enabled mitigations actually remove. A
 foreign scheme file now goes through a migration: a model-version mismatch, dropped unknown blocks
-and orphaned links are reported instead of being swallowed.
+and orphaned links are reported instead of being swallowed. In challenges the rubric is visible before submission, a
+requirement is broken down by node ("Postgres — 180 ms, 58%"), and progress for the catalogue and
+the practice sets can be exported to a file and imported back, merging the better of the two sets.
 
 * **Catalogue — 127 blocks in 14 groups: the whole planned catalogue**, MVP (44) plus V1 (65)
   plus V2 (18). A capacity model is filled in for 101 blocks — every block that carries traffic;
@@ -226,7 +228,7 @@ npm run dev        # http://localhost:5173/sd-flow/
 | `npm run preview` | Local preview of the built bundle |
 | `npm run lint` | ESLint 9 (flat config) |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Vitest: 866 tests in 50 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, practice sets, the authoring format, locales, node names, block reference and parameter hints, sample schemes, demo schemes |
+| `npm test` | Vitest: 884 tests in 52 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, practice sets, the authoring format, locales, node names, block reference and parameter hints, sample schemes, demo schemes |
 
 Deployment is GitHub Actions on a push to `main`: lint → typecheck → tests → build → GitHub Pages.
 The app installs as a PWA and runs offline; a scheme can be shared as a link, the canvas exported

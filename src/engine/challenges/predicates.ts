@@ -15,6 +15,7 @@ import type {
     NodeMatcher,
     RedundancyRequirement,
     Requirement,
+    RequirementContribution,
     RequirementEvaluation,
     RpoRtoRequirement,
     ScenarioRelaxation,
@@ -168,6 +169,7 @@ function unknown(
         headroom: null,
         nodeIds: [],
         values,
+        contributions: [],
     };
 }
 
@@ -181,6 +183,23 @@ interface ThresholdInput {
     reason: string;
     nodeIds?: string[];
     values?: Record<string, string | number>;
+    contributions?: RequirementContribution[];
+}
+
+const MAX_CONTRIBUTIONS = 3;
+
+export function topContributions(
+    entries: { nodeId: string; value: number }[],
+    limit = MAX_CONTRIBUTIONS,
+): RequirementContribution[] {
+    const positive = entries.filter((entry) => entry.value > 0);
+    const total = positive.reduce((sum, entry) => sum + entry.value, 0);
+    if (total <= 0) return [];
+
+    return [...positive]
+        .sort((left, right) => right.value - left.value)
+        .slice(0, limit)
+        .map((entry) => ({ nodeId: entry.nodeId, value: entry.value, share: entry.value / total }));
 }
 
 function threshold(input: ThresholdInput): RequirementEvaluation {
@@ -200,6 +219,7 @@ function threshold(input: ThresholdInput): RequirementEvaluation {
         headroom,
         nodeIds: input.nodeIds ?? [],
         values: input.values ?? {},
+        contributions: input.contributions ?? [],
     };
 }
 
@@ -223,6 +243,7 @@ function binary(
         headroom: null,
         nodeIds,
         values,
+        contributions: [],
     };
 }
 
@@ -263,6 +284,11 @@ function evaluateSlo(requirement: SloRequirement, input: PredicateInput): Requir
 
     if (requirement.metric === 'availability') {
         const target = Math.min(requirement.min ?? 0, input.relaxation.availabilityFloor ?? Number.POSITIVE_INFINITY);
+        const downtime = flow.hops.map((hop) => ({
+            nodeId: hop.nodeId,
+            value: 1 - (input.result.nodes[hop.nodeId]?.availability ?? 1),
+        }));
+
         return threshold({
             requirement,
             scenario: input.scenario,
@@ -271,6 +297,7 @@ function evaluateSlo(requirement: SloRequirement, input: PredicateInput): Requir
             unit: 'ratio',
             direction: 'min',
             reason: 'below-target',
+            contributions: topContributions(downtime),
         });
     }
 
@@ -303,6 +330,9 @@ function evaluateSlo(requirement: SloRequirement, input: PredicateInput): Requir
         reason: 'above-target',
         nodeIds: worstHop ? [worstHop.nodeId] : [],
         values: worstHop ? { worstNode: worstHop.nodeId, worstMs: worstHop.contributionMs } : {},
+        contributions: topContributions(
+            flow.hops.map((hop) => ({ nodeId: hop.nodeId, value: hop.contributionMs })),
+        ),
     });
 }
 
@@ -323,6 +353,9 @@ function evaluateCapacity(requirement: CapacityRequirement, input: PredicateInpu
         reason: 'node-saturated',
         nodeIds: [worst.nodeId],
         values: { node: worst.nodeId, boundBy: worst.boundBy, capacity: worst.capacity },
+        contributions: topContributions(
+            loaded.map((node) => ({ nodeId: node.nodeId, value: node.utilization })),
+        ),
     });
 }
 
@@ -416,6 +449,12 @@ function evaluateBudget(requirement: BudgetRequirement, input: PredicateInput): 
         unit: '$',
         direction: 'max',
         reason: 'over-budget',
+        contributions: topContributions(
+            Object.values(input.result.nodes).map((node) => ({
+                nodeId: node.nodeId,
+                value: node.cost.total,
+            })),
+        ),
     });
 }
 
