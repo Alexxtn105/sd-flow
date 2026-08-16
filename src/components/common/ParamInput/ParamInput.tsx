@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { ParamField, ParamValue } from '../../../engine/types/component';
+import { defaultMarkPercent, formatDefault } from '../../../utils/paramDefault';
 import { rangeStatus } from '../../../utils/paramRange';
 import { fromSlider, sliderScaleOf, SLIDER_STEPS, toSlider } from '../../../utils/paramSlider';
 import './ParamInput.css';
@@ -9,6 +10,7 @@ interface ParamInputProps {
     field: ParamField | undefined;
     value: ParamValue;
     label: string;
+    defaultValue?: ParamValue;
     disabled?: boolean;
     withSlider?: boolean;
     onChange: (value: ParamValue) => void;
@@ -19,11 +21,12 @@ export default function ParamInput({
     field,
     value,
     label,
+    defaultValue,
     disabled = false,
     withSlider = false,
     onChange,
 }: ParamInputProps) {
-    const { t } = useTranslation(['params']);
+    const { t } = useTranslation(['params', 'common']);
 
     if (field?.kind === 'boolean') {
         return (
@@ -60,6 +63,7 @@ export default function ParamInput({
         const numeric = Number(value);
         const status = rangeStatus(value, field);
         const scale = withSlider ? sliderScaleOf(field, numeric) : null;
+        const mark = scale ? defaultMarkPercent(scale, defaultValue) : null;
 
         return (
             <span className="param-number">
@@ -78,17 +82,29 @@ export default function ParamInput({
                     }}
                 />
                 {scale && (
-                    <input
-                        type="range"
-                        className="param-slider nodrag"
-                        min={0}
-                        max={SLIDER_STEPS}
-                        step={1}
-                        value={toSlider(scale, numeric)}
-                        disabled={disabled}
-                        aria-label={label}
-                        onChange={(event) => onChange(fromSlider(scale, Number(event.target.value)))}
-                    />
+                    <span className="param-track">
+                        <input
+                            type="range"
+                            className="param-slider nodrag"
+                            min={0}
+                            max={SLIDER_STEPS}
+                            step={1}
+                            value={toSlider(scale, numeric)}
+                            disabled={disabled}
+                            aria-label={label}
+                            onChange={(event) => onChange(fromSlider(scale, Number(event.target.value)))}
+                        />
+                        {mark !== null && (
+                            <span
+                                className="param-default-mark"
+                                style={{ left: `${mark}%` }}
+                                title={t('inspector.defaultValue', {
+                                    ns: 'common',
+                                    value: formatDefault(defaultValue),
+                                })}
+                            />
+                        )}
+                    </span>
                 )}
             </span>
         );

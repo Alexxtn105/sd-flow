@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import Icon from '../../common/Icons/Icon';
 import ResizeHandle from '../../common/ResizeHandle/ResizeHandle';
 import ParamInput from '../../common/ParamInput/ParamInput';
+import ParamReset from '../../common/ParamInput/ParamReset';
 import registry from '../../../engine/ComponentRegistry';
 import {
     applyInstancePreset,
@@ -298,10 +299,16 @@ export default function Inspector() {
                                                         field={field}
                                                         value={value}
                                                         label={help.name}
+                                                        defaultValue={definition.defaultParams[key]}
                                                         withSlider
                                                         onChange={(next) => updateNodeParam(node.id, key, next)}
                                                     />
                                                     <span className="ins-unit">{help.unit}</span>
+                                                    <ParamReset
+                                                        value={value}
+                                                        defaultValue={definition.defaultParams[key]}
+                                                        onReset={(next) => updateNodeParam(node.id, key, next)}
+                                                    />
                                                 </span>
                                             </div>
                                             {rangeStatus(value, field) !== 'ok' && (

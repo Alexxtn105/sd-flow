@@ -342,8 +342,10 @@
             "cost": "Cost",
             "boundBy": "Bound by «{{bound}}»: capacity {{capacity}} rps at {{instances}} instances"
         },
+        "defaultValue": "Default value: {{value}}",
         "outOfLimits": "Value is outside the allowed range — {{span}}; the result will be meaningless",
         "outOfRealistic": "That does not happen in practice — {{span}}",
+        "resetToDefault": "Restore the default value: {{value}}",
         "preset": "Instance preset",
         "presetCustom": "custom",
         "presetSize": {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import Icon from '../common/Icons/Icon';
 import ParamInput from '../common/ParamInput/ParamInput';
+import ParamReset from '../common/ParamInput/ParamReset';
 import registry from '../../engine/ComponentRegistry';
 import useParamHelp from '../../hooks/useParamHelp';
 import { useGraphStore } from '../../store/graphStore';
@@ -89,10 +90,16 @@ export default function ParamPopover({ nodeId, componentType }: ParamPopoverProp
                                 field={field}
                                 value={value}
                                 label={help.name}
+                                defaultValue={definition.defaultParams[key]}
                                 withSlider
                                 onChange={(next) => updateNodeParam(nodeId, key, next)}
                             />
                             <span className="sd-popover-unit">{help.unit}</span>
+                            <ParamReset
+                                value={value}
+                                defaultValue={definition.defaultParams[key]}
+                                onReset={(next) => updateNodeParam(nodeId, key, next)}
+                            />
                         </span>
                     </div>
                 );

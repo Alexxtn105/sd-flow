@@ -342,8 +342,10 @@
             "cost": "Стоимость",
             "boundBy": "Упирается в «{{bound}}»: ёмкость {{capacity}} запр./с при {{instances}} экз."
         },
+        "defaultValue": "Значение по умолчанию: {{value}}",
         "outOfLimits": "Значение вне допустимого — {{span}}; расчёт будет бессмысленным",
         "outOfRealistic": "Так не бывает — {{span}}",
+        "resetToDefault": "Вернуть значение по умолчанию: {{value}}",
         "preset": "Пресет инстанса",
         "presetCustom": "свой",
         "presetSize": {
