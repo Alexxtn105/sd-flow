@@ -55,6 +55,29 @@ describe('сериализация схемы', () => {
         expect(region?.style?.width).toBe(620);
     });
 
+    it('сохраняет подпись связи и не пишет пустую', () => {
+        buildGraph();
+        const edgeId = useGraphStore.getState().edges[0].id;
+
+        const empty = toScheme({
+            meta: META,
+            nodes: useGraphStore.getState().nodes,
+            edges: useGraphStore.getState().edges,
+        });
+        expect('label' in empty.edges[0]).toBe(false);
+
+        useGraphStore.getState().updateEdgeLabel(edgeId, 'запись заказа');
+        const named = toScheme({
+            meta: META,
+            nodes: useGraphStore.getState().nodes,
+            edges: useGraphStore.getState().edges,
+        });
+
+        expect(named.edges[0].label).toBe('запись заказа');
+        expect(fromScheme(named).edges[0].data?.label).toBe('запись заказа');
+        expect(fromScheme(empty).edges[0].data?.label).toBe('');
+    });
+
     it('пропускает узлы неизвестного типа и связи к ним', () => {
         buildGraph();
         const scheme = toScheme({

@@ -98,16 +98,48 @@ function TrafficEdgeView({
     const baseWidth = metrics ? widthForRps(metrics.rps) : 2;
     const width = selected ? baseWidth + 1 : baseWidth;
 
+    const name = data?.label ?? '';
+    const showMetrics = xray && metrics != null && metrics.rps > 0;
+    const label =
+        readable && (name || showMetrics) ? (
+            <EdgeLabelRenderer>
+                <div
+                    className="sd-edge-label nodrag nopan"
+                    style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
+                >
+                    {name && <span className="sd-edge-label-name">{name}</span>}
+                    {showMetrics && metrics && (
+                        <>
+                            <span className="sd-edge-label-rps">
+                                {formatRps(metrics.rps)} {t('units.rps')}
+                            </span>
+                            <span className="sd-edge-label-bytes">
+                                {throughput.value} {t(`units.${throughput.unitKey}`)}
+                            </span>
+                            {metrics.networkMs > 0 && (
+                                <span className="sd-edge-label-latency">
+                                    {metrics.networkMs.toFixed(1)} {t('units.ms')}
+                                </span>
+                            )}
+                        </>
+                    )}
+                </div>
+            </EdgeLabelRenderer>
+        ) : null;
+
     if (strands.length === 0) {
         return (
-            <path
-                id={id}
-                className="react-flow__edge-path sd-edge-path"
-                d={path}
-                fill="none"
-                strokeWidth={width}
-                style={{ stroke: 'var(--traffic-stream)', strokeDasharray: dash }}
-            />
+            <>
+                <path
+                    id={id}
+                    className="react-flow__edge-path sd-edge-path"
+                    d={path}
+                    fill="none"
+                    strokeWidth={width}
+                    style={{ stroke: 'var(--traffic-stream)', strokeDasharray: dash }}
+                />
+                {label}
+            </>
         );
     }
 
@@ -148,26 +180,7 @@ function TrafficEdgeView({
                     />
                 </g>
             )}
-            {xray && readable && metrics && metrics.rps > 0 && (
-                <EdgeLabelRenderer>
-                    <div
-                        className="sd-edge-label nodrag nopan"
-                        style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
-                    >
-                        <span className="sd-edge-label-rps">
-                            {formatRps(metrics.rps)} {t('units.rps')}
-                        </span>
-                        <span className="sd-edge-label-bytes">
-                            {throughput.value} {t(`units.${throughput.unitKey}`)}
-                        </span>
-                        {metrics.networkMs > 0 && (
-                            <span className="sd-edge-label-latency">
-                                {metrics.networkMs.toFixed(1)} {t('units.ms')}
-                            </span>
-                        )}
-                    </div>
-                </EdgeLabelRenderer>
-            )}
+            {label}
         </>
     );
 }

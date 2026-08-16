@@ -32,6 +32,7 @@ export interface SdEdgeData extends Record<string, unknown> {
     kind: EdgeKind;
     calls: CallProfile[];
     policy: EdgePolicy;
+    label: string;
     pull: boolean;
     weight: number;
 }
@@ -60,6 +61,7 @@ export interface GraphState extends GraphSnapshot {
     updateNodeLabel: (nodeId: string, label: string) => void;
     updateEdgeCall: (edgeId: string, callId: string, share: number) => void;
     updateEdgeKind: (edgeId: string, kind: EdgeKind) => void;
+    updateEdgeLabel: (edgeId: string, label: string) => void;
     setNodeParent: (nodeId: string, parentId: string | undefined) => void;
     duplicateNode: (nodeId: string) => void;
     removeElements: (nodeIds: string[], edgeIds: string[]) => void;
@@ -226,6 +228,7 @@ export const useGraphStore = create<GraphState>((set, get) => {
                     kind: scheme.kind,
                     calls: scheme.calls,
                     policy: scheme.policy,
+                    label: scheme.label ?? '',
                     pull: scheme.pull ?? false,
                     weight: scheme.weight ?? 1,
                 },
@@ -275,6 +278,13 @@ export const useGraphStore = create<GraphState>((set, get) => {
             mutate((draft) => {
                 const edge = draft.edges.find((item) => item.id === edgeId);
                 if (edge?.data) edge.data.kind = kind;
+            });
+        },
+
+        updateEdgeLabel: (edgeId, label) => {
+            mutate((draft) => {
+                const edge = draft.edges.find((item) => item.id === edgeId);
+                if (edge?.data) edge.data.label = label;
             });
         },
 

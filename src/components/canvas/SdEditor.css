@@ -59,3 +59,18 @@
 .sd-edge-label-latency {
     color: var(--text-tertiary);
 }
+
+.sd-edge-label-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sd-edge-label-name ~ .sd-edge-label-rps {
+    padding-left: 6px;
+    border-left: 1px solid var(--border-primary);
+    font-weight: 500;
+    color: var(--text-secondary);
+}

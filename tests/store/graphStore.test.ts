@@ -86,6 +86,22 @@ describe('graphStore', () => {
         expect(calls.reduce((sum, call) => sum + call.share, 0)).toBeCloseTo(1, 6);
     });
 
+    it('подписывает связь и стирает подпись пустой строкой', () => {
+        const { service, postgres } = addPair();
+        useGraphStore
+            .getState()
+            .connect({ source: service, target: postgres, sourceHandle: 'out', targetHandle: 'sql' });
+
+        const edgeId = useGraphStore.getState().edges[0].id;
+        expect(useGraphStore.getState().edges[0].data?.label).toBe('');
+
+        useGraphStore.getState().updateEdgeLabel(edgeId, 'запись заказа');
+        expect(useGraphStore.getState().edges[0].data?.label).toBe('запись заказа');
+
+        useGraphStore.getState().updateEdgeLabel(edgeId, '');
+        expect(useGraphStore.getState().edges[0].data?.label).toBe('');
+    });
+
     it('удаление контейнера уносит вложенные узлы и их связи', () => {
         const store = useGraphStore.getState();
         const region = store.addComponent('region', { x: 0, y: 0 }) ?? '';

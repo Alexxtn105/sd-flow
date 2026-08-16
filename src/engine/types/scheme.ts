@@ -52,6 +52,7 @@ export interface SchemeEdge {
     kind: EdgeKind;
     calls: CallProfile[];
     policy: EdgePolicy;
+    label?: string;
     pull?: boolean;
     weight?: number;
 }
