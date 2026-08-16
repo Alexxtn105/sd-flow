@@ -209,7 +209,9 @@
 
 .dark-theme .sd-node {
     background: var(--bg-tertiary);
-    border-color: var(--border-secondary);
+    border-top-color: var(--border-secondary);
+    border-right-color: var(--border-secondary);
+    border-bottom-color: var(--border-secondary);
 }
 
 .dark-theme .sd-node-icon {
