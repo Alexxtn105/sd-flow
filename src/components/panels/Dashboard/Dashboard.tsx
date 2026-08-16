@@ -199,9 +199,10 @@ export default function Dashboard() {
                                     label={t('dashboard.metric.storage')}
                                     value={formatNumber(totals.storageGb)}
                                     unit={t('dashboard.unit.gb')}
-                                    hint={t('dashboard.metric.growth', {
-                                        value: formatNumber(totals.growthPbYear),
+                                    hint={t('dashboard.metric.storageDetail', {
+                                        growth: formatNumber(totals.growthPbYear),
                                         unit: t('dashboard.unit.pbYear'),
+                                        backup: formatNumber(totals.backupGb),
                                     })}
                                 />
                                 <Metric

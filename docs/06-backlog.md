@@ -17,8 +17,9 @@
 
 | | ID | При. | Что не сделано | Где |
 |---|---|---|---|---|
-| `[ ]` | FR-SIM-5 | P0 | Бэкапы в модели хранения: формулы §8.5 (`backupGbMonth`) нет ни в `derived.ts`, ни в `cost.ts`. Единственное упоминание — `PROBE_BACKUP_COPIES` в проекции пробы, на итоги и счёт не влияет | `sim/derived.ts`, `sim/cost.ts` |
-| `[ ]` | FR-SIM-6 | P0 | Managed-премия: `managedMultiplier` объявлен в каждом ценовом профиле и не читается нигде. Флаг `managed` работает только на SPOF | `sim/constants.ts`, `sim/cost.ts` |
+| `[x]` | FR-SIM-5 | P0 | ~~Бэкапы в модели хранения~~ — политика §8.5 в `BACKUP_POLICY`, объём у групп `sql` и `nosql`, поля `NodeResult.backupGb` и `Totals.backupGb`, показ в доке; проба хранилища берёт ту же политику вместо своей константы | `sim/derived.ts` |
+| `[ ]` | FR-SIM-5 | P1 | Бэкапы не оплачиваются (как и логи). Отдельная строка счёта сдвинет экономику всех заданий: бюджеты каталога и цели «Гольфа» выставлены по модели без них и потребуют пересчёта | `sim/cost.ts`, `data/challenges`, `data/practice/golf.ts` |
+| `[x]` | FR-SIM-6 | P0 | ~~Managed-премия~~ — `managedMultiplier` профиля умножает `compute`, `storage` и `requests` у блоков с флагом `managed`; `network` не трогает, он и так по ставкам профиля (§9) | `sim/cost.ts` |
 | `[ ]` | FR-SIM-6 | P0 | Переключение ценового профиля в интерфейсе: четыре профиля есть, `setSetting` не вызывается ни одним компонентом. Профилей `azure` и `custom` (§9) нет | `store/schemeStore.ts`, UI |
 | `[x]` | FR-SIM-7 | P0 | ~~Биномиальная группа «k из n»~~ — `quorumAvailability`; `k` объявляет сам блок хуком `model.quorum` (`mongodb`, `cassandra`, `scylla`, `aurora` — по `quorumW`, `etcd` — большинство узлов) | `sim/availability.ts` |
 | `[x]` | FR-SIM-7 | P0 | ~~Поправка на failover~~ — `failuresPerYear · failoverSec / 31 536 000` вычитается у блоков с резервом; `failuresPerYear = 2` константа движка, `failoverSec` берётся с блока | `sim/availability.ts` |

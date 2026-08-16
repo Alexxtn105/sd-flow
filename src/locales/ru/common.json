@@ -393,7 +393,8 @@
             "ceilingFind": "Найти потолок",
             "ceilingRunning": "Ищем потолок…",
             "ceilingBound": "{{node}} · {{bound}} · ×{{factor}} к текущему трафику",
-            "ceilingFree": "ничто не упирается до ×{{factor}} — узкого места нет"
+            "ceilingFree": "ничто не упирается до ×{{factor}} — узкого места нет",
+            "storageDetail": "прирост {{growth}} {{unit}} · бэкапы {{backup}} ГБ"
         },
         "unit": {
             "rps": "запр./с",

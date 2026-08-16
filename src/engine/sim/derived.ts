@@ -1,5 +1,5 @@
 import type { ComponentParams, StorageContext, StorageResult } from '../types/component';
-import { SECONDS_PER_DAY } from './constants';
+import { BACKUP_GROUPS, BACKUP_POLICY, SECONDS_PER_DAY } from './constants';
 import type { CompiledEdge, CompiledNode, CompiledTopology } from './compile';
 import type { NodeRuntime, OperationFlow } from './solver';
 
@@ -12,6 +12,19 @@ export interface DerivedNode {
     storage: StorageResult | null;
     logsGbDay: number;
     egressGbDay: number;
+    backupGb: number;
+}
+
+export function backupCopies(): number {
+    const { fullsPerMonth, incrementalsPerMonth, incrementalRatio, retentionMonths } = BACKUP_POLICY;
+
+    return (fullsPerMonth + incrementalRatio * incrementalsPerMonth) * retentionMonths;
+}
+
+function backupGbOf(node: CompiledNode, storage: StorageResult | null): number {
+    if (!storage || !BACKUP_GROUPS.has(node.definition.group)) return 0;
+
+    return storage.totalGb * backupCopies();
 }
 
 interface EgressCharge {
@@ -105,6 +118,7 @@ export function deriveNodes(
             storage,
             logsGbDay: logsGbDayOf(node, runtime),
             egressGbDay: egressByNode.get(node.id) ?? 0,
+            backupGb: backupGbOf(node, storage),
         });
     }
 

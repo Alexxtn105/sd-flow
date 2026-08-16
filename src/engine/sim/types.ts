@@ -155,6 +155,7 @@ export interface NodeResult {
     availability: number;
     egressGbDay: number;
     logsGbDay: number;
+    backupGb: number;
 }
 
 export interface EdgeResult {
@@ -266,6 +267,7 @@ export interface Totals {
     costMonth: number;
     cost: CostBreakdown;
     storageGb: number;
+    backupGb: number;
     growthGbDay: number;
     growthPbYear: number;
     egressGbDay: number;

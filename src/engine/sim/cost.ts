@@ -84,6 +84,21 @@ function containerCost(
     return null;
 }
 
+function withManagedPremium(
+    node: CompiledNode,
+    cost: CostBreakdown,
+    pricing: PricingProfile,
+): CostBreakdown {
+    if (!node.definition.managed || pricing.managedMultiplier === 1) return cost;
+
+    return totalCost({
+        compute: cost.compute * pricing.managedMultiplier,
+        storage: cost.storage * pricing.managedMultiplier,
+        network: cost.network,
+        requests: cost.requests * pricing.managedMultiplier,
+    });
+}
+
 function add(target: CostBreakdown, source: CostBreakdown): CostBreakdown {
     return {
         compute: target.compute + source.compute,
@@ -132,7 +147,8 @@ export function computeCost(
             regionCostMultiplier: regionMultiplierOf(node.regionId, topology),
         };
 
-        const cost = model.cost(context);
+        const cost = withManagedPremium(node, model.cost(context), pricing);
+
         byNode.set(node.id, cost);
         total = add(total, cost);
     }

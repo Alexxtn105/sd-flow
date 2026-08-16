@@ -4,6 +4,7 @@ import type { SchemeV1 } from '../types/scheme';
 import { redundancyOfNode } from './availability';
 import type { CompiledNode, CompiledTopology } from './compile';
 import { DAYS_PER_MONTH, HOURS_PER_MONTH } from './constants';
+import { backupCopies } from './derived';
 import { buildLatencyHistogram, DEFAULT_HISTOGRAM_BUCKETS } from './latency';
 import type { LatencySamples } from './latency';
 import type {
@@ -19,8 +20,6 @@ import type {
     ProbeStatus,
     Totals,
 } from './types';
-
-export const PROBE_BACKUP_COPIES = 1;
 
 const DAYS_PER_YEAR = 365;
 
@@ -389,10 +388,10 @@ const storageProbe: ProbeCalculator = (spec, node, metrics, context) => {
     const includeBackups = flag(spec.params, 'includeBackups', true);
     const redundancy = redundancyOfNode(node, metrics.instances);
 
-    const backupCopies = includeBackups ? PROBE_BACKUP_COPIES : 0;
+    const copies = includeBackups ? backupCopies() : 0;
     const replicaDivisor = includeReplicas ? 1 : Math.max(redundancy, 1);
     const projected =
-        (metrics.storage.growthGbDay * DAYS_PER_YEAR * horizonYears * (1 + backupCopies)) / replicaDivisor;
+        (metrics.storage.growthGbDay * DAYS_PER_YEAR * horizonYears * (1 + copies)) / replicaDivisor;
 
     return reading(
         spec,
@@ -404,7 +403,7 @@ const storageProbe: ProbeCalculator = (spec, node, metrics, context) => {
             {
                 growthGbDay: metrics.storage.growthGbDay,
                 horizonYears,
-                backupCopies,
+                backupCopies: copies,
                 replicaDivisor,
                 redundancy,
                 currentGb: metrics.storage.totalGb,

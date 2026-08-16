@@ -99,6 +99,7 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
 
     const nodes: Record<string, NodeResult> = {};
     let storageGb = 0;
+    let backupGb = 0;
     let growthGbDay = 0;
     let egressGbDay = 0;
     let logsGbDay = 0;
@@ -111,6 +112,7 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
 
         const nodeDerived = derived.get(node.id) ?? null;
         storageGb += nodeDerived?.storage?.totalGb ?? 0;
+        backupGb += nodeDerived?.backupGb ?? 0;
         growthGbDay += nodeDerived?.storage?.growthGbDay ?? 0;
         egressGbDay += nodeDerived?.egressGbDay ?? 0;
         logsGbDay += nodeDerived?.logsGbDay ?? 0;
@@ -141,6 +143,7 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
             availability: availability.byNode.get(node.id) ?? 1,
             egressGbDay: nodeDerived?.egressGbDay ?? 0,
             logsGbDay: nodeDerived?.logsGbDay ?? 0,
+            backupGb: nodeDerived?.backupGb ?? 0,
         };
     }
 
@@ -181,6 +184,7 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
         costMonth: cost.total.total,
         cost: cost.total,
         storageGb,
+        backupGb,
         growthGbDay,
         growthPbYear: (growthGbDay * 365) / 1e6,
         egressGbDay,

@@ -393,7 +393,8 @@
             "ceilingFind": "Find the ceiling",
             "ceilingRunning": "Sweeping…",
             "ceilingBound": "{{node}} · {{bound}} · ×{{factor}} of current traffic",
-            "ceilingFree": "nothing saturates up to ×{{factor}} — no bottleneck"
+            "ceilingFree": "nothing saturates up to ×{{factor}} — no bottleneck",
+            "storageDetail": "growth {{growth}} {{unit}} · backups {{backup}} GB"
         },
         "unit": {
             "rps": "req/s",

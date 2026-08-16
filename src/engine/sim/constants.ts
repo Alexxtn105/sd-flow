@@ -114,6 +114,15 @@ export const ARRIVAL_VARIABILITY: Record<string, number> = {
     'poison-message': 1,
 };
 
+export const BACKUP_POLICY = {
+    fullsPerMonth: 1,
+    incrementalsPerMonth: 29,
+    incrementalRatio: 0.03,
+    retentionMonths: 1,
+};
+
+export const BACKUP_GROUPS = new Set(['sql', 'nosql']);
+
 export const PRICING_PROFILES: Record<string, PricingProfile> = {
     'aws-2026-q2': {
         id: 'aws-2026-q2',
