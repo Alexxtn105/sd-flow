@@ -249,6 +249,7 @@ npm run dev        # http://localhost:5173/sd-flow/
 | [docs/03-connections.md](docs/03-connections.md) | Связи: read/write/mixed, sync/async, визуализация трафика |
 | [docs/04-challenges.md](docs/04-challenges.md) | Режим заданий и алгоритм приёмки, каталог из 28 задач (23 реализованы), специальные наборы, конструктор заданий и его подмножество YAML, разбор «YouTube» |
 | [docs/05-architecture.md](docs/05-architecture.md) | Техническая архитектура, структура репозитория, план переиспользования кода, ADR |
+| [docs/07-model-review.md](docs/07-model-review.md) | Ревью модели 1.5.0: где симуляция считает неверно — 29 расхождений с отметками, числа для воспроизведения и порядок починки |
 
 **Принятые решения (2026-08-14):**
 

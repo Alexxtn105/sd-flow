@@ -252,6 +252,7 @@ The documentation is written in Russian; this README is the English entry point.
 | [docs/03-connections.md](docs/03-connections.md) | Connections: read/write/mixed, sync/async, traffic visualisation |
 | [docs/04-challenges.md](docs/04-challenges.md) | Challenges mode and the acceptance algorithm, a catalogue of 28 tasks (23 implemented), the practice sets, the challenge editor and its YAML subset, the "YouTube" walkthrough |
 | [docs/05-architecture.md](docs/05-architecture.md) | Technical architecture, repository structure, code reuse plan, ADRs |
+| [docs/07-model-review.md](docs/07-model-review.md) | Model review of 1.5.0: where the simulation is wrong — 29 defects with checkboxes, reproduction numbers and the repair order |
 
 **Decisions taken (2026-08-14):**
 
