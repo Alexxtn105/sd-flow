@@ -944,5 +944,41 @@
             "bad-json": "the JSON does not parse",
             "unparsable": "the text does not parse"
         }
+    },
+    "settings": {
+        "title": "Scheme settings",
+        "consistency": "Consistency model",
+        "consistencyMode": {
+            "off": "off",
+            "attribute": "attribute",
+            "anomalies": "anomaly simulation"
+        },
+        "consistencyHint": {
+            "off": "Consistency is not modelled: the anomaly panel stays empty.",
+            "attribute": "The mode is declared as a property of the scheme, but anomaly rates are not computed.",
+            "anomalies": "Rates of stale reads, conflicts, lost updates and duplicates are computed."
+        },
+        "consistencyLocked": "The challenge requires the «{{mode}}» mode and locks the switch.",
+        "pricing": "Pricing profile",
+        "pricingProfile": {
+            "aws-2026-q2": "Large cloud (AWS)",
+            "gcp-2026-q2": "Large cloud (GCP)",
+            "hetzner-2026-q2": "Budget hosting",
+            "on-prem": "Own hardware"
+        },
+        "pricingAsOf": "Prices as of {{date}} — they may be stale. The profile sets egress, cross-AZ and cross-region traffic, request pricing and the price level of managed services.",
+        "depth": "Model depth",
+        "depthLevel": {
+            "learning": "Learning",
+            "standard": "Standard",
+            "expert": "Expert"
+        },
+        "depthHint": {
+            "learning": "5,000 Monte-Carlo samples: faster to compute, coarser p99 tail.",
+            "standard": "20,000 Monte-Carlo samples — the usual mode.",
+            "expert": "60,000 Monte-Carlo samples: sharper tail, longer computation."
+        },
+        "seed": "Simulation seed",
+        "seedHint": "The same seed on the same scheme yields the same result. Change it to see another draw of the tail."
     }
 }

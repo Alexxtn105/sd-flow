@@ -21,6 +21,16 @@ import type { EdgeResult, NodeResult, SimResult, Totals } from './types';
 export const DEFAULT_SAMPLE_COUNT = 20000;
 export const PREVIEW_SAMPLE_COUNT = 4000;
 
+export const SAMPLE_COUNT_BY_DEPTH: Record<string, number> = {
+    learning: 5000,
+    standard: DEFAULT_SAMPLE_COUNT,
+    expert: 60000,
+};
+
+export function sampleCountFor(modelDepth: string): number {
+    return SAMPLE_COUNT_BY_DEPTH[modelDepth] ?? DEFAULT_SAMPLE_COUNT;
+}
+
 export interface SimulateOptions {
     sampleCount?: number;
     scenario?: string;
@@ -37,7 +47,7 @@ function seedFor(scheme: SchemeV1, scenario: string): number {
 
 export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimResult {
     const scenarioId = options.scenario ?? scheme.settings.scenario;
-    const sampleCount = options.sampleCount ?? DEFAULT_SAMPLE_COUNT;
+    const sampleCount = options.sampleCount ?? sampleCountFor(scheme.settings.modelDepth);
 
     const probeSpecs = collectProbes(scheme);
     const measured = withoutProbes(scheme);

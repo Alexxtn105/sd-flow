@@ -27,6 +27,7 @@ export interface HeaderProps {
     onShare: () => void;
     onExportImage: () => void;
     onExportReport: () => void;
+    onSettings: () => void;
 }
 
 export default function Header({
@@ -40,6 +41,7 @@ export default function Header({
     onShare,
     onExportImage,
     onExportReport,
+    onSettings,
 }: HeaderProps) {
     const { t, i18n } = useTranslation();
     const localized = useLocalized();
@@ -188,6 +190,9 @@ export default function Header({
                         </option>
                     ))}
                 </select>
+                <button className="hdr-btn" onClick={onSettings} title={t('settings.title')}>
+                    <Icon name="tune" size="small" />
+                </button>
                 <button
                     className={`hdr-btn ${xray ? 'active' : ''}`}
                     onClick={toggleXray}

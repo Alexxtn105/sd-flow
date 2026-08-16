@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { DEFAULT_SAMPLE_COUNT, PREVIEW_SAMPLE_COUNT } from '../engine/sim/simulate';
+import { PREVIEW_SAMPLE_COUNT, sampleCountFor } from '../engine/sim/simulate';
 import type { CeilingResult, SimResult } from '../engine/sim/types';
 import type { SchemeV1 } from '../engine/types/scheme';
 import { runCeiling, runSimulation } from '../services/simulationService';
@@ -57,7 +57,7 @@ export const useSimStore = create<SimState>((set, get) => ({
         runSimulation({
             scheme,
             scenario,
-            sampleCount: preview ? PREVIEW_SAMPLE_COUNT : DEFAULT_SAMPLE_COUNT,
+            sampleCount: preview ? PREVIEW_SAMPLE_COUNT : sampleCountFor(scheme.settings.modelDepth),
         })
             .then((result) => {
                 if (requestId !== latestRequest) return;

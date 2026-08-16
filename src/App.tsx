@@ -15,6 +15,7 @@ import LoadDialog from './components/dialogs/LoadDialog';
 import ConfirmDialog from './components/dialogs/ConfirmDialog';
 import ChallengeEditor from './components/dialogs/ChallengeEditor';
 import BlockHelpDialog from './components/dialogs/BlockHelpDialog';
+import SettingsDialog from './components/dialogs/SettingsDialog';
 import Icon from './components/common/Icons/Icon';
 import Toast from './components/common/Toast/Toast';
 import type { ToastTone } from './components/common/Toast/Toast';
@@ -259,6 +260,7 @@ export default function App() {
                     onShare={() => void handleShare()}
                     onExportImage={() => void handleExportImage()}
                     onExportReport={handleExportReport}
+                    onSettings={() => dialogs.open('settings')}
                 />
 
                 <div className="app-content">
@@ -305,6 +307,12 @@ export default function App() {
                         onClose={dialogs.close}
                         onSave={(name) => (dialogs.openDialog === 'saveAs' || !meta.name ? saveAs(name) : saveScheme())}
                     />
+                )}
+
+                {dialogs.openDialog === 'settings' && (
+                    <ErrorBoundary>
+                        <SettingsDialog onClose={dialogs.close} />
+                    </ErrorBoundary>
                 )}
 
                 {dialogs.openDialog === 'load' && (

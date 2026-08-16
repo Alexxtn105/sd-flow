@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import initComponents from '../../src/engine/initComponents';
 import registry from '../../src/engine/ComponentRegistry';
-import { simulate } from '../../src/engine/sim/simulate';
+import { sampleCountFor, simulate } from '../../src/engine/sim/simulate';
 import { buildScheme } from '../helpers/scheme';
 
 beforeAll(() => {
@@ -100,5 +100,29 @@ describe('стационарный решатель', () => {
         expect(service.utilization).toBeGreaterThan(1);
         expect(service.throughput).toBeLessThan(service.lambdaOffered);
         expect(result.findings.some((finding) => finding.code === 'overloaded')).toBe(true);
+    });
+});
+
+describe('глубина модели', () => {
+    it('задаёт число сэмплов Monte-Carlo', () => {
+        expect(sampleCountFor('learning')).toBeLessThan(sampleCountFor('standard'));
+        expect(sampleCountFor('expert')).toBeGreaterThan(sampleCountFor('standard'));
+        expect(sampleCountFor('невнятное значение')).toBe(sampleCountFor('standard'));
+    });
+
+    it('схема с профилем «Обучение» считается тем же движком', () => {
+        const scheme = buildScheme({
+            nodes: [
+                { id: 'client', type: 'client-web' },
+                { id: 'svc', type: 'service' },
+            ],
+            links: [{ from: 'client', to: 'svc' }],
+            settings: { modelDepth: 'learning' },
+        });
+
+        const result = simulate(scheme);
+
+        expect(result.flows[0].latency.p99).toBeGreaterThan(0);
+        expect(result.converged).toBe(true);
     });
 });

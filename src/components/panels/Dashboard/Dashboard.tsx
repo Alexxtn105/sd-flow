@@ -171,10 +171,14 @@ export default function Dashboard() {
                                                           bound: t(`bound.${ceiling.boundBy}`, {
                                                               defaultValue: ceiling.boundBy,
                                                           }),
-                                                          factor: formatNumber(ceiling.multiplier),
+                                                          factor: formatNumber(
+                                                              Math.round(ceiling.multiplier * 100) / 100,
+                                                          ),
                                                       })
                                                     : t('dashboard.metric.ceilingFree', {
-                                                          factor: formatNumber(ceiling.multiplier),
+                                                          factor: formatNumber(
+                                                              Math.round(ceiling.multiplier * 100) / 100,
+                                                          ),
                                                       })}
                                             </span>
                                         </>

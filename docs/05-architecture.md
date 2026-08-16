@@ -83,7 +83,7 @@ sd-flow/
 │   │   ├── panels/                    ← Palette, Inspector, Dashboard (+ Timeline), Challenges
 │   │   ├── tutorial/                  ← Tutorial + tutorialSteps.ts (чистый редьюсер шагов)
 │   │   ├── dialogs/                   ← Save, Load, Confirm, ChallengeEditor (конструктор заданий),
-│   │   │                                BlockHelpDialog (справка по блоку)
+│   │   │                                BlockHelpDialog (справка по блоку), SettingsDialog
 │   │   ├── layout/                    ← Header, Footer
 │   │   └── common/                    ← Dialog, ErrorBoundary, Icon, SdIcons, ResizeHandle, Waterfall
 │   ├── hooks/                         ← useSimulation, useAutoSave, useDialogManager, useTheme,
