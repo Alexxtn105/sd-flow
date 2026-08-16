@@ -9,7 +9,7 @@ function hop(nodeId: string, p99Ms: number, overrides: Partial<WaterfallHop> = {
         parentNodeId: 'entry',
         depth: 1,
         arm: 'sequential',
-        shareOfRequests: 1,
+        visitsPerRequest: 1,
         trafficShare: 1,
         callsPerRequest: 1,
         cacheMissShare: null,

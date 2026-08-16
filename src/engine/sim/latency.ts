@@ -676,7 +676,7 @@ export function rollUpLatency(
             .map((item) => ({
                 nodeId: item.nodeId,
                 depth: item.depth,
-                shareOfRequests: item.visits / Math.max(sampleCount, 1),
+                visitsPerRequest: item.visits / Math.max(sampleCount, 1),
                 serviceMs: (item.serviceSec / Math.max(item.visits, 1)) * 1000,
                 waitMs: (item.waitSec / Math.max(item.visits, 1)) * 1000,
                 networkMs: (item.networkSec / Math.max(item.visits, 1)) * 1000,
@@ -701,7 +701,7 @@ export function rollUpLatency(
                 parentNodeId: site.parentNodeId,
                 depth: site.depth,
                 arm: site.arm,
-                shareOfRequests: site.visits / Math.max(sampleCount, 1),
+                visitsPerRequest: site.visits / Math.max(sampleCount, 1),
                 trafficShare: site.trafficShare,
                 callsPerRequest: site.callsPerRequest,
                 cacheMissShare: site.cacheMissShare,

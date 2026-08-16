@@ -194,9 +194,9 @@ function flowCovering(context: ProbeContext, nodeId: string): FlowResult | null 
         const hop = flow.hops.find((item) => item.nodeId === nodeId);
         if (!hop) continue;
 
-        if (!best || hop.shareOfRequests * flow.rps > bestShare) {
+        if (!best || hop.visitsPerRequest * flow.rps > bestShare) {
             best = flow;
-            bestShare = hop.shareOfRequests * flow.rps;
+            bestShare = hop.visitsPerRequest * flow.rps;
         }
     }
 
@@ -594,7 +594,7 @@ const trafficInspectorProbe: ProbeCalculator = (spec, node, metrics, context) =>
         for (const flow of context.flows) {
             const hop = flow.hops.find((item) => item.nodeId === node.id);
             if (!hop) continue;
-            inputs[flow.id] = flow.rps * hop.shareOfRequests;
+            inputs[flow.id] = flow.rps * hop.visitsPerRequest;
         }
     }
 

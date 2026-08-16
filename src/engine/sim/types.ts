@@ -27,7 +27,7 @@ export interface LatencyQuantiles {
 export interface HopStat {
     nodeId: string;
     depth: number;
-    shareOfRequests: number;
+    visitsPerRequest: number;
     serviceMs: number;
     waitMs: number;
     networkMs: number;
@@ -55,7 +55,7 @@ export interface WaterfallHop {
     parentNodeId: string;
     depth: number;
     arm: HopArm;
-    shareOfRequests: number;
+    visitsPerRequest: number;
     trafficShare: number;
     callsPerRequest: number;
     cacheMissShare: number | null;

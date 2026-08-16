@@ -24,8 +24,8 @@ export default function Waterfall({ waterfall, percentile, labelOf, limit, compa
     const notesOf = (hop: WaterfallHop): string => {
         const notes = [t(`waterfall.arm.${hop.arm}`)];
 
-        if (hop.shareOfRequests < 0.999) {
-            notes.push(t('waterfall.shareOfRequests', { value: formatNumber(hop.shareOfRequests * 100) }));
+        if (hop.visitsPerRequest < 0.999) {
+            notes.push(t('waterfall.shareOfRequests', { value: formatNumber(hop.visitsPerRequest * 100) }));
         }
         if (hop.cacheMissShare !== null) {
             notes.push(t('waterfall.cacheMiss', { value: formatNumber(hop.cacheMissShare * 100) }));

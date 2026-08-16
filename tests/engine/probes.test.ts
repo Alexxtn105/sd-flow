@@ -197,7 +197,7 @@ describe('водопад задержки', () => {
 
         for (const hop of waterfall.hops) {
             expect(['sequential', 'parallel']).toContain(hop.arm);
-            expect(hop.shareOfRequests).toBeGreaterThan(0);
+            expect(hop.visitsPerRequest).toBeGreaterThan(0);
             expect(hop.p99Ms).toBeGreaterThanOrEqual(0);
         }
     });

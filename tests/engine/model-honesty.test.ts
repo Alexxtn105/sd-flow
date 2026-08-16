@@ -51,7 +51,7 @@ describe('веер вызовов в задержке', () => {
         const half = simulate(withFanout(0.5), { sampleCount: SAMPLES });
 
         const shareOf = (result: ReturnType<typeof simulate>) =>
-            result.waterfalls[0].hops.find((hop) => hop.nodeId === 'db')?.shareOfRequests ?? 0;
+            result.waterfalls[0].hops.find((hop) => hop.nodeId === 'db')?.visitsPerRequest ?? 0;
 
         expect(shareOf(always)).toBeCloseTo(1, 1);
         expect(shareOf(half)).toBeGreaterThan(0.4);
@@ -111,7 +111,7 @@ describe('балансировка против веера', () => {
         const dead = failure.waterfalls[0].hops.find((hop) => hop.nodeId === 'svc-eu');
 
         expect(failure.nodes['svc-eu'].throughput).toBe(0);
-        expect(dead?.shareOfRequests ?? 0).toBe(0);
+        expect(dead?.visitsPerRequest ?? 0).toBe(0);
     });
 
     it('веер вызовов, наоборот, складывается', () => {
