@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import StorageService, { STORAGE_KEYS } from '../services/storageService';
 import { DEFAULT_SETTINGS } from '../engine/types/scheme';
 import type { SchemeSettings } from '../engine/types/scheme';
+import type { RegionView } from '../utils/canvasView';
 import { clampPanelSize, PANEL_BOUNDS, PANEL_KEYS } from '../utils/panelSize';
 import type { PanelAxis, PanelKey } from '../utils/panelSize';
 
@@ -36,6 +37,9 @@ export interface UiState {
     minimapOn: boolean;
     defaultConsistencyModel: SchemeSettings['consistencyModel'];
     paramPopoverNodeId: string | null;
+    collapsedGroupIds: string[];
+    regionView: RegionView;
+    activeRegionId: string | null;
     connectionSource: ConnectionSource | null;
     setMode: (mode: AppMode) => void;
     togglePalette: () => void;
@@ -44,6 +48,9 @@ export interface UiState {
     openInspector: () => void;
     toggleParamPopover: (nodeId: string) => void;
     closeParamPopover: () => void;
+    toggleGroupCollapsed: (nodeId: string) => void;
+    setRegionView: (view: RegionView) => void;
+    setActiveRegion: (nodeId: string | null) => void;
     toggleXray: () => void;
     setPanelSize: (key: PanelKey, value: number) => void;
     resetPanelSize: (key: PanelKey) => void;
@@ -155,6 +162,9 @@ export const useUiStore = create<UiState>((set, get) => ({
     minimapOn: loadMinimapOn(),
     defaultConsistencyModel: loadDefaultConsistencyModel(),
     paramPopoverNodeId: null,
+    collapsedGroupIds: [],
+    regionView: 'all',
+    activeRegionId: null,
     connectionSource: null,
 
     setMode: (mode) => set({ mode }),
@@ -252,6 +262,16 @@ export const useUiStore = create<UiState>((set, get) => ({
         savePreference({ paramHints });
         set({ paramHints });
     },
+
+    toggleGroupCollapsed: (nodeId) =>
+        set((state) => ({
+            collapsedGroupIds: state.collapsedGroupIds.includes(nodeId)
+                ? state.collapsedGroupIds.filter((id) => id !== nodeId)
+                : [...state.collapsedGroupIds, nodeId],
+        })),
+
+    setRegionView: (regionView) => set({ regionView }),
+    setActiveRegion: (activeRegionId) => set({ activeRegionId }),
 
     startConnection: (source) => set({ connectionSource: source }),
     endConnection: () => {

@@ -9,6 +9,7 @@ import GroupNode from './GroupNode';
 import ProbeNode from './ProbeNode';
 import ProbeWindows from './ProbeWindows';
 import HeatLegend from './HeatLegend';
+import RegionTabs from './RegionTabs';
 import Icon from '../common/Icons/Icon';
 import TrafficEdge from './TrafficEdge';
 import CanvasContextMenu from './CanvasContextMenu';
@@ -20,6 +21,7 @@ import { useUiStore } from '../../store/uiStore';
 import { useThemeContext } from '../../contexts/ThemeContext';
 import { useTouchContext } from '../../contexts/TouchContext';
 import { PALETTE_DRAG_TYPE } from '../panels/Palette/Palette';
+import { buildCanvasView, regionsToCollapse, regionsToHide } from '../../utils/canvasView';
 import { nodeDimensions } from '../../utils/nodeSize';
 import './SdEditor.css';
 import './ReactFlowTheme.css';
@@ -104,6 +106,24 @@ export default function SdEditor() {
     const toggleMinimap = useUiStore((state) => state.toggleMinimap);
     const startConnection = useUiStore((state) => state.startConnection);
     const endConnection = useUiStore((state) => state.endConnection);
+    const collapsedGroupIds = useUiStore((state) => state.collapsedGroupIds);
+    const regionView = useUiStore((state) => state.regionView);
+    const activeRegionId = useUiStore((state) => state.activeRegionId);
+    const syncMirrors = useGraphStore((state) => state.syncMirrors);
+    const revision = useGraphStore((state) => state.revision);
+
+    const view = useMemo(() => {
+        const collapsed = new Set([...collapsedGroupIds, ...regionsToCollapse(nodes, regionView)]);
+        const hidden = regionsToHide(nodes, regionView, activeRegionId);
+
+        if (collapsed.size === 0 && hidden.size === 0) return { nodes, edges };
+
+        return buildCanvasView({ nodes, edges, collapsed, hidden });
+    }, [activeRegionId, collapsedGroupIds, edges, nodes, regionView]);
+
+    useEffect(() => {
+        syncMirrors();
+    }, [revision, syncMirrors]);
 
     const handleConnectStart = useCallback<OnConnectStart>(
         (_, { nodeId, handleId, handleType }) => {
@@ -330,8 +350,8 @@ export default function SdEditor() {
     return (
         <div className="sd-editor" ref={wrapperRef} onDrop={onDrop} onDragOver={onDragOver}>
             <ReactFlow
-                nodes={nodes}
-                edges={edges}
+                nodes={view.nodes}
+                edges={view.edges}
                 nodeTypes={nodeTypes}
                 edgeTypes={edgeTypes}
                 onNodesChange={onNodesChange}
@@ -366,6 +386,7 @@ export default function SdEditor() {
                     </ControlButton>
                 </Controls>
                 <HeatLegend />
+                <RegionTabs />
                 {minimapOn && (
                     <MiniMap
                         pannable

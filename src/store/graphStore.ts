@@ -7,6 +7,7 @@ import registry from '../engine/ComponentRegistry';
 import { applySourcePayload, createDefaultEdge } from '../engine/edgeDefaults';
 import { nextId } from '../engine/ids';
 import { isConnectionAllowed } from '../engine/ports';
+import { mirrorGraph } from '../services/mirrorRegions';
 import type { ComponentParams, ComponentShape, ComponentTypeId, ParamValue } from '../engine/types/component';
 import type { CallProfile, EdgeKind, EdgePolicy } from '../engine/types/scheme';
 import { CONTAINER_SIZE } from '../utils/nodeSize';
@@ -66,6 +67,7 @@ export interface GraphState extends GraphSnapshot {
     setNodeParent: (nodeId: string, parentId: string | undefined, position?: XYPosition) => void;
     duplicateNode: (nodeId: string) => void;
     removeElements: (nodeIds: string[], edgeIds: string[]) => void;
+    syncMirrors: () => void;
     replaceGraph: (nodes: SdNode[], edges: SdEdge[]) => void;
     clear: () => void;
     beginTransaction: () => void;
@@ -428,6 +430,20 @@ export const useGraphStore = create<GraphState>((set, get) => {
                     (edge) => !edgeIds.includes(edge.id) && !doomed.has(edge.source) && !doomed.has(edge.target),
                 );
             });
+        },
+
+        syncMirrors: () => {
+            const { nodes, edges } = get();
+            const mirrored = mirrorGraph(nodes, edges);
+            if (!mirrored.changed) return;
+
+            mutate(
+                (draft) => {
+                    draft.nodes = sortNodesForFlow(mirrored.nodes);
+                    draft.edges = mirrored.edges;
+                },
+                { history: false },
+            );
         },
 
         replaceGraph: (nodes, edges) => {

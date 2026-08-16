@@ -1,0 +1,53 @@
+.sd-regions {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 6px;
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    box-shadow: var(--shadow-sm);
+}
+
+.sd-regions-select {
+    padding: 3px 5px;
+    border: 1px solid var(--panel-border);
+    border-radius: 4px;
+    background: var(--panel-input-bg);
+    color: var(--panel-text-2);
+    font-size: 10.5px;
+    cursor: pointer;
+}
+
+.sd-regions-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    max-width: 260px;
+}
+
+.sd-regions-tab {
+    padding: 3px 7px;
+    border: 1px solid var(--panel-border);
+    border-radius: 4px;
+    background: none;
+    color: var(--panel-text-3);
+    font-size: 10.5px;
+    cursor: pointer;
+}
+
+.sd-regions-tab:hover {
+    border-color: var(--panel-border-hover);
+    color: var(--panel-text-1);
+}
+
+.sd-regions-tab.active {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+}
+
+@media (max-width: 768px) {
+    .sd-regions {
+        display: none;
+    }
+}

@@ -65,3 +65,47 @@
     background: var(--bg-tertiary);
     border-color: var(--border-secondary);
 }
+
+.sd-group-collapsed {
+    background: var(--bg-tertiary);
+    border-style: solid;
+}
+
+.sd-group-collapse {
+    display: flex;
+    padding: 1px;
+    border: none;
+    background: none;
+    color: var(--panel-text-5);
+    cursor: pointer;
+}
+
+.sd-group-collapse:hover {
+    color: var(--accent-primary);
+}
+
+.sd-group-count {
+    padding: 0 5px;
+    border-radius: 8px;
+    background: var(--panel-input-bg);
+    color: var(--panel-text-4);
+    font-size: 9.5px;
+    line-height: 15px;
+}
+
+.sd-group-mirror {
+    display: flex;
+    color: var(--panel-text-5);
+}
+
+.sd-group-collapse,
+.sd-group-count {
+    pointer-events: auto;
+}
+
+.sd-group-handle {
+    width: 7px;
+    height: 7px;
+    border: 1px solid var(--border-primary);
+    background: var(--bg-tertiary);
+}

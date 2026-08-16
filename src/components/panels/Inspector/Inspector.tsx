@@ -83,6 +83,9 @@ export default function Inspector() {
         commitTransaction();
     };
 
+    const mirrorSource = node && typeof node.data.mirrorOf === 'string' ? node.data.mirrorOf : '';
+    const mirrorParam = node && typeof node.data.params.mirrorOf === 'string' ? node.data.params.mirrorOf : '';
+
     const applyRps = (rps: number) => {
         if (!node) return;
 
@@ -198,6 +201,21 @@ export default function Inspector() {
                                 onChange={(event) => updateNodeLabel(node.id, event.target.value)}
                             />
                         </div>
+
+                        {mirrorSource.length > 0 && (
+                            <p className="ins-note">{t('inspector.mirrorNote', { source: mirrorSource })}</p>
+                        )}
+
+                        {mirrorParam.length > 0 && (
+                            <button
+                                type="button"
+                                className="ins-descriptions"
+                                onClick={() => updateNodeParam(node.id, 'mirrorOf', '')}
+                            >
+                                <Icon name="link_off" size="small" />
+                                <span className="ins-descriptions-text">{t('inspector.unlinkMirror')}</span>
+                            </button>
+                        )}
 
                         {presetSupported && (
                             <div className="ins-row">

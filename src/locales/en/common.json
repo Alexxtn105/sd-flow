@@ -301,7 +301,16 @@
         "heatFromUtilization": "Heat map: utilisation",
         "heatFromProbe": "Heat map: probe",
         "popoverMore": "{{count}} more parameters — in the inspector",
-        "popoverAll": "Open the inspector"
+        "popoverAll": "Open the inspector",
+        "collapseGroup": "Collapse the group",
+        "expandGroup": "Expand the group",
+        "mirrorOf": "Mirror of region {{source}}",
+        "regionView": "Region display",
+        "regionViewMode": {
+            "all": "Regions: all at once",
+            "single": "Regions: one at a time",
+            "collapsed": "Regions: collapsed"
+        }
     },
     "inspector": {
         "title": "Inspector",
@@ -345,7 +354,9 @@
             "xl": "XL — quadruple"
         },
         "derivedRps": "Load",
-        "derivedRpsHint": "Derived from DAU, sessions and requests per session. Editing it recomputes DAU back."
+        "derivedRpsHint": "Derived from DAU, sessions and requests per session. Editing it recomputes DAU back.",
+        "mirrorNote": "A mirror of {{source}}: edits to the prototype overwrite this block. To edit it separately, unlink the region.",
+        "unlinkMirror": "Unlink the region mirror"
     },
     "blockHelp": {
         "title": "Block reference",

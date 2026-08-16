@@ -43,7 +43,10 @@ requirement is broken down by node ("Postgres — 180 ms, 58%"), and progress fo
 the practice sets can be exported to a file and imported back, merging the better of the two sets. Block parameters are edited with a slider, an XS-XL size preset
 and a popover opened by a double click on the canvas, while derived values gained an Auto/Manual
 mode: the hit ratio is either computed by the model or set by hand, and editing a client's RPS
-recomputes DAU back.
+recomputes DAU back. Regions gained three display modes (all at once, one at a
+time in tabs, collapsed), any group folds into a card with aggregate edges, and `mirrorOf` finally
+works: a mirror region instantiates the prototype's contents, receives its edits and unlinks with
+one button.
 
 * **Catalogue — 127 blocks in 14 groups: the whole planned catalogue**, MVP (44) plus V1 (65)
   plus V2 (18). A capacity model is filled in for 101 blocks — every block that carries traffic;
@@ -231,7 +234,7 @@ npm run dev        # http://localhost:5173/sd-flow/
 | `npm run preview` | Local preview of the built bundle |
 | `npm run lint` | ESLint 9 (flat config) |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Vitest: 912 tests in 55 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, practice sets, the authoring format, locales, node names, block reference and parameter hints, sample schemes, demo schemes |
+| `npm test` | Vitest: 931 tests in 57 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, practice sets, the authoring format, locales, node names, block reference and parameter hints, sample schemes, demo schemes |
 
 Deployment is GitHub Actions on a push to `main`: lint → typecheck → tests → build → GitHub Pages.
 The app installs as a PWA and runs offline; a scheme can be shared as a link, the canvas exported
