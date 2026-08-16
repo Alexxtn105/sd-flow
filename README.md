@@ -32,6 +32,10 @@ wide parallel fan-out and keeps a resized container size in the saved scheme. Ve
 updating after a release: the document is fetched from the network, a version change clears the
 offline cache, and the version number is visible in the header. Version 1.4.3 turns the heat map on:
 the thermometer button tints blocks by utilisation and puts a scale legend on the canvas.
+Version 1.5 charges the consistency model its price: optimistic locking pays in retries under key
+contention, pessimistic locking pays with a `key-serialization` capacity limit, idempotency keys
+take up storage with a 24-hour TTL, and the **split-brain** scenario lets replicas diverge on both
+sides of the partition and prices the merge.
 
 * **Catalogue — 127 blocks in 14 groups: the whole planned catalogue**, MVP (44) plus V1 (65)
   plus V2 (18). A capacity model is filled in for 101 blocks — every block that carries traffic;
@@ -219,7 +223,7 @@ npm run dev        # http://localhost:5173/sd-flow/
 | `npm run preview` | Local preview of the built bundle |
 | `npm run lint` | ESLint 9 (flat config) |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Vitest: 810 tests in 47 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, practice sets, the authoring format, locales, node names, block reference and parameter hints, sample schemes, demo schemes |
+| `npm test` | Vitest: 845 tests in 49 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, practice sets, the authoring format, locales, node names, block reference and parameter hints, sample schemes, demo schemes |
 
 Deployment is GitHub Actions on a push to `main`: lint → typecheck → tests → build → GitHub Pages.
 The app installs as a PWA and runs offline; a scheme can be shared as a link, the canvas exported

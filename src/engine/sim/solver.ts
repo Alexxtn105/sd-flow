@@ -2,6 +2,7 @@ import type { CapacityResult, ComponentParams, NodeContext, ResourceLimit } from
 import type { CallOperation } from '../types/scheme';
 import { cacheHitRatio } from './cacheModel';
 import type { CompiledEdge, CompiledNode, CompiledTopology } from './compile';
+import { contentionRetryShare, keySerializationLimit } from './contention';
 import type { Flow } from './flows';
 import { isReadOperation } from './flows';
 import { retryAmplification, serviceVariabilityFromSigma, solveQueue } from './queueing';
@@ -53,6 +54,7 @@ export interface NodeRuntime {
     residentKeys: number;
     hotKeyShare: number;
     retryAmplification: number;
+    contentionRetryShare: number;
 }
 
 export interface SolveOptions {
@@ -131,6 +133,7 @@ function idleRuntime(node: CompiledNode): NodeRuntime {
         residentKeys: 0,
         hotKeyShare: 0,
         retryAmplification: 0,
+        contentionRetryShare: 0,
     };
 }
 
@@ -277,20 +280,20 @@ function resolveCapacity(
 
 export const BLOCKING_RESOURCE = 'blocking';
 
-function withBlockingLimit(
-    capacity: CapacityResult,
-    pool: number,
-    serviceSec: number,
-    blockingSec: number,
-): CapacityResult {
-    if (pool <= 0 || blockingSec <= 0) return capacity;
+function withLimit(capacity: CapacityResult, limit: ResourceLimit | null): CapacityResult {
+    if (!limit || !Number.isFinite(limit.value)) return capacity;
 
-    const limit = occupancyBound(BLOCKING_RESOURCE, pool, serviceSec, blockingSec);
     const limits = [...capacity.limits, limit];
 
     return limit.value < capacity.capacity
         ? { limits, capacity: limit.value, boundBy: limit.resource }
         : { limits, capacity: capacity.capacity, boundBy: capacity.boundBy };
+}
+
+function blockingLimitOf(pool: number, serviceSec: number, blockingSec: number): ResourceLimit | null {
+    if (pool <= 0 || blockingSec <= 0) return null;
+
+    return occupancyBound(BLOCKING_RESOURCE, pool, serviceSec, blockingSec);
 }
 
 function serversOf(node: CompiledNode, instances: number): number {
@@ -458,7 +461,11 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
 
             const serviceScale = options.serviceScale?.get(node.id) ?? 1;
             const serviceSec = nominalServiceSec * serviceScale;
-            const bounded = withBlockingLimit(capacity, declaredPool(node, instances), serviceSec, blockingSec);
+            const blocked = withLimit(
+                capacity,
+                blockingLimitOf(declaredPool(node, instances), serviceSec, blockingSec),
+            );
+            const bounded = withLimit(blocked, keySerializationLimit(node.params, writeShare, serviceSec));
             const effectiveCapacity =
                 (bounded.capacity * (options.capacityScale?.get(node.id) ?? 1)) / serviceScale;
 
@@ -479,7 +486,9 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
                 retryBudget,
             );
 
-            const lambdaOffered = lambdaNominal * (1 + amplification);
+            const retryShare = contentionRetryShare(node.params, lambdaNominal * writeShare, serviceSec);
+            const lambdaOffered =
+                lambdaNominal * (1 + amplification) + lambdaNominal * writeShare * retryShare;
             const servers = serversOf(node, instances);
             const queueLimit = queueLimitFor(node, servers);
             const timeoutSec = timeoutSecFor(node);
@@ -519,6 +528,7 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
                 residentKeys: cacheResult ? cacheResult.residentKeys : 0,
                 hotKeyShare: cacheResult ? cacheResult.hotKeyShare : 0,
                 retryAmplification: amplification,
+                contentionRetryShare: retryShare,
             };
 
             current.set(node.id, runtime);

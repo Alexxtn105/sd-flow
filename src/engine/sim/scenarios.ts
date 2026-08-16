@@ -21,7 +21,8 @@ export type ScenarioId =
     | 'slow-dependency'
     | 'thundering-herd'
     | 'retry-storm'
-    | 'poison-message';
+    | 'poison-message'
+    | 'split-brain';
 
 export const SCENARIOS: ScenarioId[] = [
     'baseline',
@@ -40,6 +41,7 @@ export const SCENARIOS: ScenarioId[] = [
     'poison-message',
     'stale-read',
     'write-conflict',
+    'split-brain',
 ];
 
 export const TRANSIENT_SCENARIOS: ScenarioId[] = [
@@ -68,6 +70,7 @@ export interface ScenarioSetup {
     cacheDisabled: boolean;
     replicationLagMultiplier: number;
     forceMultiMaster: boolean;
+    partitionSec: number;
     transient: TransientProfile | null;
 }
 
@@ -81,6 +84,7 @@ const HOT_KEY_SHARE = 0.4;
 const SLOW_DEPENDENCY_FACTOR = 25;
 const POISON_SHARE = 0.01;
 const DEFAULT_FAILOVER_SEC = 60;
+const SPLIT_BRAIN_PARTITION_SEC = 120;
 
 const MINUTE_SEC = 60;
 const HOUR_SEC = 3600;
@@ -326,6 +330,7 @@ export function buildScenario(topology: CompiledTopology, id: string): ScenarioS
         cacheDisabled: false,
         replicationLagMultiplier: 1,
         forceMultiMaster: false,
+        partitionSec: 0,
         transient: null,
     };
 
@@ -354,6 +359,12 @@ export function buildScenario(topology: CompiledTopology, id: string): ScenarioS
 
     if (scenario === 'write-conflict') {
         setup.forceMultiMaster = true;
+        return setup;
+    }
+
+    if (scenario === 'split-brain') {
+        setup.forceMultiMaster = true;
+        setup.partitionSec = SPLIT_BRAIN_PARTITION_SEC;
         return setup;
     }
 

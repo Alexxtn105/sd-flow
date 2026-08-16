@@ -150,6 +150,7 @@ export interface NodeResult {
     queueDepth: number;
     errorRate: number;
     retryAmplification: number;
+    contentionRetryShare: number;
     hitRatio: number | null;
     storage: StorageResult | null;
     cost: CostBreakdown;
@@ -157,6 +158,7 @@ export interface NodeResult {
     egressGbDay: number;
     logsGbDay: number;
     backupGb: number;
+    idempotencyGb: number;
 }
 
 export interface EdgeResult {
@@ -269,6 +271,7 @@ export interface Totals {
     cost: CostBreakdown;
     storageGb: number;
     backupGb: number;
+    idempotencyGb: number;
     growthGbDay: number;
     growthPbYear: number;
     egressGbDay: number;

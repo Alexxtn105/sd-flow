@@ -112,6 +112,12 @@ export const ARRIVAL_VARIABILITY: Record<string, number> = {
     'thundering-herd': 6,
     'retry-storm': 4,
     'poison-message': 1,
+    'split-brain': 1,
+};
+
+export const IDEMPOTENCY_POLICY = {
+    ttlHours: 24,
+    bytesPerKey: 256,
 };
 
 export const BACKUP_POLICY = {

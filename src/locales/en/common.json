@@ -411,7 +411,7 @@
             "ceilingRunning": "Sweeping…",
             "ceilingBound": "{{node}} · {{bound}} · ×{{factor}} of current traffic",
             "ceilingFree": "nothing saturates up to ×{{factor}} — no bottleneck",
-            "storageDetail": "growth {{growth}} {{unit}} · backups {{backup}} GB"
+            "storageDetail": "growth {{growth}} {{unit}} · backups {{backup}} GB · idempotency keys {{idempotency}} GB"
         },
         "unit": {
             "rps": "req/s",
@@ -537,6 +537,7 @@
         "cache-flush": "Cache flush",
         "stale-read": "Replica lag",
         "write-conflict": "Write conflict",
+        "split-brain": "Split-brain",
         "spike": "Spike ×5",
         "growth": "Growth ×10 over 2 years",
         "black-friday": "Black Friday ×20",
@@ -571,6 +572,7 @@
         "saturated": "Close to the limit: {{nodeNames}} runs at {{utilizationPct}}%, bound by {{boundBy}} at a capacity of {{capacity}} req/s. The queue will grow at peak.",
         "retry-storm": "Retry storm: the model did not converge — retries add load faster than the system drains it. Reduce the retry count, add backoff and a circuit breaker.",
         "retry-amplification": "Retries inflate the load: {{nodeNames}} receives {{amplificationPct}}% more requests because of repeats. Raise the timeout or enable exponential backoff.",
+        "contention-retries": "Key contention: {{sharePct}}% of writes on {{nodeNames}} are repeated because of optimistic locking. Spread writes across keys or move to a per-key queue.",
         "spof": "Single point of failure: {{nodeNames}} has no standby — losing it breaks the whole request path. Add a second replica or a second zone.",
         "hot-key": "Hot key: {{nodeNames}} takes {{hotKeyRps}} req/s on a single shard whose capacity is {{perShardCapacity}} req/s. Spread the key out or put a local cache in front.",
         "k8s-pods-exceeded": "More pods than the cluster holds: {{requested}} requested against a ceiling of {{ceiling}} ({{nodes}} nodes × {{podsPerNode}} pods per node). The extra pods stay Pending — add nodes or pack the deployments tighter.",
@@ -587,6 +589,7 @@
         "anomaly-lost-update": "Lost updates: {{ratePerSec}} ops/s ({{sharePct}}% of writes) overwrite each other ({{nodeNames}}). Use versions, CAS, or transactions instead of read-modify-write.",
         "anomaly-write-conflict": "Write conflicts: {{ratePerSec}} ops/s ({{sharePct}}%) edit the same key from different regions ({{nodeNames}}). Pin the key to one region or switch to CRDTs.",
         "anomaly-lost-write-lww": "Writes are lost to last-write-wins: {{ratePerSec}} ops/s ({{sharePct}}%) are silently discarded as losers ({{nodeNames}}). Change the conflict resolution strategy.",
+        "anomaly-divergent-replicas": "Replicas are diverging: {{ratePerSec}} ops/s are written on both sides of the partition ({{nodeNames}}) and will have to be reconciled on merge. Enable a quorum of R + W > N or pin the key to one side.",
         "anomaly-duplicate-processing": "Duplicate processing: {{ratePerSec}} ops/s ({{sharePct}}%) are handled twice ({{nodeNames}}). At-least-once without idempotency causes double effects.",
         "anomaly-monotonic-read": "The value moves back in time: {{ratePerSec}} ops/s ({{sharePct}}% of reads) land on a replica further behind than the previous read ({{nodeNames}}). Pin the session to a single replica.",
         "anomaly-ordering-violation": "Ordering violation: {{ratePerSec}} msg/s ({{sharePct}}%) of the same key are processed in parallel ({{nodeNames}}). Turn on per-key or per-partition ordering.",
@@ -606,6 +609,7 @@
         "lost-update": "Lost update",
         "write-conflict": "Write conflict",
         "lost-write-lww": "Write lost to LWW",
+        "divergent-replicas": "Replica divergence",
         "duplicate-processing": "Duplicate processing",
         "monotonic-read": "Monotonic reads broken",
         "ordering-violation": "Ordering violation",
@@ -641,6 +645,7 @@
         "inflight": "in-flight requests",
         "ingest-bandwidth": "ingest bandwidth",
         "iops": "disk IOPS",
+        "key-serialization": "key serialization",
         "job-window": "job window",
         "lock-serialization": "lock serialization",
         "manifest": "manifest metadata",

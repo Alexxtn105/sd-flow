@@ -207,6 +207,7 @@ export default function Dashboard() {
                                         growth: formatNumber(totals.growthPbYear),
                                         unit: t('dashboard.unit.pbYear'),
                                         backup: formatNumber(totals.backupGb),
+                                        idempotency: formatNumber(totals.idempotencyGb),
                                     })}
                                 />
                                 <Metric

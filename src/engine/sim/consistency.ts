@@ -1,5 +1,6 @@
 import type { ComponentParams } from '../types/component';
 import type { CompiledNode, CompiledTopology } from './compile';
+import { collisionProbability, concurrencyControlOf, effectiveKeys, rmwWindowSec } from './contention';
 import { explain } from './resources';
 import type { NodeRuntime, OperationFlow } from './solver';
 import type { AnomalyRate, ConsistencyResult } from './types';
@@ -8,7 +9,7 @@ const READ_AFTER_WRITE_SHARE = 0.5;
 const READ_AFTER_WRITE_GAP_SEC = 1;
 const MONOTONIC_READ_GAP_SEC = 1;
 const REBALANCE_REDELIVERY_RATE = 0.01;
-const KEY_COUNT_PARAMS = ['rowCount', 'uniqueKeys', 'documentCount', 'itemCount', 'keyCount'];
+const DEFAULT_PROPAGATION_SEC = 0.1;
 const REPLICA_COUNT_PARAMS = ['readReplicas', 'replicas', 'replicasPerShard'];
 const REPLICA_SET_PARAMS = ['replicationFactor', 'replicaSetSize'];
 const ORDERING_PARAMS = ['orderingScope', 'queueType'];
@@ -46,15 +47,6 @@ export function logNormalTail(thresholdSec: number, medianSec: number, sigma: nu
     if (thresholdSec <= 0) return 1;
 
     return 1 - normalCdf((Math.log(thresholdSec) - Math.log(medianSec)) / Math.max(sigma, 1e-6));
-}
-
-function effectiveKeys(params: ComponentParams): number {
-    for (const key of KEY_COUNT_PARAMS) {
-        const value = params[key];
-        if (typeof value === 'number' && value > 0) return value;
-    }
-
-    return 1e6;
 }
 
 function numericParam(params: ComponentParams, names: string[], minimum: number): number {
@@ -155,18 +147,32 @@ function monotonicGuaranteed(node: CompiledNode): boolean {
 }
 
 function mergesConflicts(node: CompiledNode): boolean {
-    return String(node.params.concurrencyControl ?? '') === 'crdt';
+    return concurrencyControlOf(node.params) === 'crdt';
 }
+
+function divergingSides(node: CompiledNode, topology: CompiledTopology): number {
+    if (topology.regions.length > 1) return topology.regions.length;
+
+    return replicaPoolSize(node) > 1 ? 2 : 1;
+}
+
+export interface ConsistencyOptions {
+    partitionSec: number;
+}
+
+const NO_PARTITION: ConsistencyOptions = { partitionSec: 0 };
 
 export function analyseConsistency(
     topology: CompiledTopology,
     runtimes: Map<string, NodeRuntime>,
     edgeFlows: Map<string, OperationFlow>,
     mode: 'off' | 'attribute' | 'anomalies',
+    options: ConsistencyOptions = NO_PARTITION,
 ): ConsistencyResult {
     if (mode !== 'anomalies') return { mode, anomalies: [] };
 
     const anomalies: AnomalyRate[] = [];
+    const partitionSec = Math.max(options.partitionSec, 0);
     const policy = topology.multiRegionPolicy;
     const conflictResolution = String(policy?.params.conflictResolution ?? 'lww');
     const multiMaster =
@@ -275,11 +281,10 @@ export function analyseConsistency(
             }
         }
 
-        const control = String(node.params.concurrencyControl ?? 'none');
+        const control = concurrencyControlOf(node.params);
         if (control === 'none' && runtime.write > 0) {
-            const windowSec = runtime.serviceSec * 2;
-            const collisionProbability = 1 - Math.exp(-writePerKey * windowSec);
-            const rate = runtime.write * collisionProbability;
+            const windowSec = rmwWindowSec(runtime.serviceSec);
+            const rate = runtime.write * collisionProbability(writePerKey, windowSec);
 
             if (rate > 0) {
                 anomalies.push({
@@ -301,9 +306,8 @@ export function analyseConsistency(
         const isolationCodes = ISOLATION_ANOMALIES[isolationLevel] ?? [];
 
         if (isolationCodes.length > 0 && runtime.read > 0 && runtime.write > 0) {
-            const windowSec = runtime.serviceSec * 2;
-            const overlapProbability = 1 - Math.exp(-writePerKey * windowSec);
-            const rate = runtime.read * overlapProbability;
+            const windowSec = rmwWindowSec(runtime.serviceSec);
+            const rate = runtime.read * collisionProbability(writePerKey, windowSec);
 
             for (const code of rate > 0 ? isolationCodes : []) {
                 anomalies.push({
@@ -327,11 +331,34 @@ export function analyseConsistency(
             }
         }
 
-        if (multiMaster && runtime.write > 0 && !mergesConflicts(node)) {
-            const regionCount = Math.max(topology.regions.length, 2);
-            const propagationSec = meanLagSec > 0 ? meanLagSec : 0.1;
-            const foreignWritePerKey = writePerKey * (regionCount - 1);
-            const conflictProbability = 1 - Math.exp(-foreignWritePerKey * propagationSec);
+        const partitioned = partitionSec > 0 && !quorumIsStrong(node.params);
+        const sides = partitioned ? divergingSides(node, topology) : Math.max(topology.regions.length, 2);
+
+        if (partitioned && sides > 1 && runtime.write > 0) {
+            anomalies.push({
+                code: 'divergent-replicas',
+                ratePerSec: runtime.write,
+                shareOfOperations: 1,
+                nodeIds: [node.id],
+                explain: explain(
+                    'λ_write × T_partition',
+                    { lambdaWrite: runtime.write, partitionSec, sides },
+                    runtime.write * partitionSec,
+                    'op',
+                ),
+            });
+        }
+
+        const conflicting = multiMaster || (partitioned && sides > 1);
+
+        if (conflicting && runtime.write > 0 && !mergesConflicts(node)) {
+            const propagationSec = partitioned
+                ? partitionSec
+                : meanLagSec > 0
+                  ? meanLagSec
+                  : DEFAULT_PROPAGATION_SEC;
+            const foreignWritePerKey = writePerKey * (sides - 1);
+            const conflictProbability = collisionProbability(foreignWritePerKey, propagationSec);
             const rate = runtime.write * conflictProbability;
             const resolution = conflictResolution;
 
@@ -370,6 +397,49 @@ export function analyseConsistency(
                 }
             }
         }
+    }
+
+    for (const edge of topology.edges) {
+        if (edge.isAsync || edge.isReplication) continue;
+        if (edge.policy.retries <= 0 || edge.policy.idempotent) continue;
+
+        const target = topology.nodeById.get(edge.target);
+        const flow = edgeFlows.get(edge.id);
+        if (!target || !flow || flow.total <= 0) continue;
+        if (target.params.idempotencyRequired !== true) continue;
+
+        const targetRuntime = runtimes.get(target.id);
+        const responseSec = targetRuntime
+            ? targetRuntime.serviceSec + targetRuntime.queue.waitSec + targetRuntime.blockingSec
+            : 0;
+        const timeoutSec = edge.policy.timeoutMs / 1000;
+        const timeoutShare =
+            timeoutSec > 0 && responseSec > 0 ? Math.exp(-timeoutSec / responseSec) : 0;
+        const failureProbability = targetRuntime?.queue.failureProbability ?? 0;
+        const duplicateShare = 1 - (1 - timeoutShare) * (1 - failureProbability);
+        const rate = flow.write * duplicateShare;
+
+        if (rate <= 0) continue;
+
+        anomalies.push({
+            code: 'duplicate-processing',
+            ratePerSec: rate,
+            shareOfOperations: rate / flow.write,
+            nodeIds: [target.id],
+            upperBound: true,
+            explain: explain(
+                '≤ λ_write × (1 − (1 − e^(−timeout / T_response)) × (1 − p_fail))',
+                {
+                    lambdaWrite: flow.write,
+                    timeoutSec,
+                    responseSec,
+                    failureProbability,
+                    retries: edge.policy.retries,
+                },
+                rate,
+                'op/s',
+            ),
+        });
     }
 
     for (const edge of topology.edges) {

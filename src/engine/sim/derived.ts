@@ -1,5 +1,5 @@
 import type { ComponentParams, StorageContext, StorageResult } from '../types/component';
-import { BACKUP_GROUPS, BACKUP_POLICY, SECONDS_PER_DAY } from './constants';
+import { BACKUP_GROUPS, BACKUP_POLICY, IDEMPOTENCY_POLICY, SECONDS_PER_DAY } from './constants';
 import type { CompiledEdge, CompiledNode, CompiledTopology } from './compile';
 import type { NodeRuntime, OperationFlow } from './solver';
 
@@ -13,6 +13,37 @@ export interface DerivedNode {
     logsGbDay: number;
     egressGbDay: number;
     backupGb: number;
+    idempotencyGb: number;
+}
+
+interface IdempotencyCharge {
+    nodeId: string;
+    keysPerSec: number;
+}
+
+export function idempotencyGbOf(keysPerSec: number): number {
+    const ttlSec = IDEMPOTENCY_POLICY.ttlHours * 3600;
+
+    return (keysPerSec * ttlSec * IDEMPOTENCY_POLICY.bytesPerKey) / 1e9;
+}
+
+function idempotencyChargeOf(
+    edge: CompiledEdge,
+    flow: OperationFlow,
+    topology: CompiledTopology,
+): IdempotencyCharge | null {
+    const source = topology.nodeById.get(edge.source);
+    const target = topology.nodeById.get(edge.target);
+    if (!source || !target) return null;
+
+    if (edge.isAsync) {
+        const deduplicating = edge.policy.idempotent || target.params.idempotent === true;
+        return deduplicating && flow.total > 0 ? { nodeId: target.id, keysPerSec: flow.total } : null;
+    }
+
+    if (edge.isReplication || target.params.idempotencyRequired !== true) return null;
+
+    return flow.write > 0 ? { nodeId: source.id, keysPerSec: flow.write } : null;
 }
 
 export function backupCopies(): number {
@@ -74,16 +105,27 @@ export function deriveNodes(
     edgeFlows: Map<string, OperationFlow>,
 ): Map<string, DerivedNode> {
     const egressByNode = new Map<string, number>();
+    const idempotencyByNode = new Map<string, number>();
 
     for (const edge of topology.edges) {
         const flow = edgeFlows.get(edge.id);
         if (!flow) continue;
 
         const charge = egressChargeOf(edge, flow, topology);
-        if (!charge) continue;
 
-        const gbDay = (charge.bytesPerSec * SECONDS_PER_DAY) / 1e9;
-        egressByNode.set(charge.nodeId, (egressByNode.get(charge.nodeId) ?? 0) + gbDay);
+        if (charge) {
+            const gbDay = (charge.bytesPerSec * SECONDS_PER_DAY) / 1e9;
+            egressByNode.set(charge.nodeId, (egressByNode.get(charge.nodeId) ?? 0) + gbDay);
+        }
+
+        const keys = idempotencyChargeOf(edge, flow, topology);
+
+        if (keys) {
+            idempotencyByNode.set(
+                keys.nodeId,
+                (idempotencyByNode.get(keys.nodeId) ?? 0) + idempotencyGbOf(keys.keysPerSec),
+            );
+        }
     }
 
     const derived = new Map<string, DerivedNode>();
@@ -120,6 +162,7 @@ export function deriveNodes(
             logsGbDay: logsGbDayOf(node, runtime),
             egressGbDay: egressByNode.get(node.id) ?? 0,
             backupGb: backupGbOf(node, storage),
+            idempotencyGb: idempotencyByNode.get(node.id) ?? 0,
         });
     }
 

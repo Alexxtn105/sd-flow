@@ -8,6 +8,7 @@ import type { ConsistencyResult, Finding, Severity } from './types';
 
 const SATURATION_WARNING = 0.8;
 const RETRY_STORM_THRESHOLD = 0.25;
+const CONTENTION_RETRY_THRESHOLD = 0.1;
 const EGRESS_SHARE_THRESHOLD = 0.4;
 const ANOMALY_SHARE_THRESHOLD = 0.001;
 const STORE_GROUPS = new Set(['sql', 'nosql', 'search', 'olap']);
@@ -70,6 +71,13 @@ export function buildFindings(input: FindingInput): Finding[] {
         if (runtime.retryAmplification > RETRY_STORM_THRESHOLD) {
             push('retry-amplification', 'warning', [node.id], [], {
                 amplification: runtime.retryAmplification,
+            });
+        }
+
+        if (runtime.contentionRetryShare > CONTENTION_RETRY_THRESHOLD) {
+            push('contention-retries', 'warning', [node.id], [], {
+                share: runtime.contentionRetryShare,
+                writeRps: runtime.write,
             });
         }
 

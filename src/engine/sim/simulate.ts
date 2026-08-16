@@ -62,6 +62,15 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
         }
     }
 
+    if (setup.partitionSec > 0) {
+        for (const node of topology.nodes) {
+            const lag = node.params.replicaLagMs;
+            if (typeof lag === 'number' && lag > 0) {
+                node.params.replicaLagMs = Math.max(lag, setup.partitionSec * 1000);
+            }
+        }
+    }
+
     if (setup.forceMultiMaster && topology.multiRegionPolicy) {
         topology.multiRegionPolicy.params.mode = 'active-active';
         topology.multiRegionPolicy.params.replicationDirection = 'bidirectional';
@@ -87,7 +96,13 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
     const derived = deriveNodes(topology, solved.nodes, solved.edges);
     const cost = computeCost(topology, solved.nodes, derived, solved.edges, pricing, placement.plans);
     const availability = computeAvailability(topology, solved.nodes);
-    const consistency = analyseConsistency(topology, solved.nodes, solved.edges, scheme.settings.consistencyModel);
+    const consistency = analyseConsistency(
+        topology,
+        solved.nodes,
+        solved.edges,
+        scheme.settings.consistencyModel,
+        { partitionSec: setup.partitionSec },
+    );
     const multiRegion = analyseMultiRegion(topology, solved.nodes, solved.edges, pricing, cost.byNode);
 
     const seed = seedFor(measured, scenarioId);
@@ -110,6 +125,7 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
     const nodes: Record<string, NodeResult> = {};
     let storageGb = 0;
     let backupGb = 0;
+    let idempotencyGb = 0;
     let growthGbDay = 0;
     let egressGbDay = 0;
     let logsGbDay = 0;
@@ -123,6 +139,7 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
         const nodeDerived = derived.get(node.id) ?? null;
         storageGb += nodeDerived?.storage?.totalGb ?? 0;
         backupGb += nodeDerived?.backupGb ?? 0;
+        idempotencyGb += nodeDerived?.idempotencyGb ?? 0;
         growthGbDay += nodeDerived?.storage?.growthGbDay ?? 0;
         egressGbDay += nodeDerived?.egressGbDay ?? 0;
         logsGbDay += nodeDerived?.logsGbDay ?? 0;
@@ -148,6 +165,7 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
             queueDepth: runtime.queue.queueDepth,
             errorRate: runtime.queue.failureProbability,
             retryAmplification: runtime.retryAmplification,
+            contentionRetryShare: runtime.contentionRetryShare,
             hitRatio: runtime.hitRatio,
             storage: nodeDerived?.storage ?? null,
             cost: cost.byNode.get(node.id) ?? emptyCost(),
@@ -155,6 +173,7 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
             egressGbDay: nodeDerived?.egressGbDay ?? 0,
             logsGbDay: nodeDerived?.logsGbDay ?? 0,
             backupGb: nodeDerived?.backupGb ?? 0,
+            idempotencyGb: nodeDerived?.idempotencyGb ?? 0,
         };
     }
 
@@ -196,6 +215,7 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
         cost: cost.total,
         storageGb,
         backupGb,
+        idempotencyGb,
         growthGbDay,
         growthPbYear: (growthGbDay * 365) / 1e6,
         egressGbDay,
