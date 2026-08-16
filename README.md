@@ -9,7 +9,7 @@ a year and what all of it costs.
 
 **[Open the editor →](https://alexxtn105.github.io/sd-flow/)**
 
-## Status: phase 4 done (v1.3)
+## Status: phase 4 done (v1.4)
 
 Behind us are the scheme editor (phase 0), the steady-state load model (phase 1), the
 Challenges mode (phase 2) and the passage of time with probes and the full catalogue (phase 3).
@@ -19,12 +19,15 @@ top of the challenge catalogue — **Interview**, **Incident** and **Golf** — 
 editor**: write your own task in YAML or JSON and run it through the same acceptance engine.
 Version 1.3.2 makes the catalogue explain itself: every block has a reference window, every
 parameter has a hint with its unit, and a connection can be given a name.
-After that the MVP gaps listed in [docs/06-backlog.md](docs/06-backlog.md) started closing:
+Version 1.4 closes the MVP gaps listed in [docs/06-backlog.md](docs/06-backlog.md):
 the **scheme ceiling** (binary search for the load at saturation, naming the limiter),
 **geo routing** and replication modes, availability with «k of n» quorums and the price of a
 failover, consistency mitigations, backup volume, cancellation of a stale computation,
 **scheme settings** (consistency model, pricing profile, model depth), live node metrics in the
-inspector, and copy/paste on the canvas.
+inspector, and copy/paste on the canvas. The headline model change is that **a slow dependency now
+occupies the caller's pool**: while the database is thinking, the worker slot is held, so the
+caller's capacity drops and the cascade arrives as ρ, not only as errors. The minimap is now a
+switch in the canvas controls — off by default on a phone.
 
 * **Catalogue — 127 blocks in 14 groups: the whole planned catalogue**, MVP (44) plus V1 (65)
   plus V2 (18). A capacity model is filled in for 101 blocks — every block that carries traffic;
@@ -212,7 +215,7 @@ npm run dev        # http://localhost:5173/sd-flow/
 | `npm run preview` | Local preview of the built bundle |
 | `npm run lint` | ESLint 9 (flat config) |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Vitest: 780 tests in 44 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, practice sets, the authoring format, locales, node names, block reference and parameter hints, sample schemes, demo schemes |
+| `npm test` | Vitest: 793 tests in 45 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, practice sets, the authoring format, locales, node names, block reference and parameter hints, sample schemes, demo schemes |
 
 Deployment is GitHub Actions on a push to `main`: lint → typecheck → tests → build → GitHub Pages.
 The app installs as a PWA and runs offline; a scheme can be shared as a link, the canvas exported
