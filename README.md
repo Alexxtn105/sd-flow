@@ -63,7 +63,9 @@ it absorbs, and TTL is computed on the same Zipf distribution as the hit itself 
 cluster are paid for once, and acceptance judges the design under canonical conditions — the seed
 and the pricing profile from the panel no longer move the verdict. In the inspector every link
 parameter now has a hint, sliders for integer parameters stopped producing fractional instances,
-and the default interface language is English.
+and the default interface language is English. Version 1.6.3 brings the earned stars back to the
+practice sets: the Interview, Incident, Golf and custom-challenge cards read the same progress as
+the catalogue — the three-star scale used to be drawn for catalogue challenges only.
 
 * **Catalogue — 127 blocks in 14 groups: the whole planned catalogue**, MVP (44) plus V1 (65)
   plus V2 (18). A capacity model is filled in for 101 blocks — every block that carries traffic;

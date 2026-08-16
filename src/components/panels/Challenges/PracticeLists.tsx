@@ -1,15 +1,18 @@
 import { useTranslation } from 'react-i18next';
 import Icon from '../../common/Icons/Icon';
+import Stars from './Stars';
 import { GOLF_TASKS, INCIDENTS, INTERVIEWS } from '../../../data/practice';
 import type { ChallengeRef } from '../../../data/practice';
 import type { LocalizedText } from '../../../engine/challenges/types';
 import type { PracticeRecord } from '../../../engine/practice/types';
 import type { AuthoredChallenge } from '../../../services/authoredChallenges';
+import type { EarnedProgress } from '../../../store/challengeStore';
 import { formatClock, formatNumber } from '../../../utils/format';
 
 export interface PracticeListProps {
     localized: (text: LocalizedText) => string;
     records: Record<string, PracticeRecord>;
+    earned: (ref: ChallengeRef) => EarnedProgress;
     onOpen: (ref: ChallengeRef) => void;
 }
 
@@ -42,84 +45,100 @@ function StartButton({ onClick }: { onClick: () => void }) {
     );
 }
 
-export function InterviewList({ localized, records, onOpen }: PracticeListProps) {
+export function InterviewList({ localized, records, earned, onOpen }: PracticeListProps) {
     const { t } = useTranslation();
 
     return (
         <div className="chl-body">
             <p className="chl-brief">{t('practice.interviewIntro')}</p>
-            {INTERVIEWS.map((session) => (
-                <article key={session.id} className="chl-card">
-                    <div className="chl-card-head">
-                        <span className="chl-card-name">{localized(session.title)}</span>
-                    </div>
-                    <div className="chl-card-meta">
-                        <span>{t('challenge.minutes', { value: session.durationMinutes })}</span>
-                        <span>{t('practice.stages', { value: session.stages.length })}</span>
-                    </div>
-                    <p className="chl-solution-tradeoff">{localized(session.brief)}</p>
-                    <RecordLine record={records[session.id]} />
-                    <StartButton onClick={() => onOpen({ kind: 'interview', sessionId: session.id, stage: 0 })} />
-                </article>
-            ))}
+            {INTERVIEWS.map((session) => {
+                const ref: ChallengeRef = { kind: 'interview', sessionId: session.id, stage: 0 };
+
+                return (
+                    <article key={session.id} className="chl-card">
+                        <div className="chl-card-head">
+                            <span className="chl-card-name">{localized(session.title)}</span>
+                            <Stars value={earned(ref).stars} />
+                        </div>
+                        <div className="chl-card-meta">
+                            <span>{t('challenge.minutes', { value: session.durationMinutes })}</span>
+                            <span>{t('practice.stages', { value: session.stages.length })}</span>
+                        </div>
+                        <p className="chl-solution-tradeoff">{localized(session.brief)}</p>
+                        <RecordLine record={records[session.id]} />
+                        <StartButton onClick={() => onOpen(ref)} />
+                    </article>
+                );
+            })}
         </div>
     );
 }
 
-export function IncidentList({ localized, records, onOpen }: PracticeListProps) {
+export function IncidentList({ localized, records, earned, onOpen }: PracticeListProps) {
     const { t } = useTranslation();
 
     return (
         <div className="chl-body">
             <p className="chl-brief">{t('practice.incidentIntro')}</p>
-            {INCIDENTS.map((incident) => (
-                <article key={incident.id} className="chl-card">
-                    <div className="chl-card-head">
-                        <span className="chl-card-name">{localized(incident.title)}</span>
-                    </div>
-                    <div className="chl-card-meta">
-                        <span>{t('challenge.minutes', { value: incident.timeLimitMinutes })}</span>
-                    </div>
-                    <p className="chl-solution-tradeoff">{localized(incident.symptom)}</p>
-                    <RecordLine record={records[incident.id]} />
-                    <StartButton onClick={() => onOpen({ kind: 'incident', caseId: incident.id })} />
-                </article>
-            ))}
+            {INCIDENTS.map((incident) => {
+                const ref: ChallengeRef = { kind: 'incident', caseId: incident.id };
+
+                return (
+                    <article key={incident.id} className="chl-card">
+                        <div className="chl-card-head">
+                            <span className="chl-card-name">{localized(incident.title)}</span>
+                            <Stars value={earned(ref).stars} />
+                        </div>
+                        <div className="chl-card-meta">
+                            <span>{t('challenge.minutes', { value: incident.timeLimitMinutes })}</span>
+                        </div>
+                        <p className="chl-solution-tradeoff">{localized(incident.symptom)}</p>
+                        <RecordLine record={records[incident.id]} />
+                        <StartButton onClick={() => onOpen(ref)} />
+                    </article>
+                );
+            })}
         </div>
     );
 }
 
-export function GolfList({ localized, records, onOpen }: PracticeListProps) {
+export function GolfList({ localized, records, earned, onOpen }: PracticeListProps) {
     const { t } = useTranslation();
 
     return (
         <div className="chl-body">
             <p className="chl-brief">{t('practice.golfIntro')}</p>
-            {GOLF_TASKS.map((task) => (
-                <article key={task.id} className="chl-card">
-                    <div className="chl-card-head">
-                        <span className="chl-card-name">{localized(task.title)}</span>
-                    </div>
-                    <div className="chl-card-meta">
-                        <span>{t('practice.par', { value: formatNumber(task.parUsdMonth) })}</span>
-                    </div>
-                    <p className="chl-solution-tradeoff">{localized(task.brief)}</p>
-                    <RecordLine record={records[task.id]} />
-                    <StartButton onClick={() => onOpen({ kind: 'golf', taskId: task.id })} />
-                </article>
-            ))}
+            {GOLF_TASKS.map((task) => {
+                const ref: ChallengeRef = { kind: 'golf', taskId: task.id };
+
+                return (
+                    <article key={task.id} className="chl-card">
+                        <div className="chl-card-head">
+                            <span className="chl-card-name">{localized(task.title)}</span>
+                            <Stars value={earned(ref).stars} />
+                        </div>
+                        <div className="chl-card-meta">
+                            <span>{t('practice.par', { value: formatNumber(task.parUsdMonth) })}</span>
+                        </div>
+                        <p className="chl-solution-tradeoff">{localized(task.brief)}</p>
+                        <RecordLine record={records[task.id]} />
+                        <StartButton onClick={() => onOpen(ref)} />
+                    </article>
+                );
+            })}
         </div>
     );
 }
 
 export interface AuthoredListProps {
     items: AuthoredChallenge[];
+    earned: (id: string) => EarnedProgress;
     onOpen: (item: AuthoredChallenge) => void;
     onEdit: (item: AuthoredChallenge | null) => void;
     onRemove: (item: AuthoredChallenge) => void;
 }
 
-export function AuthoredList({ items, onOpen, onEdit, onRemove }: AuthoredListProps) {
+export function AuthoredList({ items, earned, onOpen, onEdit, onRemove }: AuthoredListProps) {
     const { t } = useTranslation();
 
     return (
@@ -133,28 +152,36 @@ export function AuthoredList({ items, onOpen, onEdit, onRemove }: AuthoredListPr
 
             {items.length === 0 && <div className="chl-empty">{t('authoring.empty')}</div>}
 
-            {items.map((item) => (
-                <article key={item.id} className="chl-card">
-                    <div className="chl-card-head">
-                        <span className="chl-card-name">{item.title}</span>
-                    </div>
-                    <div className="chl-card-meta">
-                        <span>{item.id}</span>
-                        <span>{item.updatedAt.slice(0, 10)}</span>
-                    </div>
-                    <div className="chl-authored-actions">
-                        <StartButton onClick={() => onOpen(item)} />
-                        <button type="button" className="chl-btn" onClick={() => onEdit(item)}>
-                            <Icon name="edit" size="small" />
-                            <span>{t('authoring.edit')}</span>
-                        </button>
-                        <button type="button" className="chl-btn" onClick={() => onRemove(item)}>
-                            <Icon name="delete" size="small" />
-                            <span>{t('authoring.remove')}</span>
-                        </button>
-                    </div>
-                </article>
-            ))}
+            {items.map((item) => {
+                const progress = earned(item.id);
+
+                return (
+                    <article key={item.id} className="chl-card">
+                        <div className="chl-card-head">
+                            <span className="chl-card-name">{item.title}</span>
+                            <Stars value={progress.stars} />
+                        </div>
+                        <div className="chl-card-meta">
+                            <span>{item.id}</span>
+                            <span>{item.updatedAt.slice(0, 10)}</span>
+                            {progress.attempts > 0 && (
+                                <span>{t('challenge.attempts', { value: progress.attempts })}</span>
+                            )}
+                        </div>
+                        <div className="chl-authored-actions">
+                            <StartButton onClick={() => onOpen(item)} />
+                            <button type="button" className="chl-btn" onClick={() => onEdit(item)}>
+                                <Icon name="edit" size="small" />
+                                <span>{t('authoring.edit')}</span>
+                            </button>
+                            <button type="button" className="chl-btn" onClick={() => onRemove(item)}>
+                                <Icon name="delete" size="small" />
+                                <span>{t('authoring.remove')}</span>
+                            </button>
+                        </div>
+                    </article>
+                );
+            })}
         </div>
     );
 }

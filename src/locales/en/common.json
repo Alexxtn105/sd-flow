@@ -33,6 +33,7 @@
         "minutes": "{{value}} min",
         "requirements": "requirements: {{value}}",
         "attempts": "attempts: {{value}}",
+        "starsEarned": "Stars earned: {{value}} of {{total}}",
         "start": "Start",
         "startHint": "Load the starting scheme of the challenge and begin",
         "backToCatalog": "Back to the challenge catalog",

@@ -62,6 +62,30 @@ export interface ChallengeState {
 const SECONDS_PER_MINUTE = 60;
 const TIMED_KINDS = new Set(['interview', 'incident']);
 
+export interface ProgressSources {
+    progress: Record<string, ChallengeProgress>;
+    practice: Record<string, PracticeRecord>;
+}
+
+export interface EarnedProgress {
+    stars: ChallengeProgress['stars'];
+    attempts: number;
+}
+
+export function earnedProgressByKey(sources: ProgressSources, key: string): EarnedProgress {
+    const scored = sources.progress[key];
+    const played = sources.practice[key];
+
+    return {
+        stars: Math.max(scored?.stars ?? 0, played?.bestStars ?? 0) as ChallengeProgress['stars'],
+        attempts: Math.max(scored?.attempts ?? 0, played?.attempts ?? 0),
+    };
+}
+
+export function earnedProgress(sources: ProgressSources, ref: ChallengeRef): EarnedProgress {
+    return earnedProgressByKey(sources, refKey(ref));
+}
+
 function loadProgress(): Record<string, ChallengeProgress> {
     return StorageService.load<Record<string, ChallengeProgress>>(STORAGE_KEYS.CHALLENGES) ?? {};
 }

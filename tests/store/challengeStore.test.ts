@@ -1,8 +1,12 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import registry from '../../src/engine/ComponentRegistry';
 import initComponents from '../../src/engine/initComponents';
-import { INTERVIEWS, INCIDENTS, GOLF_TASKS } from '../../src/data/practice';
-import { useChallengeStore } from '../../src/store/challengeStore';
+import { authoredKey, INTERVIEWS, INCIDENTS, GOLF_TASKS } from '../../src/data/practice';
+import type { ChallengeSpec } from '../../src/engine/authoring/spec';
+import type { ChallengeProgress } from '../../src/engine/challenges/types';
+import type { PracticeRecord } from '../../src/engine/practice/types';
+import { earnedProgress, earnedProgressByKey, useChallengeStore } from '../../src/store/challengeStore';
+import type { ProgressSources } from '../../src/store/challengeStore';
 import { useGraphStore } from '../../src/store/graphStore';
 
 const SECONDS_PER_MINUTE = 60;
@@ -63,6 +67,77 @@ describe('запуск задания из стора', () => {
         expect(useChallengeStore.getState().session?.limitSec).toBe(
             INCIDENTS[0].timeLimitMinutes * SECONDS_PER_MINUTE,
         );
+    });
+});
+
+describe('звёзды и попытки за задание', () => {
+    function scored(key: string, stars: ChallengeProgress['stars'], attempts: number): Record<string, ChallengeProgress> {
+        return { [key]: { challengeId: key, stars, attempts, hintsUsed: [], bestScore: 0 } };
+    }
+
+    function played(key: string, bestStars: PracticeRecord['bestStars'], attempts: number): Record<string, PracticeRecord> {
+        return {
+            [key]: { id: key, attempts, solved: bestStars > 0, bestSeconds: null, bestCostUsd: null, bestStars },
+        };
+    }
+
+    function sources(
+        progress: Record<string, ChallengeProgress> = {},
+        practice: Record<string, PracticeRecord> = {},
+    ): ProgressSources {
+        return { progress, practice };
+    }
+
+    it('у задания каталога берутся из прогресса заданий', () => {
+        const earned = earnedProgress(sources(scored('url-shortener', 2, 3)), {
+            kind: 'catalog',
+            challengeId: 'url-shortener',
+        });
+
+        expect(earned).toEqual({ stars: 2, attempts: 3 });
+    });
+
+    it('у наборов практики находятся по их собственным ключам', () => {
+        const golf = GOLF_TASKS[0].id;
+        const incident = INCIDENTS[0].id;
+        const interview = INTERVIEWS[0].id;
+        const state = sources({}, { ...played(golf, 3, 1), ...played(incident, 2, 4), ...played(interview, 1, 2) });
+
+        expect(earnedProgress(state, { kind: 'golf', taskId: golf })).toEqual({ stars: 3, attempts: 1 });
+        expect(earnedProgress(state, { kind: 'incident', caseId: incident })).toEqual({ stars: 2, attempts: 4 });
+        expect(earnedProgress(state, { kind: 'interview', sessionId: interview, stage: 0 })).toEqual({
+            stars: 1,
+            attempts: 2,
+        });
+    });
+
+    it('этап интервью не заводит отдельный счёт', () => {
+        const state = sources({}, played(INTERVIEWS[0].id, 3, 5));
+        const last = INTERVIEWS[0].stages.length - 1;
+
+        expect(earnedProgress(state, { kind: 'interview', sessionId: INTERVIEWS[0].id, stage: last }).stars).toBe(3);
+    });
+
+    it('у своего задания ключ отделён префиксом', () => {
+        const state = sources(scored(authoredKey('my-task'), 3, 2));
+
+        expect(authoredKey('my-task')).not.toBe('my-task');
+        expect(earnedProgressByKey(state, authoredKey('my-task'))).toEqual({ stars: 3, attempts: 2 });
+        expect(earnedProgress(state, { kind: 'authored', spec: { id: 'my-task' } as ChallengeSpec }).stars).toBe(3);
+    });
+
+    it('из двух источников берётся лучший результат', () => {
+        const golf = GOLF_TASKS[0].id;
+        const state = sources(scored(golf, 1, 7), played(golf, 3, 2));
+
+        expect(earnedProgress(state, { kind: 'golf', taskId: golf })).toEqual({ stars: 3, attempts: 7 });
+    });
+
+    it('без записи задание показывает пустой результат', () => {
+        expect(earnedProgress(sources(), { kind: 'catalog', challengeId: 'url-shortener' })).toEqual({
+            stars: 0,
+            attempts: 0,
+        });
     });
 });
 

@@ -3,8 +3,10 @@ import { useTranslation } from 'react-i18next';
 import Icon from '../../common/Icons/Icon';
 import ResizeHandle from '../../common/ResizeHandle/ResizeHandle';
 import { AuthoredList, GolfList, IncidentList, InterviewList } from './PracticeLists';
+import Stars from './Stars';
 import { CHALLENGES, challengesByLevel } from '../../../data/challenges';
-import { golfById, incidentById, interviewById } from '../../../data/practice';
+import { authoredKey, golfById, incidentById, interviewById } from '../../../data/practice';
+import type { ChallengeRef } from '../../../data/practice';
 import { referenceSchemeName } from '../../../data/sampleSchemes';
 import { evaluateLive } from '../../../engine/challenges/accept';
 import { golfMedal } from '../../../engine/practice/derive';
@@ -30,7 +32,7 @@ import { parseChallengeSource } from '../../../services/authoredChallenges';
 import type { AuthoredChallenge } from '../../../services/authoredChallenges';
 import { removeAuthored } from '../../../services/authoredChallenges';
 import { toScheme } from '../../../services/schemeSerializer';
-import { useChallengeStore } from '../../../store/challengeStore';
+import { earnedProgress, earnedProgressByKey, useChallengeStore } from '../../../store/challengeStore';
 import type { PracticeTrack } from '../../../store/challengeStore';
 import { useGraphStore } from '../../../store/graphStore';
 import { useSchemeStore } from '../../../store/schemeStore';
@@ -44,8 +46,6 @@ const STATUS_ICON: Record<RequirementStatus, string> = {
     unmet: 'cancel',
     unknown: 'help_outline',
 };
-
-const STAR_SLOTS = [0, 1, 2];
 
 const MAX_AXIS_SCORE = 100;
 
@@ -66,21 +66,6 @@ function solutionLetter(index: number): string {
     if (index >= LETTER_ALPHABET_SIZE) return String(index + 1);
 
     return String.fromCharCode('A'.charCodeAt(0) + index);
-}
-
-function Stars({ value }: { value: number }) {
-    return (
-        <span className="chl-stars">
-            {STAR_SLOTS.map((slot) => (
-                <Icon
-                    key={slot}
-                    name={slot < value ? 'star' : 'star_border'}
-                    size="small"
-                    className={slot < value ? 'chl-star-on' : 'chl-star-off'}
-                />
-            ))}
-        </span>
-    );
 }
 
 export default function ChallengePanel() {
@@ -271,6 +256,16 @@ export default function ChallengePanel() {
             refreshAuthored();
         },
         [refreshAuthored],
+    );
+
+    const earned = useCallback(
+        (ref: ChallengeRef) => earnedProgress({ progress, practice }, ref),
+        [practice, progress],
+    );
+
+    const earnedAuthored = useCallback(
+        (id: string) => earnedProgressByKey({ progress, practice }, authoredKey(id)),
+        [practice, progress],
     );
 
     const highlight = useCallback((nodeIds: string[]) => focusNodes(nodeIds, []), [focusNodes]);
@@ -489,8 +484,7 @@ export default function ChallengePanel() {
                     <h3 className="chl-section-title">{t('challenge.level', { level: bucket.level })}</h3>
 
                     {bucket.items.map((item) => {
-                        const stars = progress[item.id]?.stars ?? 0;
-                        const attempts = progress[item.id]?.attempts ?? 0;
+                        const { stars, attempts } = earned({ kind: 'catalog', challengeId: item.id });
 
                         return (
                             <article key={item.id} className="chl-card">
@@ -534,17 +528,23 @@ export default function ChallengePanel() {
 
     const renderTrack = () => {
         if (track === 'interview') {
-            return <InterviewList localized={localized} records={practice} onOpen={openRef} />;
+            return <InterviewList localized={localized} records={practice} earned={earned} onOpen={openRef} />;
         }
         if (track === 'incident') {
-            return <IncidentList localized={localized} records={practice} onOpen={openRef} />;
+            return <IncidentList localized={localized} records={practice} earned={earned} onOpen={openRef} />;
         }
         if (track === 'golf') {
-            return <GolfList localized={localized} records={practice} onOpen={openRef} />;
+            return <GolfList localized={localized} records={practice} earned={earned} onOpen={openRef} />;
         }
         if (track === 'authored') {
             return (
-                <AuthoredList items={authored} onOpen={openAuthored} onEdit={openEditor} onRemove={removeAuthoredItem} />
+                <AuthoredList
+                    items={authored}
+                    earned={earnedAuthored}
+                    onOpen={openAuthored}
+                    onEdit={openEditor}
+                    onRemove={removeAuthoredItem}
+                />
             );
         }
 

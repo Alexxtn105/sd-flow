@@ -52,13 +52,17 @@ export function resolveChallenge(ref: ChallengeRef): Challenge {
     return challengeFromSpec(ref.spec);
 }
 
+export function authoredKey(id: string): string {
+    return `authored:${id}`;
+}
+
 export function refKey(ref: ChallengeRef): string {
     if (ref.kind === 'catalog') return ref.challengeId;
     if (ref.kind === 'interview') return ref.sessionId;
     if (ref.kind === 'incident') return ref.caseId;
     if (ref.kind === 'golf') return ref.taskId;
 
-    return `authored:${ref.spec.id}`;
+    return authoredKey(ref.spec.id);
 }
 
 export const PRACTICE_COUNTS = {

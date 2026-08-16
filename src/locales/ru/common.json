@@ -33,6 +33,7 @@
         "minutes": "{{value}} мин",
         "requirements": "требований: {{value}}",
         "attempts": "попыток: {{value}}",
+        "starsEarned": "Звёзд за задание: {{value}} из {{total}}",
         "start": "Начать",
         "startHint": "Загрузить исходную схему задания и начать",
         "backToCatalog": "Вернуться в каталог заданий",
