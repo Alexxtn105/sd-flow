@@ -92,6 +92,7 @@ export default function Tutorial() {
     const setMode = useUiStore((state) => state.setMode);
     const finishTutorial = useUiStore((state) => state.finishTutorial);
     const toggleDashboard = useSimStore((state) => state.toggleDashboard);
+    const setSelection = useUiStore((state) => state.setSelection);
 
     const [anchorClicks, setAnchorClicks] = useState(0);
     const [rect, setRect] = useState<AnchorRect | null>(null);
@@ -124,7 +125,8 @@ export default function Tutorial() {
 
         if (step.reveal === 'palette' && useUiStore.getState().paletteCollapsed) togglePalette();
         if (step.reveal === 'dashboard' && !useSimStore.getState().dashboardOpen) toggleDashboard();
-    }, [step, toggleDashboard, togglePalette]);
+        if (step.id === 'boundBy' && useUiStore.getState().selectedNodeIds.length > 0) setSelection([], []);
+    }, [setSelection, step, toggleDashboard, togglePalette]);
 
     useEffect(() => {
         const selectors = anchorKey === '' ? [] : anchorKey.split('|');

@@ -35,11 +35,19 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
     {
         id: 'boundBy',
         goal: 'nodeSelected',
-        anchors: ['.react-flow__node:not([data-id^="client-"]) .sd-metric-bound', '.sd-metric-bound', '.sd-node'],
+        anchors: ['.react-flow__node:not([data-id^="client-"])', '.sd-node:not(.sd-node-clients)', '.sd-node'],
     },
     { id: 'findings', goal: 'anchorClicked', anchors: ['.dash-section-findings', '.dash'], reveal: 'dashboard' },
     { id: 'done', goal: 'next', anchors: [] },
 ];
+
+function isNonClientSelection(selectionKey: string): boolean {
+    return selectionKey
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean)
+        .some((id) => !id.startsWith('client-'));
+}
 
 export function isGoalReached(goal: TutorialGoal, baseline: TutorialSnapshot, snapshot: TutorialSnapshot): boolean {
     switch (goal) {
@@ -48,7 +56,7 @@ export function isGoalReached(goal: TutorialGoal, baseline: TutorialSnapshot, sn
         case 'edgeAdded':
             return snapshot.edgeCount > baseline.edgeCount;
         case 'nodeSelected':
-            return snapshot.selectionKey !== '' && snapshot.selectionKey !== baseline.selectionKey;
+            return isNonClientSelection(snapshot.selectionKey);
         case 'anchorClicked':
             return snapshot.anchorClicks > baseline.anchorClicks;
         default:
