@@ -15,7 +15,7 @@ import type { InstancePreset } from '../../../engine/instancePresets';
 import { protocolOptions } from '../../../engine/ports';
 import { clientRpsOf, dauForRps } from '../../../engine/sim/flows';
 import type { ComponentParams, Protocol } from '../../../engine/types/component';
-import type { EdgeKind } from '../../../engine/types/scheme';
+import type { EdgeKind, MixMode } from '../../../engine/types/scheme';
 import useParamHelp from '../../../hooks/useParamHelp';
 import useReference from '../../../hooks/useReference';
 import { useGraphStore } from '../../../store/graphStore';
@@ -27,6 +27,7 @@ import { groupParams } from '../../../utils/paramSections';
 import './Inspector.css';
 
 const EDGE_KINDS: EdgeKind[] = ['sync', 'async', 'replication', 'stream', 'cdc', 'batch'];
+const MIX_MODES: MixMode[] = ['inherit', 'manual'];
 const CUSTOM_PRESET = 'custom';
 
 function utilizationTone(utilization: number): string {
@@ -53,6 +54,7 @@ export default function Inspector() {
     const commitTransaction = useGraphStore((state) => state.commitTransaction);
     const updateNodeLabel = useGraphStore((state) => state.updateNodeLabel);
     const updateEdgeCall = useGraphStore((state) => state.updateEdgeCall);
+    const updateEdgeMixMode = useGraphStore((state) => state.updateEdgeMixMode);
     const updateEdgeKind = useGraphStore((state) => state.updateEdgeKind);
     const updateEdgeProtocol = useGraphStore((state) => state.updateEdgeProtocol);
     const updateEdgeLabel = useGraphStore((state) => state.updateEdgeLabel);
@@ -103,6 +105,8 @@ export default function Inspector() {
 
     const mirrorSource = node && typeof node.data.mirrorOf === 'string' ? node.data.mirrorOf : '';
     const mirrorParam = node && typeof node.data.params.mirrorOf === 'string' ? node.data.params.mirrorOf : '';
+
+    const edgeHint = (key: string): string => t(`inspector.edgeHint.${key}`);
 
     const applyRps = (rps: number) => {
         if (!node) return;
@@ -384,64 +388,127 @@ export default function Inspector() {
                             </div>
                         </div>
 
-                        <div className="ins-row">
-                            <label className="ins-label" htmlFor="ins-edge-label-input">
-                                {t('inspector.edgeLabel')}
-                            </label>
-                            <input
-                                id="ins-edge-label-input"
-                                type="text"
-                                className="ins-input"
-                                value={edge.data?.label ?? ''}
-                                placeholder={t('inspector.edgeLabelPlaceholder')}
-                                onChange={(event) => updateEdgeLabel(edge.id, event.target.value)}
-                            />
-                        </div>
+                        <button
+                            className={`ins-descriptions ${paramHints ? 'active' : ''}`}
+                            onClick={toggleParamHints}
+                            title={t('inspector.descriptionsTitle')}
+                            aria-pressed={paramHints}
+                        >
+                            <Icon name={paramHints ? 'visibility' : 'visibility_off'} size="small" />
+                            <span className="ins-descriptions-text">{t('inspector.descriptions')}</span>
+                        </button>
 
-                        <div className="ins-row">
-                            <label className="ins-label" htmlFor="ins-edge-kind">
-                                {t('inspector.edgeKind')}
-                            </label>
-                            <select
-                                id="ins-edge-kind"
-                                className="ins-input"
-                                value={edge.data?.kind ?? 'sync'}
-                                onChange={(event) => updateEdgeKind(edge.id, event.target.value as EdgeKind)}
-                            >
-                                {EDGE_KINDS.map((kind) => (
-                                    <option key={kind} value={kind}>
-                                        {t(`edgeKind.${kind}`)}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        {edgeProtocols.length > 0 && (
+                        <div className="ins-param">
                             <div className="ins-row">
-                                <label className="ins-label" htmlFor="ins-edge-protocol">
-                                    {t('inspector.edgeProtocol')}
+                                <label
+                                    className="ins-label ins-label-help"
+                                    htmlFor="ins-edge-label-input"
+                                    title={edgeHint('label')}
+                                >
+                                    {t('inspector.edgeLabel')}
+                                </label>
+                                <input
+                                    id="ins-edge-label-input"
+                                    type="text"
+                                    className="ins-input"
+                                    value={edge.data?.label ?? ''}
+                                    placeholder={t('inspector.edgeLabelPlaceholder')}
+                                    onChange={(event) => updateEdgeLabel(edge.id, event.target.value)}
+                                />
+                            </div>
+                            {paramHints && <p className="ins-hint">{edgeHint('label')}</p>}
+                        </div>
+
+                        <div className="ins-param">
+                            <div className="ins-row">
+                                <label
+                                    className="ins-label ins-label-help"
+                                    htmlFor="ins-edge-kind"
+                                    title={edgeHint('kind')}
+                                >
+                                    {t('inspector.edgeKind')}
                                 </label>
                                 <select
-                                    id="ins-edge-protocol"
+                                    id="ins-edge-kind"
                                     className="ins-input"
-                                    value={edge.data?.protocol ?? edgeProtocols[0]}
-                                    onChange={(event) =>
-                                        updateEdgeProtocol(edge.id, event.target.value as Protocol)
-                                    }
+                                    value={edge.data?.kind ?? 'sync'}
+                                    onChange={(event) => updateEdgeKind(edge.id, event.target.value as EdgeKind)}
                                 >
-                                    {edgeProtocols.map((protocol) => (
-                                        <option key={protocol} value={protocol}>
-                                            {t(`protocol.${protocol}`)}
+                                    {EDGE_KINDS.map((kind) => (
+                                        <option key={kind} value={kind}>
+                                            {t(`edgeKind.${kind}`)}
                                         </option>
                                     ))}
                                 </select>
+                            </div>
+                            {paramHints && <p className="ins-hint">{edgeHint('kind')}</p>}
+                        </div>
+
+                        {edgeProtocols.length > 0 && (
+                            <div className="ins-param">
+                                <div className="ins-row">
+                                    <label
+                                        className="ins-label ins-label-help"
+                                        htmlFor="ins-edge-protocol"
+                                        title={edgeHint('protocol')}
+                                    >
+                                        {t('inspector.edgeProtocol')}
+                                    </label>
+                                    <select
+                                        id="ins-edge-protocol"
+                                        className="ins-input"
+                                        value={edge.data?.protocol ?? edgeProtocols[0]}
+                                        onChange={(event) =>
+                                            updateEdgeProtocol(edge.id, event.target.value as Protocol)
+                                        }
+                                    >
+                                        {edgeProtocols.map((protocol) => (
+                                            <option key={protocol} value={protocol}>
+                                                {t(`protocol.${protocol}`)}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                {paramHints && <p className="ins-hint">{edgeHint('protocol')}</p>}
                             </div>
                         )}
 
                         <section className="ins-section">
                             <h3 className="ins-section-title">{t('inspector.calls')}</h3>
+
+                            <div className="ins-param">
+                                <div className="ins-row">
+                                    <label
+                                        className="ins-label ins-label-help"
+                                        htmlFor="ins-edge-mix"
+                                        title={edgeHint('mixMode')}
+                                    >
+                                        {t('inspector.edgeMix')}
+                                    </label>
+                                    <select
+                                        id="ins-edge-mix"
+                                        className="ins-input"
+                                        value={edge.data?.mixMode ?? 'inherit'}
+                                        onChange={(event) =>
+                                            updateEdgeMixMode(edge.id, event.target.value as MixMode)
+                                        }
+                                    >
+                                        {MIX_MODES.map((mode) => (
+                                            <option key={mode} value={mode}>
+                                                {t(
+                                                    mode === 'inherit'
+                                                        ? 'inspector.edgeMixInherit'
+                                                        : 'inspector.edgeMixManual',
+                                                )}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                {paramHints && <p className="ins-hint">{edgeHint('mixMode')}</p>}
+                            </div>
+
                             {(edge.data?.calls ?? []).map((call) => (
-                                <div key={call.id} className="ins-call">
+                                <div key={call.id} className="ins-call" title={edgeHint('call')}>
                                     <div className="ins-call-head">
                                         <span className={`ins-call-dot ins-call-${call.op}`} />
                                         <span className="ins-call-name">{t(`op.${call.op}`)}</span>
@@ -459,17 +526,30 @@ export default function Inspector() {
                                     />
                                 </div>
                             ))}
+                            {paramHints && (edge.data?.calls ?? []).length > 0 && (
+                                <p className="ins-hint">{edgeHint('call')}</p>
+                            )}
                         </section>
 
                         <section className="ins-section">
                             <h3 className="ins-section-title">{t('inspector.policy')}</h3>
-                            <div className="ins-row">
-                                <span className="ins-label">{t('policy.timeoutMs')}</span>
-                                <span className="ins-static">{edge.data?.policy.timeoutMs}</span>
+                            <div className="ins-param">
+                                <div className="ins-row">
+                                    <span className="ins-label ins-label-help" title={edgeHint('timeoutMs')}>
+                                        {t('policy.timeoutMs')}
+                                    </span>
+                                    <span className="ins-static">{edge.data?.policy.timeoutMs}</span>
+                                </div>
+                                {paramHints && <p className="ins-hint">{edgeHint('timeoutMs')}</p>}
                             </div>
-                            <div className="ins-row">
-                                <span className="ins-label">{t('policy.retries')}</span>
-                                <span className="ins-static">{edge.data?.policy.retries}</span>
+                            <div className="ins-param">
+                                <div className="ins-row">
+                                    <span className="ins-label ins-label-help" title={edgeHint('retries')}>
+                                        {t('policy.retries')}
+                                    </span>
+                                    <span className="ins-static">{edge.data?.policy.retries}</span>
+                                </div>
+                                {paramHints && <p className="ins-hint">{edgeHint('retries')}</p>}
                             </div>
                         </section>
                     </>

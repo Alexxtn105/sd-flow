@@ -83,6 +83,20 @@ describe('локали интерфейса', () => {
         expect(missing).toEqual([]);
     });
 
+    it('у каждого поля связи есть подсказка на обоих языках', () => {
+        const fields = ['label', 'kind', 'protocol', 'mixMode', 'call', 'timeoutMs', 'retries'];
+        const missing: string[] = [];
+
+        for (const field of fields) {
+            const key = `inspector.edgeHint.${field}`;
+
+            if (!resolves(RU, key)) missing.push(`ru: ${key}`);
+            if (!resolves(EN, key)) missing.push(`en: ${key}`);
+        }
+
+        expect(missing).toEqual([]);
+    });
+
     it('русский и английский словари совпадают по набору ключей', () => {
         for (const namespace of Object.keys(RU)) {
             const ruKeys = flatten(RU[namespace], '').sort();

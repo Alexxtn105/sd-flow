@@ -325,6 +325,9 @@
         "edge": "Edge",
         "edgeKind": "Kind",
         "edgeProtocol": "Payload type",
+        "edgeMix": "Read/write mix",
+        "edgeMixInherit": "Inherited from the caller",
+        "edgeMixManual": "Manual",
         "calls": "Call profiles",
         "policy": "Policy",
         "noParams": "This block has no editable parameters",
@@ -359,7 +362,16 @@
         "derivedRps": "Load",
         "derivedRpsHint": "Derived from DAU, sessions and requests per session. Editing it recomputes DAU back.",
         "mirrorNote": "A mirror of {{source}}: edits to the prototype overwrite this block. To edit it separately, unlink the region.",
-        "unlinkMirror": "Unlink the region mirror"
+        "unlinkMirror": "Unlink the region mirror",
+        "edgeHint": {
+            "label": "A caption for the link on the canvas: \"serve chunk\", \"cache invalidation\". It does not affect the model — it is there so a human can read the scheme.",
+            "kind": "What kind of link this is. sync — the caller waits, so the leg is part of the request latency. async, stream, batch and cdc break the latency chain: the work goes to a queue and shows up as lag. replication is not user traffic at all — it is the engine copying writes.",
+            "protocol": "The payload type: what actually travels over this link. The choice is limited to protocols shared by the source out-port and the target in-port. It does not affect the model but sets the vocabulary of the scheme and the caption on the line.",
+            "mixMode": "Where the read/write proportion comes from. \"Inherited\" — from the caller: the client declared 90/10, so this edge carries 90/10, and the profile shares below only say what the edge does and which part of the requests goes through it. \"Manual\" — shares are taken literally. The mode flips to manual as soon as you move a slider.",
+            "call": "The share of the source requests that make this call. The sum over profiles is how much of the traffic goes through the edge at all: 1.0 — every request, 0.3 — every third one. With an inherited mix the shares within a class set the split, while the read/write proportion comes from the caller.",
+            "timeoutMs": "How long the caller waits before giving up. It cuts the latency tail and turns a slow answer into an error; together with retries it decides what a slow neighbour costs.",
+            "retries": "How many times the caller repeats a failed call. Retries pile load onto an already overloaded node — that is a retry storm; without idempotency they also breed duplicates."
+        }
     },
     "blockHelp": {
         "title": "Block reference",
