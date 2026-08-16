@@ -1,5 +1,6 @@
 import type { ComponentParams, CostBreakdown, CostContext, PricingProfile } from '../types/component';
 import { DAYS_PER_MONTH, HOURS_PER_MONTH, SECONDS_PER_DAY } from './constants';
+import { billableIops } from './provisioned';
 import type { ClusterPodPlan } from './clusters';
 import type { CompiledNode, CompiledTopology } from './compile';
 import type { DerivedNode } from './derived';
@@ -119,6 +120,21 @@ function withEgress(cost: CostBreakdown, egressCost: number): CostBreakdown {
     });
 }
 
+function iopsCostOf(node: CompiledNode, pricing: PricingProfile): number {
+    return billableIops(node.params) * pricing.iopsPerMonth;
+}
+
+function withProvisionedIops(cost: CostBreakdown, iopsCost: number): CostBreakdown {
+    if (iopsCost <= 0) return cost;
+
+    return totalCost({
+        compute: cost.compute,
+        storage: cost.storage + iopsCost,
+        network: cost.network,
+        requests: cost.requests,
+    });
+}
+
 function clusterComputeShares(
     topology: CompiledTopology,
     runtimes: Map<string, NodeRuntime>,
@@ -204,7 +220,8 @@ export function computeCost(
             regionCostMultiplier: regionMultiplierOf(node.regionId, topology),
         };
 
-        const modelled = withManagedPremium(node, model.cost(context), pricing);
+        const billed = withProvisionedIops(model.cost(context), iopsCostOf(node, pricing));
+        const modelled = withManagedPremium(node, billed, pricing);
         const hostedCompute = clusterShares.get(node.id);
         const placed =
             hostedCompute === undefined

@@ -1,10 +1,12 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import initComponents from '../../src/engine/initComponents';
 import registry from '../../src/engine/ComponentRegistry';
-import { PRICING_PROFILES } from '../../src/engine/sim/constants';
+import { FREE_IOPS, PRICING_PROFILES, pricingFor } from '../../src/engine/sim/constants';
 import { backupCopies } from '../../src/engine/sim/derived';
+import { billableIops } from '../../src/engine/sim/provisioned';
 import { simulate } from '../../src/engine/sim/simulate';
 import { buildScheme } from '../helpers/scheme';
+import type { ComponentParams } from '../../src/engine/types/component';
 
 beforeAll(() => {
     registry.reset();
@@ -13,12 +15,12 @@ beforeAll(() => {
 
 const SAMPLES = 200;
 
-function withStore(type: string) {
+function withStore(type: string, params?: ComponentParams) {
     return buildScheme({
         nodes: [
             { id: 'client', type: 'client-web' },
             { id: 'svc', type: 'service' },
-            { id: 'store', type },
+            { id: 'store', type, ...(params ? { params } : {}) },
         ],
         links: [
             { from: 'client', to: 'svc' },
@@ -47,11 +49,42 @@ describe('бэкапы', () => {
     it('не попадают в счёт: это строка хранилища, а не стоимости', () => {
         const result = simulate(withStore('postgres'), { sampleCount: SAMPLES });
         const store = result.nodes.store;
+        const defaults = registry.getDefaultParams('postgres');
         const storageGb = store.storage?.totalGb ?? 0;
-        const perGb = Number(registry.getDefaultParams('postgres').costPerGbMonth);
+        const perGb = Number(defaults.costPerGbMonth);
+        const iops = (Number(defaults.provisionedIops) - FREE_IOPS) * pricingFor('aws-2026-q2').iopsPerMonth;
 
         expect(store.backupGb).toBeGreaterThan(0);
-        expect(store.cost.storage).toBeCloseTo(storageGb * perGb, 3);
+        expect(store.cost.storage).toBeCloseTo(storageGb * perGb + iops, 3);
+    });
+});
+
+describe('выделенные IOPS', () => {
+    it('оплачиваются сверх объёма, с бесплатным порогом', () => {
+        const rate = pricingFor('aws-2026-q2').iopsPerMonth;
+        const declared = Number(registry.getDefaultParams('postgres').provisionedIops);
+
+        const base = simulate(withStore('postgres'), { sampleCount: SAMPLES }).nodes.store;
+        const doubled = simulate(withStore('postgres', { provisionedIops: declared * 2 }), {
+            sampleCount: SAMPLES,
+        }).nodes.store;
+
+        expect(doubled.cost.storage - base.cost.storage).toBeCloseTo(declared * rate, 3);
+        expect(billableIops({ provisionedIops: declared })).toBe(declared - FREE_IOPS);
+    });
+
+    it('первые IOPS бесплатны, как у gp3', () => {
+        expect(billableIops({ provisionedIops: FREE_IOPS })).toBe(0);
+        expect(billableIops({ provisionedIops: FREE_IOPS - 1000 })).toBe(0);
+        expect(billableIops({ provisionedIops: FREE_IOPS + 1000 })).toBe(1000);
+        expect(billableIops({})).toBe(0);
+    });
+
+    it('не начисляются блоку, который их не объявляет', () => {
+        const result = simulate(withStore('redis'), { sampleCount: SAMPLES });
+
+        expect(registry.getDefaultParams('redis').provisionedIops).toBeUndefined();
+        expect(result.nodes.store.cost.storage).toBe(0);
     });
 });
 

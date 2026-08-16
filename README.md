@@ -67,6 +67,15 @@ and the default interface language is English. Version 1.6.3 brings the earned s
 practice sets: the Interview, Incident, Golf and custom-challenge cards read the same progress as
 the catalogue — the three-star scale used to be drawn for catalogue challenges only.
 
+Version 1.7 audits the bill. Provisioned disk IOPS are now charged, as the model documentation
+promised all along — thirteen blocks used to hand out disk performance for free. Every declared
+price is checked against the whole catalogue by a test: doubling any `costPer*` parameter has to
+move the monthly bill of a scheme built around that block. The parameters that deliberately do not
+pay — machine size, declared disk ceilings, behaviour coefficients — are now listed and explained
+in [docs/02-simulation.md](docs/02-simulation.md) §9.1 instead of leaving you guessing. On the
+canvas, the coloured group edge on the left of a block survives the dark theme: the theme's border
+override used to repaint it grey.
+
 * **Catalogue — 127 blocks in 14 groups: the whole planned catalogue**, MVP (44) plus V1 (65)
   plus V2 (18). A capacity model is filled in for 101 blocks — every block that carries traffic;
   clients have none by construction (they are sources), and containers, links and probes never

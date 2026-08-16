@@ -338,7 +338,9 @@ S = (serviceTimeMs + coldStartMs × coldStartShare) / 1000
 `replicationMode`, `consistencyModel`, `replicaLagMs` / `replicaLagSigma`, `isolationLevel`
 (таблица аномалий изоляции, `docs/02-simulation.md` §7а.2), `concurrencyControl`, `failoverSec`,
 `multiAz` (признак наличия реплик, когда репликация не нарисована ребром: с ним синхронная запись
-платит RTT между AZ), `availability` и обе статьи стоимости. Параметры `bufferPoolGb`,
+платит RTT между AZ), `availability` и обе статьи стоимости. С 1.7 `provisionedIops` не только
+ограничивает ёмкость, но и оплачивается по ставке профиля цен сверх бесплатных 3000 IOPS
+(`docs/02-simulation.md` §9). Параметры `bufferPoolGb`,
 `workingSetGb`, `queryProfile`, `storageGb` пока только хранятся;
 `conflictResolution` у самого блока не читается — конфликты мульти-мастера разрешаются значением
 из `multi-region-policy` (§13.1). Строки `role`, `instanceClass`, `sharding.*`, `storageType`,

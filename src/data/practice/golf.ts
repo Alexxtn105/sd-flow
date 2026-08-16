@@ -53,7 +53,7 @@ export const GOLF_TASKS: GolfTask[] = [
         id: 'golf-autocomplete',
         challengeId: 'autocomplete',
         startFrom: 'in-memory-prefix-index',
-        parUsdMonth: 6800,
+        parUsdMonth: 6850,
         title: { ru: 'Подсказки за минимум', en: 'Autocomplete on a budget' },
         brief: {
             ru: 'Самая жёсткая задача набора: бюджет задержки крошечный, а лишние узлы стоят денег. Резать придётся аккуратно.',

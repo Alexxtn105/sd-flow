@@ -139,6 +139,7 @@ export interface PricingProfile {
     crossAzPerGb: number;
     crossRegionPerGb: number;
     requestsPerMillion: number;
+    iopsPerMonth: number;
     managedMultiplier: number;
 }
 

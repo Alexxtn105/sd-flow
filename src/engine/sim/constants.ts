@@ -97,6 +97,8 @@ export const SECONDS_PER_YEAR = 31_536_000;
 
 export const DAYS_PER_MONTH = 30.44;
 
+export const FREE_IOPS = 3000;
+
 export const ARRIVAL_VARIABILITY: Record<string, number> = {
     baseline: 1,
     peak: 1.4,
@@ -139,6 +141,7 @@ export const PRICING_PROFILES: Record<string, PricingProfile> = {
         crossAzPerGb: 0.01,
         crossRegionPerGb: 0.02,
         requestsPerMillion: 0.4,
+        iopsPerMonth: 0.005,
         managedMultiplier: 1,
     },
     'gcp-2026-q2': {
@@ -148,6 +151,7 @@ export const PRICING_PROFILES: Record<string, PricingProfile> = {
         crossAzPerGb: 0.01,
         crossRegionPerGb: 0.02,
         requestsPerMillion: 0.4,
+        iopsPerMonth: 0.005,
         managedMultiplier: 0.95,
     },
     'hetzner-2026-q2': {
@@ -157,6 +161,7 @@ export const PRICING_PROFILES: Record<string, PricingProfile> = {
         crossAzPerGb: 0,
         crossRegionPerGb: 0.001,
         requestsPerMillion: 0,
+        iopsPerMonth: 0,
         managedMultiplier: 0.45,
     },
     'on-prem': {
@@ -166,6 +171,7 @@ export const PRICING_PROFILES: Record<string, PricingProfile> = {
         crossAzPerGb: 0,
         crossRegionPerGb: 0.005,
         requestsPerMillion: 0,
+        iopsPerMonth: 0.002,
         managedMultiplier: 0.6,
     },
 };
