@@ -2,6 +2,7 @@ import { MODEL_VERSION } from '../types/scheme';
 import type { SchemeV1 } from '../types/scheme';
 import { computeAvailability } from './availability';
 import { compileTopology } from './compile';
+import { KEY_COUNT_PARAMS } from './contention';
 import { LAG_WINDOW_SEC, pricingFor } from './constants';
 import { analyseConsistency } from './consistency';
 import { computeCost } from './cost';
@@ -72,6 +73,18 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
         }
     }
 
+    if (setup.keyScale !== 1) {
+        for (const node of topology.nodes) {
+            for (const name of KEY_COUNT_PARAMS) {
+                const value = node.params[name];
+                if (typeof value !== 'number' || value <= 0) continue;
+
+                node.params[name] = Math.max(1, Math.round(value * setup.keyScale));
+                break;
+            }
+        }
+    }
+
     if (setup.forceMultiMaster && topology.multiRegionPolicy) {
         topology.multiRegionPolicy.params.mode = 'active-active';
         topology.multiRegionPolicy.params.replicationDirection = 'bidirectional';
@@ -110,7 +123,14 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
         scheme.settings.consistencyModel,
         { partitionSec: setup.partitionSec },
     );
-    const multiRegion = analyseMultiRegion(topology, solved.nodes, solved.edges, pricing, cost.byNode);
+    const multiRegion = analyseMultiRegion(
+        topology,
+        solved.nodes,
+        solved.edges,
+        pricing,
+        cost.byNode,
+        setup.partitionSec,
+    );
 
     const seed = seedFor(measured, scenarioId);
     const rng = createRng(seed);

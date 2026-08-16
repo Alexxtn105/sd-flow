@@ -215,33 +215,36 @@ export function analyseConsistency(
 
         if (lagSec > 0 && replicaShare > 0 && !staleReadsEliminated(node)) {
             const staleProbability = 1 - Math.exp(-writePerKey * meanLagSec);
-            const rate = runtime.read * replicaShare * staleProbability;
-
-            if (rate > 0) {
-                anomalies.push({
-                    code: 'stale-read',
-                    ratePerSec: rate,
-                    shareOfOperations: runtime.read > 0 ? rate / runtime.read : 0,
-                    nodeIds: [node.id],
-                    explain: explain(
-                        'λ_read × replicaShare × (1 − e^(−λ_write,key × E[L]))',
-                        {
-                            lambdaRead: runtime.read,
-                            replicaShare,
-                            lambdaWriteKey: writePerKey,
-                            expectedLagSec: meanLagSec,
-                        },
-                        rate,
-                        'op/s',
-                    ),
-                });
-            }
+            const randomStaleRate = runtime.read * replicaShare * staleProbability;
 
             const sticky = stickyReadShare(node);
             const rywProbability = logNormalTail(READ_AFTER_WRITE_GAP_SEC, lagSec, sigma);
             const rywRate = readYourWritesGuaranteed(node)
                 ? 0
                 : runtime.write * READ_AFTER_WRITE_SHARE * replicaShare * rywProbability * (1 - sticky);
+
+            const rate = randomStaleRate + rywRate;
+
+            if (rate > 0) {
+                anomalies.push({
+                    code: 'stale-read',
+                    ratePerSec: rate,
+                    shareOfOperations: runtime.read > 0 ? Math.min(rate / runtime.read, 1) : 0,
+                    nodeIds: [node.id],
+                    explain: explain(
+                        'λ_read × replicaShare × (1 − e^(−λ_write,key × E[L])) + λ_чтений-после-записи',
+                        {
+                            lambdaRead: runtime.read,
+                            replicaShare,
+                            lambdaWriteKey: writePerKey,
+                            expectedLagSec: meanLagSec,
+                            readYourWritesRate: rywRate,
+                        },
+                        rate,
+                        'op/s',
+                    ),
+                });
+            }
 
             if (rywRate > 0) {
                 anomalies.push({
@@ -270,7 +273,7 @@ export function analyseConsistency(
             const divergenceProbability = logNormalTail(MONOTONIC_READ_GAP_SEC, lagSec, pairSigma);
             const monotonicRate = monotonicGuaranteed(node)
                 ? 0
-                : rate * (1 - sticky) * (1 - 1 / replicaPool) * divergenceProbability;
+                : randomStaleRate * (1 - sticky) * (1 - 1 / replicaPool) * divergenceProbability;
 
             if (monotonicRate > 0) {
                 anomalies.push({

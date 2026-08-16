@@ -324,8 +324,8 @@ export const INTERVIEWS: InterviewSession[] = [
                 },
                 requirementIds: ['R2', 'R3'],
                 extraRequirements: [],
-                scale: { nodeId: 'buyers', params: { peakFactor: 8 } },
-                given: { peakFactor: 8, peakRps: 33333 },
+                scale: { nodeId: 'buyers', params: { peakFactor: 6 } },
+                given: { peakFactor: 6, peakRps: 25000 },
             },
             {
                 atMinute: 35,

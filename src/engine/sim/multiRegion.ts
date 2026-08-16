@@ -20,6 +20,7 @@ export function analyseMultiRegion(
     edgeFlows: Map<string, OperationFlow>,
     pricing: PricingProfile,
     costByNode: Map<string, { total: number }>,
+    partitionSec = 0,
 ): MultiRegionResult | null {
     if (topology.regions.length === 0) return null;
 
@@ -91,6 +92,8 @@ export function analyseMultiRegion(
         if (lagMs > 0 && mode !== 'sync') rpoSec = Math.max(rpoSec, lagP99Sec(lagMs, sigma));
         failoverSec = Math.max(failoverSec, Number(node.params.failoverSec ?? 0));
     }
+
+    if (partitionSec > 0) rpoSec = Math.min(rpoSec, partitionSec);
 
     const automatic = String(policy?.params.failoverMode ?? 'manual') === 'auto';
     const rtoSec = DETECTION_SEC + DNS_TTL_SEC + failoverSec + WARMUP_SEC + (automatic ? 0 : 900);

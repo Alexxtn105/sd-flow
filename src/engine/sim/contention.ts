@@ -7,7 +7,7 @@ export const RMW_WINDOW_FACTOR = 2;
 export const MAX_WRITE_ATTEMPTS = 5;
 
 const DEFAULT_KEY_COUNT = 1e6;
-const KEY_COUNT_PARAMS = ['rowCount', 'uniqueKeys', 'documentCount', 'itemCount', 'keyCount'];
+export const KEY_COUNT_PARAMS = ['rowCount', 'uniqueKeys', 'documentCount', 'itemCount', 'keyCount'];
 
 export function effectiveKeys(params: ComponentParams): number {
     for (const key of KEY_COUNT_PARAMS) {

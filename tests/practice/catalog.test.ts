@@ -112,6 +112,15 @@ describe('интервью', () => {
                 }
             });
 
+            it('масштаб этапа остаётся в реалистичных пределах', () => {
+                const challenge = base(session.challengeId);
+                const last = session.stages.length - 1;
+                const derived = challengeForInterview(challenge, session, last);
+                const verdict = accept(derived, derived.starter());
+
+                expect(verdict.realism.filter((item) => item.code === 'param-out-of-range')).toHaveLength(0);
+            });
+
             it('на первом этапе сдаётся лучшим эталоном базового задания', () => {
                 const challenge = base(session.challengeId);
                 const derived = challengeForInterview(challenge, session, 0);
@@ -182,6 +191,12 @@ describe('гольф', () => {
 
                 expect(accept(derived, inflated).stage).toBe('passed');
                 expect(costOf(inflated)).toBeGreaterThan(task.parUsdMonth);
+            });
+
+            it('медаль за нетронутую схему не выдаётся', () => {
+                const derived = challengeForGolf(base(task.challengeId), task);
+
+                expect(golfMedal(costOf(derived.starter()), task.parUsdMonth)).toBe('none');
             });
 
             it('цель достижима: исходный эталон в неё укладывается', () => {

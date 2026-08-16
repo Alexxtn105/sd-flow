@@ -69,6 +69,7 @@ export interface ScenarioSetup {
     retryBudget: number;
     cacheDisabled: boolean;
     replicationLagMultiplier: number;
+    keyScale: number;
     forceMultiMaster: boolean;
     partitionSec: number;
     transient: TransientProfile | null;
@@ -86,6 +87,8 @@ const POISON_SHARE = 0.01;
 const DEFAULT_FAILOVER_SEC = 60;
 const DEFAULT_AZ_SPREAD = 3;
 const SPLIT_BRAIN_PARTITION_SEC = 120;
+const CONFLICT_KEY_SCALE = 0.001;
+const POISON_RETRY_ATTEMPTS = 3;
 
 const MINUTE_SEC = 60;
 const HOUR_SEC = 3600;
@@ -324,6 +327,22 @@ function applyWorstMoment(setup: ScenarioSetup, profile: TransientProfile, topol
         }
     }
 
+    if (profile.poison) {
+        for (const nodeId of profile.poison.nodeIds) {
+            const node = topology.nodeById.get(nodeId);
+            if (!node) continue;
+
+            const dlq = node.params.dlqEnabled;
+            if (dlq === false) {
+                setup.capacityScale.set(nodeId, 0);
+                continue;
+            }
+
+            const wasted = profile.poison.share * POISON_RETRY_ATTEMPTS;
+            setup.capacityScale.set(nodeId, 1 / (1 + wasted));
+        }
+    }
+
     if (profile.cacheFlushAtSec !== null) setup.cacheDisabled = true;
 }
 
@@ -342,6 +361,7 @@ export function buildScenario(topology: CompiledTopology, id: string): ScenarioS
         retryBudget: RETRY_BUDGET,
         cacheDisabled: false,
         replicationLagMultiplier: 1,
+        keyScale: 1,
         forceMultiMaster: false,
         partitionSec: 0,
         transient: null,
@@ -384,6 +404,7 @@ export function buildScenario(topology: CompiledTopology, id: string): ScenarioS
 
     if (scenario === 'write-conflict') {
         setup.forceMultiMaster = true;
+        setup.keyScale = CONFLICT_KEY_SCALE;
         return setup;
     }
 
