@@ -131,7 +131,7 @@ function inMemoryPrefixIndex(): SchemeV1 {
                 id: 'prefix-index',
                 type: 'autocomplete',
                 params: {
-                    nodes: 3,
+                    nodes: 2,
                     prefixCount: 400000000,
                     keySizeBytes: 24,
                     valueSizeBytes: 200,

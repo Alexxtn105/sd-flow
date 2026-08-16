@@ -33,6 +33,7 @@ export interface CompiledEdge {
     viaNat: boolean;
     isReplication: boolean;
     isAsync: boolean;
+    inheritsMix: boolean;
 }
 
 export interface CompiledTopology {
@@ -371,6 +372,7 @@ export function compileTopology(scheme: SchemeV1): CompiledTopology {
             viaNat,
             isReplication: edge.kind === 'replication',
             isAsync: edge.kind === 'async' || edge.kind === 'stream' || edge.kind === 'cdc' || edge.kind === 'batch',
+            inheritsMix: edge.mixMode !== 'manual',
         };
 
         edges.push(compiled);

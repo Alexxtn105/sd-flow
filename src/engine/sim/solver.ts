@@ -1,5 +1,5 @@
 import type { CapacityResult, ComponentParams, NodeContext, ResourceLimit } from '../types/component';
-import type { CallOperation } from '../types/scheme';
+import type { CallOperation, CallProfile } from '../types/scheme';
 import { cacheHitRatio, resolveHitRatio } from './cacheModel';
 import type { CompiledEdge, CompiledNode, CompiledTopology } from './compile';
 import { contentionRetryShare, keySerializationLimit } from './contention';
@@ -13,17 +13,21 @@ import { occupancyBound, UNBOUNDED } from './resources';
 
 const DAMPING = 0.5;
 const MAX_ITERATIONS = 50;
-const CONVERGENCE_THRESHOLD = 0.001;
+const CONVERGENCE_THRESHOLD = 0.0001;
 export const RETRY_BUDGET = 0.5;
 const ABSORBING_TARGET_GROUPS = new Set(['sql', 'nosql', 'search', 'olap', 'storage']);
 const FULL_SHARE: RouteShare = { read: 1, write: 1 };
 const EMPTY_SHARE: RouteShare = { read: 0, write: 0 };
 const BALANCING_GROUPS = new Set(['edge', 'clients']);
+const MIX_READ_OPERATIONS = new Set<CallOperation>(['read', 'scan']);
+const MIX_WRITE_OPERATIONS = new Set<CallOperation>(['write', 'delete']);
 
 export interface OperationFlow {
     total: number;
     read: number;
     write: number;
+    accessTotal: number;
+    accessRead: number;
     byOperation: Partial<Record<CallOperation, number>>;
     bytesPerSec: number;
     requestBytes: number;
@@ -37,8 +41,11 @@ export interface NodeRuntime {
     throughput: number;
     read: number;
     write: number;
+    originWrite: number;
     readShare: number;
     writeShare: number;
+    mixReadShare: number;
+    mixKnown: boolean;
     requestBytes: number;
     responseBytes: number;
     instances: number;
@@ -78,7 +85,17 @@ export interface SolverOutput {
 }
 
 function emptyFlow(): OperationFlow {
-    return { total: 0, read: 0, write: 0, byOperation: {}, bytesPerSec: 0, requestBytes: 0, responseBytes: 0 };
+    return {
+        total: 0,
+        read: 0,
+        write: 0,
+        accessTotal: 0,
+        accessRead: 0,
+        byOperation: {},
+        bytesPerSec: 0,
+        requestBytes: 0,
+        responseBytes: 0,
+    };
 }
 
 function addFlow(target: OperationFlow, source: OperationFlow): void {
@@ -92,6 +109,8 @@ function addFlow(target: OperationFlow, source: OperationFlow): void {
     target.total = combined;
     target.read += source.read;
     target.write += source.write;
+    target.accessTotal += source.accessTotal;
+    target.accessRead += source.accessRead;
     target.bytesPerSec += source.bytesPerSec;
 
     for (const [operation, value] of Object.entries(source.byOperation)) {
@@ -108,8 +127,11 @@ function idleRuntime(node: CompiledNode): NodeRuntime {
         throughput: 0,
         read: 0,
         write: 0,
+        originWrite: 0,
         readShare: 1,
         writeShare: 0,
+        mixReadShare: 1,
+        mixKnown: false,
         requestBytes: 0,
         responseBytes: 0,
         instances: Number(node.params.instances ?? 1),
@@ -167,6 +189,36 @@ function balancingShares(
     return shares;
 }
 
+interface MixWeights {
+    read: number;
+    write: number;
+    access: number;
+}
+
+function mixWeightsOf(edge: CompiledEdge): MixWeights {
+    let read = 0;
+    let write = 0;
+
+    for (const call of edge.calls) {
+        if (MIX_READ_OPERATIONS.has(call.op)) read += Math.max(call.share, 0);
+        else if (MIX_WRITE_OPERATIONS.has(call.op)) write += Math.max(call.share, 0);
+    }
+
+    return { read, write, access: read + write };
+}
+
+function inheritedShare(call: CallProfile, source: NodeRuntime, weights: MixWeights): number {
+    if (MIX_READ_OPERATIONS.has(call.op)) {
+        return weights.read > 0 ? (source.mixReadShare * weights.access * call.share) / weights.read : 0;
+    }
+
+    if (MIX_WRITE_OPERATIONS.has(call.op)) {
+        return weights.write > 0 ? ((1 - source.mixReadShare) * weights.access * call.share) / weights.write : 0;
+    }
+
+    return call.share;
+}
+
 function computeEdgeFlow(
     edge: CompiledEdge,
     source: NodeRuntime,
@@ -177,9 +229,10 @@ function computeEdgeFlow(
     const flow = emptyFlow();
 
     if (edge.isReplication || edge.kind === 'cdc') {
-        const rps = edge.isReplication ? source.write * Math.max(edge.weight, 0) : source.write;
+        const rps = edge.isReplication ? source.originWrite * Math.max(edge.weight, 0) : source.write;
         flow.total = rps;
         flow.write = rps;
+        flow.accessTotal = rps;
         flow.byOperation.write = rps;
         flow.requestBytes = source.requestBytes;
         flow.responseBytes = 0;
@@ -189,12 +242,15 @@ function computeEdgeFlow(
 
     let requestWeighted = 0;
     let responseWeighted = 0;
+    const weights = mixWeightsOf(edge);
 
     for (const call of edge.calls) {
         const reading = isReadOperation(call.op);
         const served = reading ? 1 - absorption : 1;
         const base = source.throughput * (reading ? splitShare.read : splitShare.write);
-        const rps = base * served * call.share * Math.max(call.fanout, 0);
+        const share =
+            edge.inheritsMix && source.mixKnown ? inheritedShare(call, source, weights) : call.share;
+        const rps = base * served * share * Math.max(call.fanout, 0);
         if (rps <= 0) continue;
 
         const requestBytes = call.requestBytes * payloadScale;
@@ -208,6 +264,13 @@ function computeEdgeFlow(
 
         if (isReadOperation(call.op)) flow.read += rps;
         else flow.write += rps;
+
+        if (MIX_READ_OPERATIONS.has(call.op)) {
+            flow.accessTotal += rps;
+            flow.accessRead += rps;
+        } else if (MIX_WRITE_OPERATIONS.has(call.op)) {
+            flow.accessTotal += rps;
+        }
     }
 
     if (flow.total > 0) {
@@ -379,6 +442,53 @@ function queueLimitFor(node: CompiledNode, servers: number): number {
     return typeof limit === 'number' ? limit : servers;
 }
 
+function entryFlowsOf(flows: Flow[]): Map<string, OperationFlow> {
+    const entry = new Map<string, OperationFlow>();
+
+    for (const flow of flows) {
+        const accumulator = entry.get(flow.entryNodeId) ?? emptyFlow();
+
+        accumulator.total += flow.rps;
+        accumulator.read += flow.rps * flow.readShare;
+        accumulator.write += flow.rps * (1 - flow.readShare);
+        accumulator.accessTotal += flow.rps;
+        accumulator.accessRead += flow.rps * flow.readShare;
+        accumulator.byOperation.read = (accumulator.byOperation.read ?? 0) + flow.rps * flow.readShare;
+        accumulator.byOperation.write = (accumulator.byOperation.write ?? 0) + flow.rps * (1 - flow.readShare);
+
+        entry.set(flow.entryNodeId, accumulator);
+    }
+
+    return entry;
+}
+
+interface ArrivedFlow {
+    flow: OperationFlow;
+    replicated: number;
+}
+
+function arrivedFlow(
+    node: CompiledNode,
+    topology: CompiledTopology,
+    entryFlows: ReadonlyMap<string, OperationFlow>,
+    edgeFlows: ReadonlyMap<string, OperationFlow>,
+): ArrivedFlow {
+    const flow = emptyFlow();
+    let replicated = 0;
+    const entry = entryFlows.get(node.id);
+    if (entry) addFlow(flow, entry);
+
+    for (const edgeId of node.incoming) {
+        const arrived = edgeFlows.get(edgeId);
+        if (!arrived) continue;
+
+        addFlow(flow, arrived);
+        if (topology.edgeById.get(edgeId)?.isReplication) replicated += arrived.write;
+    }
+
+    return { flow, replicated };
+}
+
 export function solveFlows(topology: CompiledTopology, flows: Flow[], options: SolveOptions): SolverOutput {
     const { arrivalVariability, disabledNodes, cacheEnabled } = options;
     const retryBudget = options.retryBudget ?? RETRY_BUDGET;
@@ -393,7 +503,8 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
     let previous = new Map<string, NodeRuntime>(
         trafficNodes.map((node) => [node.id, options.warmStart?.get(node.id) ?? idleRuntime(node)]),
     );
-    let edgeFlows = new Map<string, OperationFlow>();
+    const entryFlows = entryFlowsOf(flows);
+    const edgeFlows = new Map<string, OperationFlow>();
     let iterations = 0;
     let converged = false;
 
@@ -401,22 +512,9 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
         iterations = pass + 1;
 
         const current = new Map<string, NodeRuntime>();
-        const inflow = new Map<string, OperationFlow>(trafficNodes.map((node) => [node.id, emptyFlow()]));
-        const nextEdgeFlows = new Map<string, OperationFlow>();
-
-        for (const flow of flows) {
-            const accumulator = inflow.get(flow.entryNodeId);
-            if (!accumulator) continue;
-
-            accumulator.total += flow.rps;
-            accumulator.read += flow.rps * flow.readShare;
-            accumulator.write += flow.rps * (1 - flow.readShare);
-            accumulator.byOperation.read = (accumulator.byOperation.read ?? 0) + flow.rps * flow.readShare;
-            accumulator.byOperation.write = (accumulator.byOperation.write ?? 0) + flow.rps * (1 - flow.readShare);
-        }
 
         for (const node of nodeOrder) {
-            const arrived = inflow.get(node.id) ?? emptyFlow();
+            const { flow: arrived, replicated } = arrivedFlow(node, topology, entryFlows, edgeFlows);
             const priorRuntime = previous.get(node.id) ?? idleRuntime(node);
 
             if (disabledNodes.has(node.id)) {
@@ -429,6 +527,8 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
                     capacity: 0,
                     boundBy: 'disabled',
                 });
+
+                for (const edgeId of node.outgoing) edgeFlows.set(edgeId, emptyFlow());
                 continue;
             }
 
@@ -436,6 +536,10 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
             const lambdaNominal = Math.max(damped, 0);
             const readShare = arrived.total > 0 ? arrived.read / arrived.total : 1;
             const writeShare = 1 - readShare;
+            const originWriteShare =
+                arrived.total > 0 ? Math.max(arrived.write - replicated, 0) / arrived.total : 0;
+            const mixKnown = arrived.accessTotal > 0;
+            const mixReadShare = mixKnown ? arrived.accessRead / arrived.accessTotal : readShare;
             const bytes = averageBytes(node, topology, arrived, flows, payloadScale);
 
             const blockingSec = blockingSecFor(node, topology, previous, edgeFlows, priorRuntime);
@@ -514,8 +618,11 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
                 throughput: queue.throughput,
                 read: queue.throughput * readShare,
                 write: queue.throughput * writeShare,
+                originWrite: queue.throughput * originWriteShare,
                 readShare,
                 writeShare,
+                mixReadShare,
+                mixKnown,
                 requestBytes: bytes.requestBytes,
                 responseBytes: bytes.responseBytes,
                 instances,
@@ -555,18 +662,12 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
                         : ABSORBING_TARGET_GROUPS.has(target.definition.group)
                           ? siblingAbsorption
                           : 0;
-                const flow = computeEdgeFlow(edge, runtime, splitShare, applied, payloadScale);
-
-                nextEdgeFlows.set(edge.id, flow);
-
-                const accumulator = inflow.get(edge.target);
-                if (accumulator) addFlow(accumulator, flow);
+                edgeFlows.set(edge.id, computeEdgeFlow(edge, runtime, splitShare, applied, payloadScale));
             }
         }
 
         const delta = maxRelativeChange(previous, current);
         previous = current;
-        edgeFlows = nextEdgeFlows;
 
         if (delta < CONVERGENCE_THRESHOLD) {
             converged = true;

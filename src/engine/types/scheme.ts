@@ -6,6 +6,8 @@ export type EdgeKind = 'sync' | 'async' | 'replication' | 'stream' | 'cdc' | 'ba
 
 export type Consistency = 'strong' | 'bounded' | 'eventual';
 
+export type MixMode = 'inherit' | 'manual';
+
 export interface CallProfile {
     id: string;
     op: CallOperation;
@@ -56,6 +58,7 @@ export interface SchemeEdge {
     label?: string;
     pull?: boolean;
     weight?: number;
+    mixMode?: MixMode;
 }
 
 export interface SchemeSettings {

@@ -304,7 +304,7 @@ describe('исправленные расхождения модели', () => {
     it('кэш поглощает только чтения', () => {
         const scheme = buildScheme({
             nodes: [
-                { id: 'client', type: 'client-web', params: { dau: 200000 } },
+                { id: 'client', type: 'client-web', params: { dau: 200000, readWriteMix: 0.5 } },
                 { id: 'api', type: 'service' },
                 { id: 'cache', type: 'redis', params: { shards: 4 } },
                 { id: 'db', type: 'postgres' },

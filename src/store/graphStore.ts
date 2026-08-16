@@ -15,7 +15,7 @@ import type {
     ParamValue,
     Protocol,
 } from '../engine/types/component';
-import type { CallProfile, EdgeKind, EdgePolicy } from '../engine/types/scheme';
+import type { CallProfile, EdgeKind, EdgePolicy, MixMode } from '../engine/types/scheme';
 import { CONTAINER_SIZE } from '../utils/nodeSize';
 
 enablePatches();
@@ -38,6 +38,7 @@ export interface SdEdgeData extends Record<string, unknown> {
     calls: CallProfile[];
     policy: EdgePolicy;
     label: string;
+    mixMode?: MixMode;
     pull: boolean;
     weight: number;
 }
@@ -69,6 +70,7 @@ export interface GraphState extends GraphSnapshot {
     updateNodeParam: (nodeId: string, key: string, value: ParamValue) => void;
     updateNodeLabel: (nodeId: string, label: string) => void;
     updateEdgeCall: (edgeId: string, callId: string, share: number) => void;
+    updateEdgeMixMode: (edgeId: string, mixMode: MixMode) => void;
     updateEdgeKind: (edgeId: string, kind: EdgeKind) => void;
     updateEdgeProtocol: (edgeId: string, protocol: Protocol) => void;
     updateEdgeLabel: (edgeId: string, label: string) => void;
@@ -268,6 +270,7 @@ export const useGraphStore = create<GraphState>((set, get) => {
                     calls: scheme.calls,
                     policy: scheme.policy,
                     label: scheme.label ?? '',
+                    mixMode: scheme.mixMode ?? 'inherit',
                     pull: scheme.pull ?? false,
                     weight: scheme.weight ?? 1,
                 },
@@ -295,8 +298,9 @@ export const useGraphStore = create<GraphState>((set, get) => {
         updateEdgeCall: (edgeId, callId, share) => {
             mutate((draft) => {
                 const edge = draft.edges.find((item) => item.id === edgeId);
-                const calls = edge?.data?.calls;
-                if (!calls) return;
+                if (!edge?.data) return;
+
+                const calls = edge.data.calls;
 
                 const target = calls.find((call) => call.id === callId);
                 if (!target) return;
@@ -310,6 +314,15 @@ export const useGraphStore = create<GraphState>((set, get) => {
                 for (const call of others) {
                     call.share = othersTotal > 0 ? (call.share / othersTotal) * remaining : remaining / others.length;
                 }
+
+                edge.data.mixMode = 'manual';
+            });
+        },
+
+        updateEdgeMixMode: (edgeId, mixMode) => {
+            mutate((draft) => {
+                const edge = draft.edges.find((item) => item.id === edgeId);
+                if (edge?.data) edge.data.mixMode = mixMode;
             });
         },
 

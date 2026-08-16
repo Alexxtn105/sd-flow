@@ -26,7 +26,11 @@ function run(spec: SchemeSpec): SimResult {
 function storeScheme(params: ComponentParams, readShare = 0.5): SchemeSpec {
     return {
         nodes: [
-            { id: 'client', type: 'client-web', params: { dau: 2000000, requestsPerSession: 30 } },
+            {
+                id: 'client',
+                type: 'client-web',
+                params: { dau: 2000000, requestsPerSession: 30, readWriteMix: readShare },
+            },
             { id: 'api', type: 'service', params: { instances: 40, autoscale: false } },
             { id: 'db', type: 'postgres', params },
         ],
