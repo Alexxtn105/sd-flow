@@ -33,6 +33,14 @@
     white-space: nowrap;
 }
 
+.hdr-version {
+    font-size: 9.5px;
+    font-weight: 600;
+    color: var(--panel-text-6);
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+}
+
 .hdr-modes {
     display: flex;
     gap: 2px;
@@ -265,7 +273,8 @@
 }
 
 @media (max-width: 1100px) {
-    .hdr-title {
+    .hdr-title,
+    .hdr-version {
         display: none;
     }
 }

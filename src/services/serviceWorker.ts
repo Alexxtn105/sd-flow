@@ -9,7 +9,7 @@ function loadedUrls(): string[] {
 
 async function warmOfflineCache(): Promise<void> {
     const registration = await navigator.serviceWorker.ready;
-    registration.active?.postMessage({ type: 'warm-cache', urls: loadedUrls() });
+    registration.active?.postMessage({ type: 'warm-cache', version: __APP_VERSION__, urls: loadedUrls() });
 }
 
 export function registerServiceWorker(): void {

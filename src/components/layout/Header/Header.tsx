@@ -91,6 +91,7 @@ export default function Header({
             <div className="hdr-brand">
                 <span className="hdr-logo">{t('app.logo')}</span>
                 <span className="hdr-title">{t('app.name')}</span>
+                <span className="hdr-version">v{__APP_VERSION__}</span>
             </div>
 
             <div className="hdr-modes">

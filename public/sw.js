@@ -1,5 +1,6 @@
 const CACHE_VERSION = 'sd-flow-cache-v1';
 const APP_SHELL_URL = new URL('./', self.location).href;
+const BUILD_MARK_URL = new URL('./build-mark', self.location).href;
 
 self.addEventListener('install', (event) => {
     event.waitUntil(self.skipWaiting());
@@ -13,7 +14,7 @@ self.addEventListener('message', (event) => {
     const message = event.data;
     if (!message || message.type !== 'warm-cache' || !Array.isArray(message.urls)) return;
 
-    event.waitUntil(warmCache(message.urls));
+    event.waitUntil(dropOutdatedBuild(message.version).then(() => warmCache(message.urls)));
 });
 
 self.addEventListener('fetch', (event) => {
@@ -22,7 +23,11 @@ self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
     if (url.origin !== self.location.origin) return;
 
-    event.respondWith(respondFromCacheFirst(event));
+    event.respondWith(
+        event.request.mode === 'navigate'
+            ? respondNetworkFirst(event.request)
+            : respondCacheFirst(event.request),
+    );
 });
 
 async function warmCache(urls) {
@@ -38,41 +43,42 @@ async function dropStaleCaches() {
     await Promise.all(keys.filter((key) => key !== CACHE_VERSION).map((key) => caches.delete(key)));
 }
 
-async function respondFromCacheFirst(event) {
+async function dropOutdatedBuild(version) {
+    if (typeof version !== 'string' || version.length === 0) return;
+
     const cache = await caches.open(CACHE_VERSION);
-    const cached = await cache.match(event.request);
+    const mark = await cache.match(BUILD_MARK_URL);
+    if (mark && (await mark.text()) === version) return;
 
-    if (cached) {
-        if (event.request.mode === 'navigate') {
-            event.waitUntil(revalidate(cache, event.request));
-        }
-        return cached;
-    }
-
-    return fetchAndStore(cache, event.request);
+    await caches.delete(CACHE_VERSION);
+    const fresh = await caches.open(CACHE_VERSION);
+    await fresh.put(BUILD_MARK_URL, new Response(version));
 }
 
-async function fetchAndStore(cache, request) {
+async function respondNetworkFirst(request) {
+    const cache = await caches.open(CACHE_VERSION);
+
     try {
         const response = await fetch(request);
-        if (response.ok && response.type === 'basic') {
-            await cache.put(request, response.clone());
-        }
+        if (isStorable(response)) await cache.put(request, response.clone());
         return response;
     } catch (error) {
-        const shell = await cache.match(APP_SHELL_URL);
-        if (request.mode === 'navigate' && shell) return shell;
+        const cached = (await cache.match(request)) ?? (await cache.match(APP_SHELL_URL));
+        if (cached) return cached;
         throw error;
     }
 }
 
-async function revalidate(cache, request) {
-    try {
-        const response = await fetch(request);
-        if (response.ok && response.type === 'basic') {
-            await cache.put(request, response.clone());
-        }
-    } catch {
-        await Promise.resolve();
-    }
+async function respondCacheFirst(request) {
+    const cache = await caches.open(CACHE_VERSION);
+    const cached = await cache.match(request);
+    if (cached) return cached;
+
+    const response = await fetch(request);
+    if (isStorable(response)) await cache.put(request, response.clone());
+    return response;
+}
+
+function isStorable(response) {
+    return response.ok && response.type === 'basic';
 }
