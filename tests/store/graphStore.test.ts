@@ -187,3 +187,69 @@ describe('graphStore', () => {
         expect(useGraphStore.getState().nodes[0].position).toEqual({ x: 0, y: 0 });
     });
 });
+
+describe('копирование и вставка', () => {
+    it('копия повторяет параметры и связи, но получает новые идентификаторы', () => {
+        const { service, postgres } = addPair();
+        const store = useGraphStore.getState();
+        store.updateNodeParam(service, 'instances', 12);
+        store.connect({ source: service, target: postgres, sourceHandle: 'out', targetHandle: 'sql' });
+
+        useGraphStore.getState().copySelection([service, postgres]);
+        const created = useGraphStore.getState().paste();
+
+        expect(created).toHaveLength(2);
+        expect(created).not.toContain(service);
+
+        const nodes = useGraphStore.getState().nodes;
+        expect(nodes).toHaveLength(4);
+
+        const copy = nodes.find((node) => node.id === created[0]);
+        expect(copy?.data.params.instances).toBe(12);
+        expect(copy?.position.x).not.toBe(0);
+
+        const edges = useGraphStore.getState().edges;
+        expect(edges).toHaveLength(2);
+        expect(edges.some((edge) => edge.source === created[0] && edge.target === created[1])).toBe(true);
+    });
+
+    it('связь наружу выделения не копируется', () => {
+        const { service, postgres } = addPair();
+        useGraphStore
+            .getState()
+            .connect({ source: service, target: postgres, sourceHandle: 'out', targetHandle: 'sql' });
+
+        useGraphStore.getState().copySelection([service]);
+        useGraphStore.getState().paste();
+
+        expect(useGraphStore.getState().edges).toHaveLength(1);
+        expect(useGraphStore.getState().nodes).toHaveLength(3);
+    });
+
+    it('правка копии не трогает оригинал', () => {
+        const { service } = addPair();
+        useGraphStore.getState().copySelection([service]);
+        const [copy] = useGraphStore.getState().paste();
+
+        useGraphStore.getState().updateNodeParam(copy, 'instances', 40);
+
+        const original = useGraphStore.getState().nodes.find((node) => node.id === service);
+        expect(original?.data.params.instances).toBe(3);
+    });
+
+    it('вставка без копии ничего не делает', () => {
+        useGraphStore.getState().copySelection([]);
+        expect(useGraphStore.getState().paste()).toEqual([]);
+        expect(useGraphStore.getState().clipboardSize).toBe(0);
+    });
+
+    it('вставка отменяется одним undo', () => {
+        const { service } = addPair();
+        useGraphStore.getState().copySelection([service]);
+        useGraphStore.getState().paste();
+        expect(useGraphStore.getState().nodes).toHaveLength(3);
+
+        useGraphStore.getState().undo();
+        expect(useGraphStore.getState().nodes).toHaveLength(2);
+    });
+});

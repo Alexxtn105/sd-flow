@@ -9,8 +9,8 @@ import GroupNode from './GroupNode';
 import ProbeNode from './ProbeNode';
 import ProbeWindows from './ProbeWindows';
 import TrafficEdge from './TrafficEdge';
-import NodeContextMenu from './NodeContextMenu';
-import type { ContextMenuTarget } from './NodeContextMenu';
+import CanvasContextMenu from './CanvasContextMenu';
+import type { ContextMenuTarget } from './CanvasContextMenu';
 import registry from '../../engine/ComponentRegistry';
 import { useGraphStore } from '../../store/graphStore';
 import type { SdNode as SdNodeModel } from '../../store/graphStore';
@@ -66,6 +66,8 @@ function containerAt(nodes: SdNodeModel[], point: XYPosition): SdNodeModel | nul
     return best;
 }
 
+const SNAP_GRID: [number, number] = [18, 18];
+
 export default function SdEditor() {
     const { t } = useTranslation();
     const { isDarkTheme } = useThemeContext();
@@ -82,6 +84,9 @@ export default function SdEditor() {
     const isValidConnection = useGraphStore((state) => state.isValidConnection);
     const addComponent = useGraphStore((state) => state.addComponent);
     const duplicateNode = useGraphStore((state) => state.duplicateNode);
+    const copySelection = useGraphStore((state) => state.copySelection);
+    const paste = useGraphStore((state) => state.paste);
+    const clipboardSize = useGraphStore((state) => state.clipboardSize);
     const removeElements = useGraphStore((state) => state.removeElements);
     const setNodeParent = useGraphStore((state) => state.setNodeParent);
     const beginTransaction = useGraphStore((state) => state.beginTransaction);
@@ -172,6 +177,30 @@ export default function SdEditor() {
         });
     }, [fitView, focusRequest, selectOnly, selectedEdgeIds, selectedNodeIds]);
 
+    const openEdgeMenu = useCallback((event: React.MouseEvent, edge: Edge) => {
+        event.preventDefault();
+        const rect = wrapperRef.current?.getBoundingClientRect();
+        if (!rect) return;
+
+        setMenuTarget({ kind: 'edge', edgeId: edge.id, x: event.clientX - rect.left, y: event.clientY - rect.top });
+    }, []);
+
+    const openPaneMenu = useCallback((event: React.MouseEvent | MouseEvent) => {
+        event.preventDefault();
+        const rect = wrapperRef.current?.getBoundingClientRect();
+        if (!rect) return;
+
+        setMenuTarget({ kind: 'pane', x: event.clientX - rect.left, y: event.clientY - rect.top });
+    }, []);
+
+    const pasteClipboard = useCallback(() => {
+        const created = paste();
+        if (created.length === 0) return;
+
+        setSelection(created, []);
+        selectOnly(created, []);
+    }, [paste, selectOnly, setSelection]);
+
     const deleteSelection = useCallback(() => {
         removeElements(selectedNodeIds, selectedEdgeIds);
         setSelection([], []);
@@ -188,6 +217,19 @@ export default function SdEditor() {
                 event.preventDefault();
                 if (event.shiftKey) redo();
                 else undo();
+                return;
+            }
+
+            if (modifier && event.key.toLowerCase() === 'c') {
+                if (selectedNodeIds.length === 0) return;
+                event.preventDefault();
+                copySelection(selectedNodeIds);
+                return;
+            }
+
+            if (modifier && event.key.toLowerCase() === 'v') {
+                event.preventDefault();
+                pasteClipboard();
                 return;
             }
 
@@ -208,7 +250,7 @@ export default function SdEditor() {
 
         document.addEventListener('keydown', handler);
         return () => document.removeEventListener('keydown', handler);
-    }, [deleteSelection, openBlockHelp, redo, selectedNodeIds, undo]);
+    }, [copySelection, deleteSelection, openBlockHelp, pasteClipboard, redo, selectedNodeIds, undo]);
 
     const openMenu = useCallback(
         (event: React.MouseEvent, node: Node) => {
@@ -217,6 +259,7 @@ export default function SdEditor() {
             if (!rect) return;
             const model = useGraphStore.getState().nodes.find((item) => item.id === node.id);
             setMenuTarget({
+                kind: 'node',
                 nodeId: node.id,
                 x: event.clientX - rect.left,
                 y: event.clientY - rect.top,
@@ -269,6 +312,10 @@ export default function SdEditor() {
                 onNodeDragStart={beginTransaction}
                 onNodeDragStop={commitTransaction}
                 onNodeContextMenu={openMenu}
+                onEdgeContextMenu={openEdgeMenu}
+                onPaneContextMenu={openPaneMenu}
+                snapToGrid
+                snapGrid={SNAP_GRID}
                 onNodeClick={isTouch ? openMenu : undefined}
                 onPaneClick={() => setMenuTarget(null)}
                 onSelectionChange={handleSelectionChange}
@@ -296,8 +343,9 @@ export default function SdEditor() {
             )}
 
             {menuTarget && (
-                <NodeContextMenu
+                <CanvasContextMenu
                     target={menuTarget}
+                    canPaste={clipboardSize > 0}
                     onClose={() => setMenuTarget(null)}
                     onDuplicate={duplicateNode}
                     onDelete={(nodeId) => removeElements([nodeId], [])}
@@ -307,6 +355,9 @@ export default function SdEditor() {
                         const model = useGraphStore.getState().nodes.find((item) => item.id === nodeId);
                         if (model) openBlockHelp(model.data.componentType);
                     }}
+                    onDeleteEdge={(edgeId) => removeElements([], [edgeId])}
+                    onPaste={pasteClipboard}
+                    onFitView={() => void fitView({ duration: 300, padding: 0.3 })}
                 />
             )}
         </div>

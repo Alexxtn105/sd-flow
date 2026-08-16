@@ -272,7 +272,10 @@
         "settings": "Parameters",
         "detachFromGroup": "Move out of group",
         "openProbeWindow": "Probe window",
-        "blockHelp": "Block reference"
+        "blockHelp": "Block reference",
+        "paste": "Paste",
+        "fitView": "Fit to screen",
+        "deleteEdge": "Delete connection"
     },
     "inspector": {
         "title": "Inspector",

@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import Icon from '../common/Icons/Icon';
-import './NodeContextMenu.css';
+import './CanvasContextMenu.css';
 
-export interface ContextMenuTarget {
+export interface NodeMenuTarget {
+    kind: 'node';
     nodeId: string;
     x: number;
     y: number;
@@ -11,25 +12,48 @@ export interface ContextMenuTarget {
     isProbe: boolean;
 }
 
-interface NodeContextMenuProps {
+export interface EdgeMenuTarget {
+    kind: 'edge';
+    edgeId: string;
+    x: number;
+    y: number;
+}
+
+export interface PaneMenuTarget {
+    kind: 'pane';
+    x: number;
+    y: number;
+}
+
+export type ContextMenuTarget = NodeMenuTarget | EdgeMenuTarget | PaneMenuTarget;
+
+interface CanvasContextMenuProps {
     target: ContextMenuTarget;
+    canPaste: boolean;
     onClose: () => void;
     onDuplicate: (nodeId: string) => void;
     onDelete: (nodeId: string) => void;
     onDetach: (nodeId: string) => void;
     onOpenProbeWindow: (nodeId: string) => void;
     onOpenHelp: (nodeId: string) => void;
+    onDeleteEdge: (edgeId: string) => void;
+    onPaste: () => void;
+    onFitView: () => void;
 }
 
-export default function NodeContextMenu({
+export default function CanvasContextMenu({
     target,
+    canPaste,
     onClose,
     onDuplicate,
     onDelete,
     onDetach,
     onOpenProbeWindow,
     onOpenHelp,
-}: NodeContextMenuProps) {
+    onDeleteEdge,
+    onPaste,
+    onFitView,
+}: CanvasContextMenuProps) {
     const { t } = useTranslation();
     const ref = useRef<HTMLDivElement>(null);
 
@@ -42,9 +66,44 @@ export default function NodeContextMenu({
     }, [onClose]);
 
     const run = (action: (nodeId: string) => void) => {
+        if (target.kind !== 'node') return;
         action(target.nodeId);
         onClose();
     };
+
+    const call = (action: () => void) => {
+        action();
+        onClose();
+    };
+
+    if (target.kind === 'pane') {
+        return (
+            <div className="ctx-menu" ref={ref} style={{ left: target.x, top: target.y }}>
+                <button className="ctx-item" onClick={() => call(onPaste)} disabled={!canPaste}>
+                    <Icon name="content_paste" size="small" />
+                    <span>{t('canvas.paste')}</span>
+                </button>
+                <button className="ctx-item" onClick={() => call(onFitView)}>
+                    <Icon name="fit_screen" size="small" />
+                    <span>{t('canvas.fitView')}</span>
+                </button>
+            </div>
+        );
+    }
+
+    if (target.kind === 'edge') {
+        return (
+            <div className="ctx-menu" ref={ref} style={{ left: target.x, top: target.y }}>
+                <button
+                    className="ctx-item ctx-item-danger"
+                    onClick={() => call(() => onDeleteEdge(target.edgeId))}
+                >
+                    <Icon name="delete_outline" size="small" />
+                    <span>{t('canvas.deleteEdge')}</span>
+                </button>
+            </div>
+        );
+    }
 
     return (
         <div className="ctx-menu" ref={ref} style={{ left: target.x, top: target.y }}>

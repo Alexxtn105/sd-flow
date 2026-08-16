@@ -49,6 +49,7 @@ interface HistoryEntry {
 
 export interface GraphState extends GraphSnapshot {
     revision: number;
+    clipboardSize: number;
     past: HistoryEntry[];
     future: HistoryEntry[];
     transactionBase: GraphSnapshot | null;
@@ -57,6 +58,8 @@ export interface GraphState extends GraphSnapshot {
     addComponent: (type: ComponentTypeId, position: XYPosition, parentId?: string) => string | null;
     connect: (connection: Connection) => void;
     selectOnly: (nodeIds: string[], edgeIds: string[]) => void;
+    copySelection: (nodeIds: string[]) => void;
+    paste: (offset?: XYPosition) => string[];
     isValidConnection: (connection: Connection | Edge) => boolean;
     updateNodeParam: (nodeId: string, key: string, value: ParamValue) => void;
     updateNodeLabel: (nodeId: string, label: string) => void;
@@ -101,6 +104,32 @@ function hasRemoval(changes: { type: string }[]): boolean {
     return changes.some((change) => change.type === 'remove');
 }
 
+const PASTE_OFFSET: XYPosition = { x: 32, y: 32 };
+
+interface Clipboard {
+    nodes: SdNode[];
+    edges: SdEdge[];
+}
+
+let clipboard: Clipboard = { nodes: [], edges: [] };
+
+function cloneNode(node: SdNode): SdNode {
+    return { ...node, data: { ...node.data, params: { ...node.data.params } } };
+}
+
+function cloneEdge(edge: SdEdge): SdEdge {
+    return {
+        ...edge,
+        data: edge.data
+            ? {
+                  ...edge.data,
+                  calls: edge.data.calls.map((call) => ({ ...call })),
+                  policy: { ...edge.data.policy },
+              }
+            : edge.data,
+    };
+}
+
 export const useGraphStore = create<GraphState>((set, get) => {
     function mutate(recipe: (draft: GraphSnapshot) => void, options: MutateOptions = {}): void {
         const { history = true, documentChange = true } = options;
@@ -123,6 +152,7 @@ export const useGraphStore = create<GraphState>((set, get) => {
         nodes: [],
         edges: [],
         revision: 0,
+        clipboardSize: 0,
         past: [],
         future: [],
         transactionBase: null,
@@ -301,6 +331,58 @@ export const useGraphStore = create<GraphState>((set, get) => {
                     delete node.extent;
                 }
             });
+        },
+
+        copySelection: (nodeIds) => {
+            const picked = new Set(nodeIds);
+            const { nodes, edges } = get();
+
+            clipboard = {
+                nodes: nodes.filter((node) => picked.has(node.id)).map(cloneNode),
+                edges: edges
+                    .filter((edge) => picked.has(edge.source) && picked.has(edge.target))
+                    .map(cloneEdge),
+            };
+
+            set({ clipboardSize: clipboard.nodes.length });
+        },
+
+        paste: (offset = PASTE_OFFSET) => {
+            if (clipboard.nodes.length === 0) return [];
+
+            const renamed = new Map<string, string>();
+            const nodes = clipboard.nodes.map((node) => {
+                const id = nextId(node.data.componentType);
+                renamed.set(node.id, id);
+
+                return {
+                    ...cloneNode(node),
+                    id,
+                    position: { x: node.position.x + offset.x, y: node.position.y + offset.y },
+                    selected: false,
+                };
+            });
+
+            for (const node of nodes) {
+                if (!node.parentId) continue;
+                const moved = renamed.get(node.parentId);
+                if (moved) node.parentId = moved;
+            }
+
+            const edges = clipboard.edges.map((edge) => ({
+                ...cloneEdge(edge),
+                id: nextId('edge'),
+                source: renamed.get(edge.source) ?? edge.source,
+                target: renamed.get(edge.target) ?? edge.target,
+                selected: false,
+            }));
+
+            mutate((draft) => {
+                draft.nodes = sortNodesForFlow([...(draft.nodes as SdNode[]), ...nodes]);
+                draft.edges = [...(draft.edges as SdEdge[]), ...edges];
+            });
+
+            return nodes.map((node) => node.id);
         },
 
         selectOnly: (nodeIds, edgeIds) => {

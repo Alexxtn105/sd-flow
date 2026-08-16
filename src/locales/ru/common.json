@@ -272,7 +272,10 @@
         "settings": "Параметры",
         "detachFromGroup": "Вынести из группы",
         "openProbeWindow": "Окно измерителя",
-        "blockHelp": "Справка о блоке"
+        "blockHelp": "Справка о блоке",
+        "paste": "Вставить",
+        "fitView": "Вписать в экран",
+        "deleteEdge": "Удалить связь"
     },
     "inspector": {
         "title": "Инспектор",

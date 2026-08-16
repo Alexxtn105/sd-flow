@@ -79,7 +79,8 @@ sd-flow/
 │   ├── workers/simulation.worker.ts   ← расчёт схемы и приёмка задания вне главного потока
 │   ├── store/                         ← Zustand: graphStore, schemeStore, uiStore, simStore, challengeStore
 │   ├── components/
-│   │   ├── canvas/                    ← SdEditor, SdNode, GroupNode, ProbeNode, ProbeWindows, TrafficEdge
+│   │   ├── canvas/                    ← SdEditor, SdNode, GroupNode, ProbeNode, ProbeWindows, TrafficEdge,
+│   │   │                                CanvasContextMenu (узел, ребро, холст)
 │   │   ├── panels/                    ← Palette, Inspector, Dashboard (+ Timeline), Challenges
 │   │   ├── tutorial/                  ← Tutorial + tutorialSteps.ts (чистый редьюсер шагов)
 │   │   ├── dialogs/                   ← Save, Load, Confirm, ChallengeEditor (конструктор заданий),
