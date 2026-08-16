@@ -12,6 +12,7 @@ import { deriveFlows } from './flows';
 import { rollUpLatency } from './latency';
 import { analyseMultiRegion } from './multiRegion';
 import { collectProbes, readProbes, withoutProbes } from './probes';
+import { applyGeoDetour, geoDetourMs } from './routing';
 import { createRng, hashString } from './rng';
 import { solveScheme } from './pipeline';
 import { runTransient } from './transient';
@@ -77,6 +78,8 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
     }
 
     const flows = applyScenarioToFlows(deriveFlows(topology, 1), setup);
+    applyGeoDetour(topology, geoDetourMs(topology, flows, setup.disabledNodes));
+
     const solveOptions = {
         arrivalVariability: setup.arrivalVariability,
         disabledNodes: setup.disabledNodes,
@@ -107,7 +110,7 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
 
     const seed = seedFor(measured, scenarioId);
     const rng = createRng(seed);
-    const rollup = rollUpLatency(topology, flows, solved.nodes, rng, sampleCount);
+    const rollup = rollUpLatency(topology, flows, solved.nodes, solved.edges, rng, sampleCount);
     const flowResults = rollup.flows;
     const timeline = runTransient({ topology, flows: deriveFlows(topology, 1), setup, seed });
 

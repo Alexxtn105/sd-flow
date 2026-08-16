@@ -52,6 +52,7 @@ export function analyseMultiRegion(
 
     for (const edge of topology.edges) {
         if (edge.scope !== 'cross-region') continue;
+        if (!edge.isReplication && edge.kind !== 'cdc') continue;
 
         const flow = edgeFlows.get(edge.id);
         if (!flow) continue;

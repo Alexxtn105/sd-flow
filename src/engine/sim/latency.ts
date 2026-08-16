@@ -2,7 +2,7 @@ import { DEFAULT_RTT_MS } from './constants';
 import type { CompiledEdge, CompiledNode, CompiledTopology } from './compile';
 import type { Flow } from './flows';
 import { selfAbsorption } from './solver';
-import type { NodeRuntime } from './solver';
+import type { NodeRuntime, OperationFlow } from './solver';
 import type { Rng } from './rng';
 import type {
     FlowResult,
@@ -64,6 +64,7 @@ interface CallPlan {
     callsPerRequest: number[];
     balanced: boolean;
     liveEdges: CompiledEdge[];
+    liveWeights: number[];
     parallel: boolean;
     replicationAckSec: number;
 }
@@ -195,12 +196,27 @@ function routableEdges(node: CompiledNode, topology: CompiledTopology): Compiled
         .filter((edge): edge is CompiledEdge => edge !== undefined && !edge.isReplication);
 }
 
-function trafficShareOf(source: CompiledNode, edge: CompiledEdge, topology: CompiledTopology): number {
+function branchWeights(edges: CompiledEdge[], edgeFlows: ReadonlyMap<string, OperationFlow>): number[] {
+    const routed = edges.map((edge) => Math.max(edgeFlows.get(edge.id)?.total ?? 0, 0));
+    if (routed.some((value) => value > 0)) return routed;
+
+    return edges.map((edge) => Math.max(edge.weight, 0));
+}
+
+function trafficShareOf(
+    source: CompiledNode,
+    edge: CompiledEdge,
+    topology: CompiledTopology,
+    edgeFlows: ReadonlyMap<string, OperationFlow>,
+): number {
     if (!BALANCING_GROUPS.has(source.definition.group)) return 1;
 
     const siblings = routableEdges(source, topology);
-    const totalWeight = siblings.reduce((sum, item) => sum + Math.max(item.weight, 0), 0);
-    if (totalWeight > 0) return Math.max(edge.weight, 0) / totalWeight;
+    const weights = branchWeights(siblings, edgeFlows);
+    const total = weights.reduce((sum, value) => sum + value, 0);
+    const index = siblings.findIndex((item) => item.id === edge.id);
+
+    if (total > 0 && index >= 0) return weights[index] / total;
 
     return siblings.length > 0 ? 1 / siblings.length : 1;
 }
@@ -232,15 +248,15 @@ function sampleCallCount(callsPerRequest: number, rng: Rng): number {
     return whole + (fraction > 0 && rng.bernoulli(fraction) ? 1 : 0);
 }
 
-function pickBalancedEdge(edges: CompiledEdge[], rng: Rng): CompiledEdge {
-    const totalWeight = edges.reduce((sum, edge) => sum + Math.max(edge.weight, 0), 0);
+function pickBalancedEdge(edges: CompiledEdge[], weights: number[], rng: Rng): CompiledEdge {
+    const totalWeight = weights.reduce((sum, value) => sum + value, 0);
     if (totalWeight <= 0) return edges[Math.min(Math.floor(rng.next() * edges.length), edges.length - 1)];
 
     let ticket = rng.next() * totalWeight;
 
-    for (const edge of edges) {
-        ticket -= Math.max(edge.weight, 0);
-        if (ticket <= 0) return edge;
+    for (let index = 0; index < edges.length; index += 1) {
+        ticket -= weights[index];
+        if (ticket <= 0) return edges[index];
     }
 
     return edges[edges.length - 1];
@@ -330,6 +346,7 @@ export function rollUpLatency(
     topology: CompiledTopology,
     flows: Flow[],
     runtimes: Map<string, NodeRuntime>,
+    edgeFlows: ReadonlyMap<string, OperationFlow>,
     rng: Rng,
     sampleCount: number,
 ): LatencyRollup {
@@ -344,11 +361,13 @@ export function rollUpLatency(
 
         const edges = routableEdges(node, topology);
         const live = edges.filter((edge) => runtimes.get(edge.target)?.boundBy !== 'disabled');
+        const liveEdges = live.length > 0 ? live : edges;
         const plan: CallPlan = {
             edges,
             callsPerRequest: edges.map(callsPerRequestOf),
             balanced: BALANCING_GROUPS.has(node.definition.group),
-            liveEdges: live.length > 0 ? live : edges,
+            liveEdges,
+            liveWeights: branchWeights(liveEdges, edgeFlows),
             parallel: node.params.callMode === 'parallel',
             replicationAckSec: replicationAckSec(node, topology),
         };
@@ -386,7 +405,7 @@ export function rollUpLatency(
                 parentNodeId: edge.source,
                 depth,
                 arm: source?.params.callMode === 'parallel' ? 'parallel' : 'sequential',
-                trafficShare: source ? trafficShareOf(source, edge, topology) : 1,
+                trafficShare: source ? trafficShareOf(source, edge, topology, edgeFlows) : 1,
                 callsPerRequest: callsPerRequestOf(edge),
                 cacheMissShare:
                     source && target ? cacheMissShareOf(source, target, topology, runtimes) : null,
@@ -433,7 +452,7 @@ export function rollUpLatency(
 
             if (plan.edges.length === 0) return { durations, spans, failed, timedOut };
 
-            const chosen = plan.balanced ? pickBalancedEdge(plan.liveEdges, rng) : null;
+            const chosen = plan.balanced ? pickBalancedEdge(plan.liveEdges, plan.liveWeights, rng) : null;
 
             for (let index = 0; index < plan.edges.length; index += 1) {
                 const edge = plan.edges[index];

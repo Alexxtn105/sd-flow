@@ -12,6 +12,7 @@ interface Branch {
     regionId: string | null;
     geo: string | null;
     code: string;
+    weight: number;
     primary: boolean;
     alive: boolean;
 }
@@ -43,6 +44,7 @@ function branchesOf(
             regionId: region?.id ?? null,
             geo: region ? String(region.params.geo ?? '') : null,
             code: region ? String(region.params.code ?? region.id) : '',
+            weight: Math.max(edge.weight, 0),
             primary: region ? region.params.isPrimary === true : false,
             alive: !disabledNodes.has(edge.target) && (!region || !disabledNodes.has(region.id)),
         });
@@ -132,6 +134,54 @@ function normalise(weights: Map<string, number>): Map<string, number> {
     return new Map([...weights].map(([edgeId, value]) => [edgeId, value / total]));
 }
 
+function zoneAssignment(
+    node: CompiledNode,
+    branches: Branch[],
+    zones: Map<string, number>,
+): Map<string, Map<string, number>> {
+    const policy = String(node.params.routingPolicy ?? 'simple');
+    const alive = branches.filter((branch) => branch.alive);
+    const assignment = new Map<string, Map<string, number>>(
+        branches.map((branch) => [branch.edgeId, new Map<string, number>()]),
+    );
+
+    if (alive.length === 0) return assignment;
+
+    const add = (edgeId: string, zone: string, rps: number): void => {
+        const perZone = assignment.get(edgeId);
+        if (perZone) perZone.set(zone, (perZone.get(zone) ?? 0) + rps);
+    };
+
+    if (policy === 'failover') {
+        const target = alive.find((branch) => branch.primary) ?? alive[0];
+        for (const [zone, rps] of zones) add(target.edgeId, zone, rps);
+
+        return assignment;
+    }
+
+    if (policy === 'weighted' || policy === 'simple') {
+        const total = alive.reduce((sum, branch) => sum + Math.max(branch.weight, 0), 0);
+
+        for (const [zone, rps] of zones) {
+            for (const branch of alive) {
+                const share = total > 0 ? Math.max(branch.weight, 0) / total : 1 / alive.length;
+                add(branch.edgeId, zone, rps * share);
+            }
+        }
+
+        return assignment;
+    }
+
+    const byContinent = policy === 'geo' && String(node.params.geoMapping ?? 'none') !== 'none';
+
+    for (const [zone, rps] of zones) {
+        const picked = (byContinent ? sameZone(alive, zone) : null) ?? nearest(alive, zone) ?? alive[0];
+        add(picked.edgeId, zone, rps);
+    }
+
+    return assignment;
+}
+
 function readWeights(node: CompiledNode, branches: Branch[], zones: Map<string, number>): Map<string, number> {
     const policy = String(node.params.routingPolicy ?? 'simple');
     const alive = branches.filter((branch) => branch.alive);
@@ -146,14 +196,59 @@ function readWeights(node: CompiledNode, branches: Branch[], zones: Map<string, 
         return weights;
     }
 
-    const byContinent = policy === 'geo' && String(node.params.geoMapping ?? 'none') !== 'none';
-
-    for (const [zone, rps] of zones) {
-        const picked = (byContinent ? sameZone(alive, zone) : null) ?? nearest(alive, zone) ?? alive[0];
-        weights.set(picked.edgeId, (weights.get(picked.edgeId) ?? 0) + rps);
+    for (const [edgeId, perZone] of zoneAssignment(node, branches, zones)) {
+        weights.set(edgeId, [...perZone.values()].reduce((sum, rps) => sum + rps, 0));
     }
 
     return normalise(weights);
+}
+
+export function geoDetourMs(
+    topology: CompiledTopology,
+    flows: Flow[],
+    disabledNodes: ReadonlySet<string>,
+): Map<string, number> {
+    const detours = new Map<string, number>();
+    if (topology.regions.length < 2) return detours;
+
+    for (const node of topology.nodes) {
+        if (node.regionId || node.definition.shape !== 'node') continue;
+
+        const branches = branchesOf(node, topology, disabledNodes).filter((branch) => branch.geo);
+        const regions = new Set(branches.map((branch) => branch.regionId));
+        if (branches.length < 2 || regions.size < 2) continue;
+
+        const zones = clientZones(topology, flows, node.id);
+        const assignment = zoneAssignment(node, branches, zones);
+
+        for (const branch of branches) {
+            const perZone = assignment.get(branch.edgeId);
+            if (!perZone || perZone.size === 0) continue;
+
+            let weighted = 0;
+            let total = 0;
+
+            for (const [zone, rps] of perZone) {
+                const closest = Math.min(...branches.map((item) => geoRttMs(zone, String(item.geo))));
+                weighted += rps * Math.max(geoRttMs(zone, String(branch.geo)) - closest, 0);
+                total += rps;
+            }
+
+            if (total > 0 && weighted > 0) detours.set(branch.edgeId, weighted / total);
+        }
+    }
+
+    return detours;
+}
+
+export function applyGeoDetour(topology: CompiledTopology, detours: ReadonlyMap<string, number>): void {
+    for (const [edgeId, detourMs] of detours) {
+        const edge = topology.edgeById.get(edgeId);
+        if (!edge || detourMs <= 0) continue;
+
+        edge.networkMs += detourMs;
+        edge.scope = 'cross-region';
+    }
 }
 
 export function routingShares(
