@@ -1,6 +1,7 @@
 import { getNodesBounds, getViewportForBounds } from '@xyflow/react';
 import { toPng } from 'html-to-image';
 import type { SdNode } from '../store/graphStore';
+import { nodeDimensions } from '../utils/nodeSize';
 
 const VIEWPORT_SELECTOR = '.react-flow__viewport';
 const IMAGE_PADDING_PX = 48;
@@ -17,12 +18,6 @@ export type ImageExportResult = { ok: true; dataUrl: string } | { ok: false; rea
 
 function clamp(value: number, min: number, max: number): number {
     return Math.min(Math.max(value, min), max);
-}
-
-function measuredSize(node: SdNode): { width: number; height: number } {
-    const width = typeof node.style?.width === 'number' ? node.style.width : (node.measured?.width ?? 0);
-    const height = typeof node.style?.height === 'number' ? node.style.height : (node.measured?.height ?? 0);
-    return { width, height };
 }
 
 function absolutePosition(node: SdNode, byId: Map<string, SdNode>): { x: number; y: number } {
@@ -47,7 +42,7 @@ function flattened(nodes: SdNode[]): SdNode[] {
         ...node,
         parentId: undefined,
         position: absolutePosition(node, byId),
-        measured: measuredSize(node),
+        measured: nodeDimensions(node),
     }));
 }
 

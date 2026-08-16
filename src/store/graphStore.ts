@@ -9,15 +9,12 @@ import { nextId } from '../engine/ids';
 import { isConnectionAllowed } from '../engine/ports';
 import type { ComponentParams, ComponentShape, ComponentTypeId, ParamValue } from '../engine/types/component';
 import type { CallProfile, EdgeKind, EdgePolicy } from '../engine/types/scheme';
+import { CONTAINER_SIZE } from '../utils/nodeSize';
 
 enablePatches();
 
 const HISTORY_LIMIT = 100;
 
-const CONTAINER_SIZE: Record<string, { width: number; height: number }> = {
-    region: { width: 620, height: 420 },
-    az: { width: 280, height: 320 },
-};
 
 export interface SdNodeData extends Record<string, unknown> {
     componentType: ComponentTypeId;
@@ -191,7 +188,7 @@ export const useGraphStore = create<GraphState>((set, get) => {
                     params: registry.getDefaultParams(type),
                     label: '',
                 },
-                ...(size ? { style: { width: size.width, height: size.height } } : {}),
+                ...(size ? { width: size.width, height: size.height } : {}),
                 ...(parentId ? { parentId, extent: 'parent' as const } : {}),
             };
 
@@ -471,6 +468,7 @@ export const useGraphStore = create<GraphState>((set, get) => {
 
             set((state) => ({
                 transactionBase: null,
+                revision: redo.length > 0 ? state.revision + 1 : state.revision,
                 past: redo.length > 0 ? [...state.past, { redo, undo }].slice(-HISTORY_LIMIT) : state.past,
                 future: redo.length > 0 ? [] : state.future,
             }));

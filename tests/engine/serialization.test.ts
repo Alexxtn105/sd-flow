@@ -52,7 +52,72 @@ describe('сериализация схемы', () => {
         expect(service?.extent).toBe('parent');
 
         const region = parsed.nodes.find((node) => node.type === 'group');
-        expect(region?.style?.width).toBe(620);
+        expect(region?.width).toBe(620);
+        expect(region?.height).toBe(420);
+    });
+
+    it('размер контейнера переживает растягивание мышью, сохранение и открытие', () => {
+        buildGraph();
+        const regionId = useGraphStore.getState().nodes.find((node) => node.type === 'group')?.id ?? '';
+
+        useGraphStore.getState().beginTransaction();
+        useGraphStore.getState().onNodesChange([
+            {
+                id: regionId,
+                type: 'dimensions',
+                dimensions: { width: 880, height: 640 },
+                setAttributes: true,
+                resizing: true,
+            },
+        ]);
+        useGraphStore.getState().commitTransaction();
+
+        const { nodes, edges } = useGraphStore.getState();
+        const scheme = toScheme({ meta: META, nodes, edges });
+
+        expect(scheme.nodes.find((node) => node.id === regionId)?.size).toEqual({ width: 880, height: 640 });
+
+        const region = fromScheme(scheme).nodes.find((node) => node.id === regionId);
+        expect(region?.width).toBe(880);
+        expect(region?.height).toBe(640);
+    });
+
+    it('растягивание помечает схему изменённой и попадает в отмену', () => {
+        buildGraph();
+        const regionId = useGraphStore.getState().nodes.find((node) => node.type === 'group')?.id ?? '';
+        const before = useGraphStore.getState().revision;
+
+        useGraphStore.getState().beginTransaction();
+        useGraphStore.getState().onNodesChange([
+            {
+                id: regionId,
+                type: 'dimensions',
+                dimensions: { width: 880, height: 640 },
+                setAttributes: true,
+            },
+        ]);
+        useGraphStore.getState().commitTransaction();
+
+        expect(useGraphStore.getState().revision).toBeGreaterThan(before);
+
+        useGraphStore.getState().undo();
+        const region = useGraphStore.getState().nodes.find((node) => node.id === regionId);
+
+        expect(region?.width).toBe(620);
+    });
+
+    it('обмер узла браузером не считается правкой схемы', () => {
+        buildGraph();
+        const serviceId = useGraphStore.getState().nodes.find((node) => node.type === 'sd')?.id ?? '';
+        const before = useGraphStore.getState().revision;
+
+        useGraphStore.getState().onNodesChange([
+            { id: serviceId, type: 'dimensions', dimensions: { width: 210, height: 96 } },
+        ]);
+
+        expect(useGraphStore.getState().revision).toBe(before);
+        expect(toScheme({ meta: META, ...useGraphStore.getState() }).nodes.find((node) => node.id === serviceId)?.size)
+            .toBeUndefined();
     });
 
     it('сохраняет подпись связи и не пишет пустую', () => {

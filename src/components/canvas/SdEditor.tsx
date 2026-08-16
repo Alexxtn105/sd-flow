@@ -19,6 +19,7 @@ import { useUiStore } from '../../store/uiStore';
 import { useThemeContext } from '../../contexts/ThemeContext';
 import { useTouchContext } from '../../contexts/TouchContext';
 import { PALETTE_DRAG_TYPE } from '../panels/Palette/Palette';
+import { nodeDimensions } from '../../utils/nodeSize';
 import './SdEditor.css';
 import './ReactFlowTheme.css';
 
@@ -41,12 +42,6 @@ function absolutePosition(node: SdNodeModel, nodes: SdNodeModel[]): XYPosition {
     return { x, y };
 }
 
-function nodeSize(node: SdNodeModel): { width: number; height: number } {
-    const width = typeof node.style?.width === 'number' ? node.style.width : (node.measured?.width ?? 0);
-    const height = typeof node.style?.height === 'number' ? node.style.height : (node.measured?.height ?? 0);
-    return { width, height };
-}
-
 function containerAt(nodes: SdNodeModel[], point: XYPosition): SdNodeModel | null {
     const containers = nodes.filter((node) => node.type === 'group');
     let best: SdNodeModel | null = null;
@@ -54,7 +49,7 @@ function containerAt(nodes: SdNodeModel[], point: XYPosition): SdNodeModel | nul
 
     for (const container of containers) {
         const origin = absolutePosition(container, nodes);
-        const { width, height } = nodeSize(container);
+        const { width, height } = nodeDimensions(container);
         const inside =
             point.x >= origin.x && point.x <= origin.x + width && point.y >= origin.y && point.y <= origin.y + height;
         const area = width * height;
@@ -280,7 +275,7 @@ export default function SdEditor() {
             if (!model || model.type === 'group') return;
 
             const absolute = absolutePosition(model, nodes);
-            const size = nodeSize(model);
+            const size = nodeDimensions(model);
             const centre = { x: absolute.x + size.width / 2, y: absolute.y + size.height / 2 };
             const container = containerAt(nodes, centre);
 

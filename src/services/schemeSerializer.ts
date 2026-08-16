@@ -1,9 +1,18 @@
 import registry from '../engine/ComponentRegistry';
 import { syncIdCounter } from '../engine/ids';
 import { DEFAULT_POLICY, DEFAULT_SETTINGS, MODEL_VERSION } from '../engine/types/scheme';
-import type { SchemeEdge, SchemeMeta, SchemeNode, SchemeSettings, SchemeV1, SchemeViewport } from '../engine/types/scheme';
+import type {
+    SchemeEdge,
+    SchemeMeta,
+    SchemeNode,
+    SchemeSettings,
+    SchemeV1,
+    SchemeViewport,
+    Size,
+} from '../engine/types/scheme';
 import { sortNodesForFlow } from '../store/graphStore';
 import type { SdEdge, SdNode } from '../store/graphStore';
+import { nodeDimensions } from '../utils/nodeSize';
 
 interface SerializeInput {
     meta: SchemeMeta;
@@ -16,13 +25,11 @@ interface SerializeInput {
 
 const DEFAULT_VIEWPORT: SchemeViewport = { x: 0, y: 0, zoom: 1 };
 
-function nodeSize(node: SdNode): { width: number; height: number } | undefined {
-    const width = node.style?.width;
-    const height = node.style?.height;
-    if (typeof width === 'number' && typeof height === 'number') {
-        return { width, height };
-    }
-    return undefined;
+function nodeSize(node: SdNode): Size | undefined {
+    if (registry.getShape(node.data.componentType) !== 'container') return undefined;
+
+    const { width, height } = nodeDimensions(node);
+    return width > 0 && height > 0 ? { width, height } : undefined;
 }
 
 export function toScheme(input: SerializeInput): SchemeV1 {
@@ -77,7 +84,7 @@ function toFlowNode(node: SchemeNode): SdNode {
             params: { ...registry.getDefaultParams(node.type), ...node.params },
             label: node.label ?? '',
         },
-        ...(node.size ? { style: { width: node.size.width, height: node.size.height } } : {}),
+        ...(node.size ? { width: node.size.width, height: node.size.height } : {}),
         ...(node.parentId ? { parentId: node.parentId, extent: 'parent' as const } : {}),
     };
 }
