@@ -144,6 +144,7 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
             instances: runtime.instances,
             serviceSec: runtime.serviceSec,
             waitSec: runtime.queue.waitSec,
+            blockingSec: runtime.blockingSec,
             queueDepth: runtime.queue.queueDepth,
             errorRate: runtime.queue.failureProbability,
             retryAmplification: runtime.retryAmplification,

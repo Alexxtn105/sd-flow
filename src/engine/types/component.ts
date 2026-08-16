@@ -151,6 +151,7 @@ export interface NodeContext<P extends ComponentParams = ComponentParams> {
     writeShare: number;
     requestBytes: number;
     responseBytes: number;
+    blockingSec: number;
 }
 
 export interface CostContext<P extends ComponentParams = ComponentParams> extends NodeContext<P> {

@@ -28,6 +28,7 @@ function contextFor(type: string, mix: { readShare: number; writeShare: number }
         writeShare: mix.writeShare,
         requestBytes: 2000,
         responseBytes: 20000,
+        blockingSec: 0,
     };
 }
 

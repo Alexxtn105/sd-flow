@@ -107,6 +107,7 @@ export function deriveNodes(
                 writeShare: runtime.writeShare,
                 requestBytes: runtime.requestBytes,
                 responseBytes: runtime.responseBytes,
+                blockingSec: runtime.blockingSec,
                 writeRps: runtime.write,
                 recordBytes: recordBytesOf(node, runtime),
                 horizonDays: HORIZON_DAYS,

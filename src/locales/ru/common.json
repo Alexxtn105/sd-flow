@@ -614,6 +614,7 @@
     },
     "bound": {
         "authoritative-qps": "лимит авторитетного сервера",
+        "blocking": "ожидание зависимостей",
         "broker-network": "сеть брокера",
         "cardinality": "кардинальность",
         "commit-wait": "ожидание фиксации TrueTime",

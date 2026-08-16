@@ -141,6 +141,7 @@ export function computeCost(
             writeShare: runtime.writeShare,
             requestBytes: runtime.requestBytes,
             responseBytes: runtime.responseBytes,
+            blockingSec: runtime.blockingSec,
             pricing,
             storageGb: nodeDerived?.storage?.totalGb ?? 0,
             egressGbMonth: (nodeDerived?.egressGbDay ?? 0) * DAYS_PER_MONTH,

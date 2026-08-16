@@ -289,6 +289,7 @@ describe('ёмкость DLQ', () => {
             writeShare: 1,
             requestBytes: 4000,
             responseBytes: 200,
+            blockingSec: 0,
         };
 
         expect(model.capacity(context).capacity).toBeGreaterThan(50);

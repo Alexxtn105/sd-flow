@@ -18,6 +18,7 @@ export function referenceContext(definition: ComponentDefinition): NodeContext {
         writeShare: 1 - REFERENCE_READ_SHARE,
         requestBytes: REFERENCE_REQUEST_BYTES,
         responseBytes: REFERENCE_RESPONSE_BYTES,
+        blockingSec: 0,
     };
 }
 

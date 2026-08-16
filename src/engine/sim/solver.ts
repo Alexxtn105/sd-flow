@@ -8,7 +8,7 @@ import { retryAmplification, serviceVariabilityFromSigma, solveQueue } from './q
 import type { QueueResult } from './queueing';
 import { routingShares } from './routing';
 import type { RouteShare } from './routing';
-import { UNBOUNDED } from './resources';
+import { occupancyBound, UNBOUNDED } from './resources';
 
 const DAMPING = 0.5;
 const MAX_ITERATIONS = 50;
@@ -30,6 +30,7 @@ export interface OperationFlow {
 }
 
 export interface NodeRuntime {
+    blockingSec: number;
     lambdaNominal: number;
     lambdaOffered: number;
     throughput: number;
@@ -99,6 +100,7 @@ function addFlow(target: OperationFlow, source: OperationFlow): void {
 
 function idleRuntime(node: CompiledNode): NodeRuntime {
     return {
+        blockingSec: 0,
         lambdaNominal: 0,
         lambdaOffered: 0,
         throughput: 0,
@@ -273,14 +275,86 @@ function resolveCapacity(
     return { capacity: model.capacity(context), serviceSec: model.serviceSec(context) };
 }
 
+export const BLOCKING_RESOURCE = 'blocking';
+
+function withBlockingLimit(
+    capacity: CapacityResult,
+    pool: number,
+    serviceSec: number,
+    blockingSec: number,
+): CapacityResult {
+    if (pool <= 0 || blockingSec <= 0) return capacity;
+
+    const limit = occupancyBound(BLOCKING_RESOURCE, pool, serviceSec, blockingSec);
+    const limits = [...capacity.limits, limit];
+
+    return limit.value < capacity.capacity
+        ? { limits, capacity: limit.value, boundBy: limit.resource }
+        : { limits, capacity: capacity.capacity, boundBy: capacity.boundBy };
+}
+
 function serversOf(node: CompiledNode, instances: number): number {
-    const concurrency = Number(node.params.concurrencyPerInstance ?? node.params.concurrency ?? 0);
-    if (concurrency > 0) return instances * concurrency;
+    const pool = declaredPool(node, instances);
+    if (pool > 0) return pool;
 
     const cores = Number(node.params.cpuCores ?? 0);
     if (cores > 0) return Math.max(cores, 1);
 
     return 1;
+}
+
+function declaredPool(node: CompiledNode, instances: number): number {
+    const concurrency = Number(node.params.concurrencyPerInstance ?? node.params.concurrency ?? 0);
+    return concurrency > 0 ? instances * concurrency : 0;
+}
+
+function callsPerRequestOn(
+    edge: CompiledEdge,
+    source: NodeRuntime,
+    edgeFlows: ReadonlyMap<string, OperationFlow>,
+): number {
+    const flow = edgeFlows.get(edge.id);
+    if (flow && source.throughput > 0) return flow.total / source.throughput;
+
+    return edge.calls.reduce((sum, call) => sum + call.share * Math.max(call.fanout, 0), 0);
+}
+
+function legSec(edge: CompiledEdge, target: NodeRuntime | undefined): number {
+    if (!target) return 0;
+
+    const responseSec = target.serviceSec + target.queue.waitSec + target.blockingSec;
+    const leg = edge.networkMs / 1000 + responseSec;
+    const timeoutSec = edge.policy.timeoutMs / 1000;
+
+    return timeoutSec > 0 ? Math.min(leg, timeoutSec) : leg;
+}
+
+function blockingSecFor(
+    node: CompiledNode,
+    topology: CompiledTopology,
+    runtimes: ReadonlyMap<string, NodeRuntime>,
+    edgeFlows: ReadonlyMap<string, OperationFlow>,
+    source: NodeRuntime,
+): number {
+    const parallel = node.params.callMode === 'parallel';
+    let sequential = 0;
+    let slowest = 0;
+
+    for (const edgeId of node.outgoing) {
+        const edge = topology.edgeById.get(edgeId);
+        if (!edge || edge.isAsync || edge.isReplication) continue;
+
+        const calls = callsPerRequestOn(edge, source, edgeFlows);
+        if (calls <= 0) continue;
+
+        const leg = legSec(edge, runtimes.get(edge.target));
+        if (leg <= 0) continue;
+
+        sequential += calls * leg;
+        slowest = Math.max(slowest, leg);
+    }
+
+    return parallel ? slowest : sequential;
 }
 
 function arrivalVariabilityFor(node: CompiledNode, base: number): number {
@@ -361,6 +435,8 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
             const writeShare = 1 - readShare;
             const bytes = averageBytes(node, topology, arrived, flows, payloadScale);
 
+            const blockingSec = blockingSecFor(node, topology, previous, edgeFlows, priorRuntime);
+
             const baseContext: NodeContext<ComponentParams> = {
                 nodeId: node.id,
                 params: node.params,
@@ -370,6 +446,7 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
                 writeShare,
                 requestBytes: bytes.requestBytes,
                 responseBytes: bytes.responseBytes,
+                blockingSec,
             };
 
             const model = node.definition.model;
@@ -381,8 +458,9 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
 
             const serviceScale = options.serviceScale?.get(node.id) ?? 1;
             const serviceSec = nominalServiceSec * serviceScale;
+            const bounded = withBlockingLimit(capacity, declaredPool(node, instances), serviceSec, blockingSec);
             const effectiveCapacity =
-                (capacity.capacity * (options.capacityScale?.get(node.id) ?? 1)) / serviceScale;
+                (bounded.capacity * (options.capacityScale?.get(node.id) ?? 1)) / serviceScale;
 
             const cacheProfile = cacheEnabled && model?.cache ? model.cache(context) : null;
             const cacheResult = cacheProfile
@@ -418,6 +496,7 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
             });
 
             const runtime: NodeRuntime = {
+                blockingSec,
                 lambdaNominal,
                 lambdaOffered,
                 throughput: queue.throughput,
@@ -431,8 +510,8 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
                 desiredInstances,
                 serviceSec,
                 capacity: effectiveCapacity,
-                boundBy: capacity.boundBy,
-                limits: capacity.limits,
+                boundBy: bounded.boundBy,
+                limits: bounded.limits,
                 queue,
                 queueLimit,
                 timeoutSec,
@@ -515,15 +594,26 @@ function maxRelativeChange(
     previous: Map<string, NodeRuntime>,
     current: Map<string, NodeRuntime>,
 ): number {
+    return Math.max(
+        relativeChange(previous, current, (runtime) => runtime.lambdaNominal),
+        relativeChange(previous, current, (runtime) => runtime.blockingSec),
+    );
+}
+
+function relativeChange(
+    previous: Map<string, NodeRuntime>,
+    current: Map<string, NodeRuntime>,
+    pick: (runtime: NodeRuntime) => number,
+): number {
     let peak = 0;
     let largest = 0;
 
-    for (const runtime of current.values()) largest = Math.max(largest, runtime.lambdaNominal);
+    for (const runtime of current.values()) largest = Math.max(largest, pick(runtime));
     if (largest <= 0) return 0;
 
     for (const [nodeId, runtime] of current) {
-        const before = previous.get(nodeId)?.lambdaNominal ?? 0;
-        peak = Math.max(peak, Math.abs(runtime.lambdaNominal - before));
+        const before = previous.get(nodeId);
+        peak = Math.max(peak, Math.abs(pick(runtime) - (before ? pick(before) : 0)));
     }
 
     return peak / largest;

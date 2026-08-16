@@ -39,6 +39,20 @@ export function littleLaw(resource: string, servers: number, serviceSec: number)
     );
 }
 
+export function occupancyBound(
+    resource: string,
+    servers: number,
+    serviceSec: number,
+    blockingSec: number,
+): ResourceLimit {
+    return resourceLimit(
+        resource,
+        servers / positive(serviceSec + blockingSec),
+        'servers / (S + Sdeps)',
+        { servers, S: serviceSec, Sdeps: blockingSec },
+    );
+}
+
 export function explicitRps(resource: string, instances: number, rpsPerInstance: number): ResourceLimit {
     return resourceLimit(
         resource,

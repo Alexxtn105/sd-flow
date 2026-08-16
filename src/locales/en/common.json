@@ -614,6 +614,7 @@
     },
     "bound": {
         "authoritative-qps": "authoritative server limit",
+        "blocking": "waiting on dependencies",
         "broker-network": "broker network",
         "cardinality": "cardinality",
         "commit-wait": "TrueTime commit wait",

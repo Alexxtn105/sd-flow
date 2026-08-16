@@ -146,6 +146,7 @@ export interface NodeResult {
     instances: number;
     serviceSec: number;
     waitSec: number;
+    blockingSec: number;
     queueDepth: number;
     errorRate: number;
     retryAmplification: number;

@@ -122,7 +122,7 @@ const serviceModel = defineModel<typeof serviceDefaults>({
 
         const serviceSec = ctx.params.serviceTimeMs / 1000;
         const perInstance = Math.min(
-            ctx.params.concurrencyPerInstance / serviceSec,
+            ctx.params.concurrencyPerInstance / (serviceSec + ctx.blockingSec),
             ctx.params.cpuCores / (serviceSec * ctx.params.cpuShare),
         );
         const target = Math.max(ctx.params.autoscaleTargetUtilization, 0.05);
