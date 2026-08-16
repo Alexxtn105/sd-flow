@@ -84,6 +84,7 @@ const HOT_KEY_SHARE = 0.4;
 const SLOW_DEPENDENCY_FACTOR = 25;
 const POISON_SHARE = 0.01;
 const DEFAULT_FAILOVER_SEC = 60;
+const DEFAULT_AZ_SPREAD = 3;
 const SPLIT_BRAIN_PARTITION_SEC = 120;
 
 const MINUTE_SEC = 60;
@@ -129,6 +130,18 @@ function consumers(topology: CompiledTopology): CompiledNode[] {
     return trafficNodes(topology).filter((node) =>
         node.incoming.some((edgeId) => topology.edgeById.get(edgeId)?.isAsync === true),
     );
+}
+
+export function azSurvivalShare(node: CompiledNode): number {
+    if (node.params.multiAz === true) return 1;
+
+    const units = Number(node.params.instances ?? node.params.nodes ?? node.params.brokers ?? 0);
+    if (!Number.isFinite(units) || units <= 0) return 1;
+
+    const declared = Number(node.params.azSpread ?? DEFAULT_AZ_SPREAD);
+    const spread = Math.min(Math.max(Number.isFinite(declared) ? declared : DEFAULT_AZ_SPREAD, 1), units);
+
+    return (spread - 1) / spread;
 }
 
 export function shardCountOf(node: CompiledNode): number {
@@ -341,7 +354,19 @@ export function buildScenario(topology: CompiledTopology, id: string): ScenarioS
 
     if (scenario === 'az-failure') {
         const az = firstContainerOf(topology, 'az');
-        if (az) setup.disabledNodes = nodesInsideContainer(topology, az);
+
+        if (az) {
+            setup.disabledNodes = nodesInsideContainer(topology, az);
+            return setup;
+        }
+
+        for (const node of trafficNodes(topology)) {
+            const survival = azSurvivalShare(node);
+
+            if (survival <= 0) setup.disabledNodes.add(node.id);
+            else if (survival < 1) setup.capacityScale.set(node.id, survival);
+        }
+
         return setup;
     }
 

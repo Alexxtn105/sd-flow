@@ -96,7 +96,11 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
     const converged = run.converged;
 
     const pricing = pricingFor(scheme.settings.pricingProfile);
-    const derived = deriveNodes(topology, solved.nodes, solved.edges);
+    const intact =
+        setup.disabledNodes.size > 0
+            ? solveScheme(topology, flows, { ...solveOptions, disabledNodes: new Set<string>() }).runtime
+            : solved;
+    const derived = deriveNodes(topology, solved.nodes, solved.edges, intact.nodes);
     const cost = computeCost(topology, solved.nodes, derived, solved.edges, pricing, placement.plans);
     const availability = computeAvailability(topology, solved.nodes);
     const consistency = analyseConsistency(

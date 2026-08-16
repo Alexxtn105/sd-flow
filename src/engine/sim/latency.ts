@@ -587,6 +587,19 @@ export function rollUpLatency(
             let failed = false;
             let timedOut = false;
 
+            if (runtimes.get(edge.target)?.down === true) {
+                const attempts = edge.policy.circuitBreaker ? 1 : edge.policy.retries + 1;
+                const waitSec = timeoutSec > 0 ? timeoutSec : networkSec;
+
+                for (let tryIndex = 0; tryIndex < attempts; tryIndex += 1) {
+                    elapsed += waitSec;
+                    site.networkSec += waitSec;
+                    record(siteIndex, waitSec);
+                }
+
+                return { seconds: elapsed, failed: true, timedOut: timeoutSec > 0 };
+            }
+
             for (let tryIndex = 0; tryIndex <= edge.policy.retries; tryIndex += 1) {
                 if (tryIndex > 0) {
                     const backoffSec = BACKOFF_BASE_SEC * Math.pow(2, tryIndex - 1);

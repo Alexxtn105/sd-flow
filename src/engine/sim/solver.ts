@@ -35,6 +35,7 @@ export interface OperationFlow {
 }
 
 export interface NodeRuntime {
+    down: boolean;
     blockingSec: number;
     lambdaNominal: number;
     lambdaOffered: number;
@@ -121,6 +122,7 @@ function addFlow(target: OperationFlow, source: OperationFlow): void {
 
 function idleRuntime(node: CompiledNode): NodeRuntime {
     return {
+        down: false,
         blockingSec: 0,
         lambdaNominal: 0,
         lambdaOffered: 0,
@@ -518,14 +520,26 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
             const priorRuntime = previous.get(node.id) ?? idleRuntime(node);
 
             if (disabledNodes.has(node.id)) {
+                const lostReadShare = arrived.total > 0 ? arrived.read / arrived.total : 1;
+
                 current.set(node.id, {
                     ...idleRuntime(node),
+                    down: true,
                     lambdaNominal: arrived.total,
                     lambdaOffered: arrived.total,
-                    instances: 0,
-                    desiredInstances: 0,
+                    readShare: lostReadShare,
+                    writeShare: 1 - lostReadShare,
                     capacity: 0,
                     boundBy: 'disabled',
+                    queue: {
+                        utilization: 0,
+                        waitSec: 0,
+                        queueDepth: 0,
+                        throughput: 0,
+                        overflowProbability: arrived.total > 0 ? 1 : 0,
+                        timeoutProbability: 0,
+                        failureProbability: arrived.total > 0 ? 1 : 0,
+                    },
                 });
 
                 for (const edgeId of node.outgoing) edgeFlows.set(edgeId, emptyFlow());
@@ -612,6 +626,7 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
             });
 
             const runtime: NodeRuntime = {
+                down: false,
                 blockingSec,
                 lambdaNominal,
                 lambdaOffered,

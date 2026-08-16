@@ -48,6 +48,11 @@ export function buildFindings(input: FindingInput): Finding[] {
         const runtime = runtimes.get(node.id);
         if (!runtime || runtime.lambdaOffered <= 0) continue;
 
+        if (runtime.down) {
+            push('node-down', 'error', [node.id], [], { lostRps: runtime.lambdaNominal });
+            continue;
+        }
+
         if (runtime.boundBy === 'unmodelled') {
             push('unmodelled', 'info', [node.id], [], {});
             continue;

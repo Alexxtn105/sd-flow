@@ -103,6 +103,7 @@ export function deriveNodes(
     topology: CompiledTopology,
     runtimes: Map<string, NodeRuntime>,
     edgeFlows: Map<string, OperationFlow>,
+    intactRuntimes: Map<string, NodeRuntime> = runtimes,
 ): Map<string, DerivedNode> {
     const egressByNode = new Map<string, number>();
     const idempotencyByNode = new Map<string, number>();
@@ -137,21 +138,22 @@ export function deriveNodes(
         if (!runtime) continue;
 
         const model = node.definition.model;
+        const stored = intactRuntimes.get(node.id) ?? runtime;
         let storage: StorageResult | null = null;
 
         if (model?.storage) {
             const context: StorageContext<ComponentParams> = {
                 nodeId: node.id,
                 params: node.params,
-                instances: runtime.instances,
-                lambda: runtime.lambdaNominal,
-                readShare: runtime.readShare,
-                writeShare: runtime.writeShare,
-                requestBytes: runtime.requestBytes,
-                responseBytes: runtime.responseBytes,
-                blockingSec: runtime.blockingSec,
-                writeRps: runtime.write,
-                recordBytes: recordBytesOf(node, runtime),
+                instances: stored.instances,
+                lambda: stored.lambdaNominal,
+                readShare: stored.readShare,
+                writeShare: stored.writeShare,
+                requestBytes: stored.requestBytes,
+                responseBytes: stored.responseBytes,
+                blockingSec: stored.blockingSec,
+                writeRps: stored.write,
+                recordBytes: recordBytesOf(node, stored),
                 horizonDays: HORIZON_DAYS,
             };
             storage = model.storage(context);
