@@ -5,11 +5,13 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 import ruCommon from './ru/common.json';
 import ruBlocks from './ru/blocks.json';
 import ruGroups from './ru/groups.json';
+import ruNodes from './ru/nodes.json';
 import ruParams from './ru/params.json';
 
 import enCommon from './en/common.json';
 import enBlocks from './en/blocks.json';
 import enGroups from './en/groups.json';
+import enNodes from './en/nodes.json';
 import enParams from './en/params.json';
 
 export interface LanguageOption {
@@ -26,8 +28,8 @@ i18n.use(LanguageDetector)
     .use(initReactI18next)
     .init({
         resources: {
-            ru: { common: ruCommon, blocks: ruBlocks, groups: ruGroups, params: ruParams },
-            en: { common: enCommon, blocks: enBlocks, groups: enGroups, params: enParams },
+            ru: { common: ruCommon, blocks: ruBlocks, groups: ruGroups, nodes: ruNodes, params: ruParams },
+            en: { common: enCommon, blocks: enBlocks, groups: enGroups, nodes: enNodes, params: enParams },
         },
         defaultNS: 'common',
         fallbackLng: 'ru',

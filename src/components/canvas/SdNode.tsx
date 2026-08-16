@@ -11,6 +11,7 @@ import { useNodeResult, useSimStore } from '../../store/simStore';
 import { useUiStore } from '../../store/uiStore';
 import { formatParamValue, formatPercent, formatRps, utilizationLevel } from '../../utils/format';
 import { heatLevel, heatValueOf } from '../../utils/heatmap';
+import { blockName, nodeName } from '../../utils/nodeName';
 import { useHandleCompatibility } from './useHandleCompatibility';
 import type { HandleCompatibility, HandleDirection } from './useHandleCompatibility';
 import './SdNode.css';
@@ -42,7 +43,7 @@ function renderHandles(
 }
 
 function SdNodeView({ id, data, selected }: NodeProps<SdNodeType>) {
-    const { t } = useTranslation(['params', 'blocks', 'groups', 'common']);
+    const { t } = useTranslation(['params', 'blocks', 'groups', 'nodes', 'common']);
     const updateNodeParam = useGraphStore((state) => state.updateNodeParam);
     const metrics = useNodeResult(id);
     const heatmapProbeId = useUiStore((state) => state.heatmapProbeId);
@@ -56,8 +57,10 @@ function SdNodeView({ id, data, selected }: NodeProps<SdNodeType>) {
     const definition = registry.get(data.componentType);
     if (!definition) return null;
 
-    const displayName = data.label || t(data.componentType, { ns: 'blocks', defaultValue: data.componentType });
-    const groupName = t(definition.group, { ns: 'groups', defaultValue: definition.group });
+    const typeName = blockName(data.componentType, t);
+    const displayName = nodeName({ id, componentType: data.componentType, label: data.label }, t);
+    const kindName =
+        displayName === typeName ? t(definition.group, { ns: 'groups', defaultValue: definition.group }) : typeName;
     const entries = Object.entries(data.params).slice(0, MAX_VISIBLE_PARAMS);
     const hiddenCount = Object.keys(data.params).length - entries.length;
 
@@ -152,7 +155,7 @@ function SdNodeView({ id, data, selected }: NodeProps<SdNodeType>) {
                 </span>
                 <span className="sd-node-title">
                     <span className="sd-node-name">{displayName}</span>
-                    <span className="sd-node-group">{groupName}</span>
+                    <span className="sd-node-kind">{kindName}</span>
                 </span>
             </div>
 

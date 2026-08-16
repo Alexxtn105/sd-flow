@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import enBlocks from '../../src/locales/en/blocks.json';
 import enCommon from '../../src/locales/en/common.json';
 import enGroups from '../../src/locales/en/groups.json';
+import enNodes from '../../src/locales/en/nodes.json';
 import enParams from '../../src/locales/en/params.json';
 import ruBlocks from '../../src/locales/ru/blocks.json';
 import ruCommon from '../../src/locales/ru/common.json';
 import ruGroups from '../../src/locales/ru/groups.json';
+import ruNodes from '../../src/locales/ru/nodes.json';
 import ruParams from '../../src/locales/ru/params.json';
 
 type Dictionary = Record<string, unknown>;
@@ -14,6 +16,7 @@ const RU: Record<string, Dictionary> = {
     blocks: ruBlocks,
     common: ruCommon,
     groups: ruGroups,
+    nodes: ruNodes,
     params: ruParams,
 };
 
@@ -21,6 +24,7 @@ const EN: Record<string, Dictionary> = {
     blocks: enBlocks,
     common: enCommon,
     groups: enGroups,
+    nodes: enNodes,
     params: enParams,
 };
 

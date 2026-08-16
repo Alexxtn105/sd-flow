@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import Histogram from '../common/Histogram/Histogram';
@@ -14,6 +14,7 @@ import type {
     TimelineNodeSample,
 } from '../../engine/sim/types';
 import type { ComponentParams } from '../../engine/types/component';
+import useNodeLabels from '../../hooks/useNodeLabels';
 import { useGraphStore } from '../../store/graphStore';
 import { useSimStore } from '../../store/simStore';
 import { useUiStore } from '../../store/uiStore';
@@ -370,26 +371,11 @@ function ProbeWindowCard({ probeId, reading, title, params, index, waterfall, ti
 }
 
 export default function ProbeWindows() {
-    const { t } = useTranslation(['blocks', 'common']);
     const nodes = useGraphStore((state) => state.nodes);
     const result = useSimStore((state) => state.result);
     const probeWindowIds = useUiStore((state) => state.probeWindowIds);
 
-    const labels = useMemo(() => {
-        const map = new Map<string, string>();
-
-        for (const node of nodes) {
-            const fallback = t(node.data.componentType, {
-                ns: 'blocks',
-                defaultValue: node.data.componentType,
-            });
-            map.set(node.id, node.data.label || fallback);
-        }
-
-        return map;
-    }, [nodes, t]);
-
-    const labelOf = useCallback((nodeId: string) => labels.get(nodeId) ?? nodeId, [labels]);
+    const labelOf = useNodeLabels();
 
     const windows = probeWindowIds
         .map((probeId) => ({ node: nodes.find((item) => item.id === probeId), reading: result?.probes[probeId] ?? null }))

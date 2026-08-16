@@ -1,5 +1,6 @@
 import i18n from '../locales/i18n';
 import { formatDateTime, formatNumber, formatPercent, formatRps } from '../utils/format';
+import { nodeName } from '../utils/nodeName';
 import type { EdgeResult, Finding, FlowResult, NodeResult, SimResult } from '../engine/sim/types';
 import type { SchemeEdge, SchemeNode, SchemeV1 } from '../engine/types/scheme';
 
@@ -25,7 +26,7 @@ function nodeLabels(scheme: SchemeV1, t: Translate): Map<string, string> {
     return new Map(
         scheme.nodes.map((node: SchemeNode) => [
             node.id,
-            node.label || t(`blocks:${node.type}`, { defaultValue: node.type }),
+            nodeName({ id: node.id, componentType: node.type, label: node.label }, t),
         ]),
     );
 }

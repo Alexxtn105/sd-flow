@@ -8,11 +8,12 @@ import type { SdNode } from '../../store/graphStore';
 import { useProbeReading } from '../../store/simStore';
 import { useUiStore } from '../../store/uiStore';
 import { formatNumber } from '../../utils/format';
+import { nodeName } from '../../utils/nodeName';
 import { useHandleCompatibility } from './useHandleCompatibility';
 import './ProbeNode.css';
 
 function ProbeNodeView({ id, data, selected }: NodeProps<SdNode>) {
-    const { t } = useTranslation(['blocks', 'common']);
+    const { t } = useTranslation(['blocks', 'nodes', 'common']);
     const definition = registry.get(data.componentType);
     const reading = useProbeReading(id);
     const opened = useUiStore((state) => state.probeWindowIds.includes(id));
@@ -21,7 +22,7 @@ function ProbeNodeView({ id, data, selected }: NodeProps<SdNode>) {
 
     if (!definition) return null;
 
-    const name = data.label || t(data.componentType, { ns: 'blocks', defaultValue: data.componentType });
+    const name = nodeName({ id, componentType: data.componentType, label: data.label }, t);
     const status = reading?.status ?? 'no-data';
     const unit = reading ? t(`probe.unit.${reading.unit}`, { ns: 'common', defaultValue: '' }) : '';
 

@@ -189,12 +189,12 @@ describe('отчёт в Markdown', () => {
             '| Блок | Тип | Инстансы | λ, запр./с | Ёмкость, запр./с | Ограничитель | Утилизация | Обслуживание + ожидание, мс | Стоимость, $/мес |',
         );
         expect(report).toContain('| PostgreSQL | PostgreSQL | 1 | 1.2k | 900 | IOPS диска | 135.0% | 420 | 1520 |');
-        expect(report).toContain('| API-шлюз | API-шлюз | 4 | 1.0k | 4.0k | число соединений | 62.0% | 21 | 100 |');
+        expect(report).toContain('| Шлюз | API-шлюз | 4 | 1.0k | 4.0k | число соединений | 62.0% | 21 | 100 |');
     });
 
     it('таблица связей показывает трафик каждого ребра', () => {
         expect(report).toContain('| Связь | Характер | RPS | Трафик, МБ/с | Сеть, мс | Область | Отставание, с |');
-        expect(report).toContain('| Веб-клиенты → API-шлюз | Синхронная | 1.0k | 2 | 24 | интернет | 0 |');
+        expect(report).toContain('| Веб-клиенты → Шлюз | Синхронная | 1.0k | 2 | 24 | интернет | 0 |');
         expect(report).toContain('| Сервис → PostgreSQL | Синхронная | 1.2k | 2 | 1.5 | внутри зоны | 0.2 |');
     });
 
@@ -202,7 +202,7 @@ describe('отчёт в Markdown', () => {
         expect(report).toContain(
             '- **Ошибка** — Перегружен: PostgreSQL загружен на 135% и упирается в IOPS диска при ёмкости 900 запр./с',
         );
-        expect(report).toContain('- **Предупреждение** — Единая точка отказа: API-шлюз без резерва');
+        expect(report).toContain('- **Предупреждение** — Единая точка отказа: Шлюз без резерва');
     });
 
     it('заканчивается блоком допущений со ссылкой на модель', () => {
@@ -222,5 +222,7 @@ describe('отчёт в Markdown', () => {
             expect(english).toContain(section);
         }
         expect(english).not.toContain('Сводка');
+        expect(english).toContain('| Gateway | API gateway |');
+        expect(english).not.toContain('| Шлюз |');
     });
 });

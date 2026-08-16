@@ -1,11 +1,11 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Icon from '../../common/Icons/Icon';
 import ResizeHandle from '../../common/ResizeHandle/ResizeHandle';
 import Waterfall from '../../common/Waterfall/Waterfall';
 import Timeline from './Timeline';
 import type { Finding } from '../../../engine/sim/types';
-import { useGraphStore } from '../../../store/graphStore';
+import useNodeLabels from '../../../hooks/useNodeLabels';
 import { useSimStore } from '../../../store/simStore';
 import { useUiStore } from '../../../store/uiStore';
 import { formatNumber } from '../../../utils/format';
@@ -52,25 +52,10 @@ export default function Dashboard() {
     const focusWaterfall = useSimStore((state) => state.focusWaterfall);
     const [percentile, setPercentile] = useState<WaterfallPercentile>('p99');
 
-    const nodes = useGraphStore((state) => state.nodes);
     const setSelection = useUiStore((state) => state.setSelection);
     const height = useUiStore((state) => state.panels.dashboard);
 
-    const labels = useMemo(() => {
-        const map = new Map<string, string>();
-
-        for (const node of nodes) {
-            const fallback = t(node.data.componentType, {
-                ns: 'blocks',
-                defaultValue: node.data.componentType,
-            });
-            map.set(node.id, node.data.label || fallback);
-        }
-
-        return map;
-    }, [nodes, t]);
-
-    const labelOf = useCallback((nodeId: string) => labels.get(nodeId) ?? nodeId, [labels]);
+    const labelOf = useNodeLabels();
 
     const findingText = useCallback(
         (finding: Finding): string => {

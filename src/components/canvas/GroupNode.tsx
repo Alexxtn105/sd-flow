@@ -6,6 +6,7 @@ import Icon from '../common/Icons/Icon';
 import registry from '../../engine/ComponentRegistry';
 import { useGraphStore } from '../../store/graphStore';
 import type { SdNode } from '../../store/graphStore';
+import { blockName, roleName } from '../../utils/nodeName';
 import './GroupNode.css';
 
 const MIN_SIZE: Record<string, { width: number; height: number }> = {
@@ -13,16 +14,16 @@ const MIN_SIZE: Record<string, { width: number; height: number }> = {
     az: { width: 200, height: 180 },
 };
 
-function GroupNodeView({ data, selected }: NodeProps<SdNode>) {
-    const { t } = useTranslation(['blocks', 'params']);
+function GroupNodeView({ id, data, selected }: NodeProps<SdNode>) {
+    const { t } = useTranslation(['blocks', 'nodes', 'params']);
     const beginTransaction = useGraphStore((state) => state.beginTransaction);
     const commitTransaction = useGraphStore((state) => state.commitTransaction);
     const definition = registry.get(data.componentType);
     if (!definition) return null;
 
-    const kindName = t(data.componentType, { ns: 'blocks', defaultValue: data.componentType });
+    const kindName = blockName(data.componentType, t);
     const code = typeof data.params.code === 'string' ? data.params.code : '';
-    const title = data.label || code || kindName;
+    const title = data.label || code || roleName(id, t) || kindName;
     const minSize = MIN_SIZE[data.componentType] ?? { width: 200, height: 160 };
 
     return (
