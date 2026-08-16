@@ -1183,7 +1183,7 @@ const schedulerQueueModel = defineModel<typeof schedulerQueueDefaults>({
         littleLaw('depth', ctx.params.pendingJobs, schedulerAverageDelaySec(ctx.params)),
         memoryResidencyBound(
             'memory',
-            ctx.params.memoryGb * SCHEDULER_MEMORY_SHARE,
+            ctx.instances * ctx.params.memoryGb * SCHEDULER_MEMORY_SHARE,
             (schedulerJobBytes(ctx.params) * schedulerAverageDelaySec(ctx.params)) / 1e9,
         ),
     ],

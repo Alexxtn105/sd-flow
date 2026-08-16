@@ -74,7 +74,7 @@ export default function ParamInput({
                     value={numeric}
                     min={field.min}
                     max={field.max}
-                    step={field.step ?? 'any'}
+                    step={field.step ?? 1}
                     disabled={disabled}
                     onChange={(event) => {
                         const parsed = Number.parseFloat(event.target.value);

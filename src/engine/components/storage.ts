@@ -783,6 +783,7 @@ const hdfs = defineComponent({
 });
 
 const ftpLegacyDefaults = {
+    instances: 1,
     throughputMbs: 100,
     perSessionMbs: 10,
     concurrency: 50,
@@ -807,8 +808,12 @@ function ftpLegacyServiceSec(params: typeof ftpLegacyDefaults): number {
 const ftpLegacyModel = defineModel<typeof ftpLegacyDefaults>({
     serviceSec: (ctx) => ftpLegacyServiceSec(ctx.params),
     resources: (ctx) => [
-        littleLaw('concurrency', ctx.params.concurrency, ftpLegacyServiceSec(ctx.params)),
-        bandwidthBound('throughput', ctx.params.throughputMbs * 8, ftpLegacyFileBytes(ctx.params)),
+        littleLaw('concurrency', ctx.instances * ctx.params.concurrency, ftpLegacyServiceSec(ctx.params)),
+        bandwidthBound(
+            'throughput',
+            ctx.instances * ctx.params.throughputMbs * 8,
+            ftpLegacyFileBytes(ctx.params),
+        ),
     ],
     storage: (ctx) => {
         const growthGbDay = (ctx.writeRps * SECONDS_PER_DAY * ftpLegacyFileBytes(ctx.params)) / 1e9;
@@ -840,7 +845,7 @@ const ftpLegacyModel = defineModel<typeof ftpLegacyDefaults>({
     },
     cost: (ctx) =>
         totalCost({
-            compute: ctx.params.costPerInstanceHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
+            compute: ctx.instances * ctx.params.costPerInstanceHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
             storage: ctx.storageGb * ctx.params.costPerGbMonth,
             network: 0,
             requests: 0,
@@ -857,6 +862,7 @@ const ftpLegacy = defineComponent({
     ports: FILE_PORTS,
     defaultParams: ftpLegacyDefaults,
     paramSchema: {
+        instances: num('scale', { min: 1, max: 200, realistic: { min: 1, max: 8 } }),
         throughputMbs: num('capacity', { min: 1, max: 100000, realistic: { min: 10, max: 1000 } }),
         perSessionMbs: num('capacity', { min: 0.1, max: 10000, step: 0.1, realistic: { min: 1, max: 100 } }),
         concurrency: num('capacity', { min: 1, max: 100000, realistic: { min: 10, max: 500 } }),

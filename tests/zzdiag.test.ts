@@ -1,54 +1,42 @@
-import { appendFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { beforeAll, describe, it } from 'vitest';
 import registry from '../src/engine/ComponentRegistry';
 import initComponents from '../src/engine/initComponents';
-import { simulate } from '../src/engine/sim/simulate';
-import { sampleGroups } from '../src/data/sampleSchemes';
-import type { SchemeV1 } from '../src/engine/types/scheme';
 
 beforeAll(() => {
     registry.reset();
     initComponents();
 });
 
-function doubled(scheme: SchemeV1): SchemeV1 {
-    return {
-        ...scheme,
-        nodes: scheme.nodes.map((node) => {
-            const dau = node.params.dau;
-            const rps = node.params.rps;
-            if (typeof dau === 'number') return { ...node, params: { ...node.params, dau: dau * 2 } };
-            if (typeof rps === 'number') return { ...node, params: { ...node.params, rps: rps * 2 } };
-
-            return node;
-        }),
-    };
-}
-
 describe('diag', () => {
-    it('S-1 монотонность', () => {
-        writeFileSync('/tmp/sdf-diag.txt', '');
-        let breaches = 0;
+    it('кто не растёт от инстансов', () => {
+        const lines: string[] = [];
 
-        for (const group of sampleGroups()) {
-            for (const sample of group.items) {
-                const base = simulate(sample.build(), { sampleCount: 100 });
-                const heavy = simulate(doubled(sample.build()), { sampleCount: 100 });
+        for (const definition of registry.list()) {
+            const defaults = registry.getDefaultParams(definition.id);
+            if (definition.shape !== 'node' || !definition.model || typeof defaults.instances !== 'number') continue;
 
-                for (const [id, node] of Object.entries(base.nodes)) {
-                    const other = heavy.nodes[id];
-                    if (!other) continue;
-                    if (other.throughput + 1e-6 < node.throughput * 0.999) {
-                        breaches += 1;
-                        appendFileSync(
-                            '/tmp/sdf-diag.txt',
-                            `${sample.id}/${id}: поток ${node.throughput.toFixed(2)} → ${other.throughput.toFixed(2)} · hit ${(node.hitRatio ?? -1).toFixed(3)} → ${(other.hitRatio ?? -1).toFixed(3)} · util ${node.utilization.toFixed(4)} → ${other.utilization.toFixed(4)}\n`,
-                        );
-                    }
-                }
+            const capacity = (instances: number) =>
+                definition.model!.capacity({
+                    nodeId: 'node',
+                    params: { ...defaults, instances },
+                    instances,
+                    lambda: 1000,
+                    readShare: 0.8,
+                    writeShare: 0.2,
+                    requestBytes: 500,
+                    responseBytes: 2000,
+                    blockingSec: 0,
+                });
+
+            const single = capacity(1);
+            const double = capacity(2);
+
+            if (double.capacity <= single.capacity) {
+                lines.push(`${definition.id}: ${single.capacity.toFixed(0)} (${single.boundBy}) → ${double.capacity.toFixed(0)} (${double.boundBy})`);
             }
         }
 
-        appendFileSync('/tmp/sdf-diag.txt', `нарушений монотонности: ${breaches}\n`);
+        writeFileSync('/tmp/sdf-diag.txt', `${lines.join('\n')}\n`);
     }, 600_000);
 });

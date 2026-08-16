@@ -56,6 +56,20 @@ describe('шкала слайдера', () => {
         expect(fromSlider(scale, -100)).toBe(0);
     });
 
+    it('без объявленного шага значение остаётся целым', () => {
+        const counted = sliderScaleOf(numberField({ min: 1, max: 40 }), 3)!;
+
+        for (const position of [1, 7, 123, 456, 789, SLIDER_STEPS - 1]) {
+            const value = fromSlider(counted, position);
+
+            expect(Number.isInteger(value)).toBe(true);
+        }
+
+        const wide = sliderScaleOf(numberField({ min: 1, max: 5_000_000_000 }), 2_000_000)!;
+
+        expect(Number.isInteger(fromSlider(wide, 421))).toBe(true);
+    });
+
     it('позиция не выпадает за пределы даже для значения вне шкалы', () => {
         const scale = { min: 10, max: 20, log: false, step: 1 };
 

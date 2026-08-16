@@ -33,7 +33,7 @@ export function toSlider(scale: SliderScale, value: number): number {
 }
 
 function roundToStep(value: number, step: number | null): number {
-    if (step === null || step <= 0) return Number(value.toPrecision(3));
+    if (step === null || step <= 0) return Math.round(value);
 
     const rounded = Math.round(value / step) * step;
     const decimals = Math.max(0, Math.ceil(-Math.log10(step)));

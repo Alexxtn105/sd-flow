@@ -20,9 +20,11 @@ export interface LanguageOption {
 }
 
 export const LANGUAGES: LanguageOption[] = [
-    { code: 'ru', label: 'Русский' },
     { code: 'en', label: 'English' },
+    { code: 'ru', label: 'Русский' },
 ];
+
+export const DEFAULT_LANGUAGE = 'en';
 
 i18n.use(LanguageDetector)
     .use(initReactI18next)
@@ -32,7 +34,7 @@ i18n.use(LanguageDetector)
             en: { common: enCommon, blocks: enBlocks, groups: enGroups, nodes: enNodes, params: enParams },
         },
         defaultNS: 'common',
-        fallbackLng: 'ru',
+        fallbackLng: DEFAULT_LANGUAGE,
         react: { useSuspense: false },
         supportedLngs: LANGUAGES.map((language) => language.code),
         nonExplicitSupportedLngs: true,
@@ -43,5 +45,14 @@ i18n.use(LanguageDetector)
             caches: ['localStorage'],
         },
     });
+
+function syncDocumentLanguage(language: string): void {
+    if (typeof document === 'undefined') return;
+
+    document.documentElement.lang = language;
+}
+
+syncDocumentLanguage(i18n.resolvedLanguage ?? DEFAULT_LANGUAGE);
+i18n.on('languageChanged', syncDocumentLanguage);
 
 export default i18n;

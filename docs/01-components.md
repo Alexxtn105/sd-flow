@@ -183,6 +183,29 @@ p99(L) = median · e^(2.3263 · σ)   при σ = 0.8 → 6.43 × медианы
 > первый — в число соединений и память, второй — в стоимость egress. Это лечит главную ошибку новичка
 > «всё меряется в RPS».
 
+### 2.1. Сколько единиц у блока
+
+Блок, за который платят почасово, обязан говорить, **сколько его**: без этого счёт нельзя ни
+посчитать, ни уменьшить. Имя счётчика зависит от природы блока — `instances` у пулов, `nodes` у
+кластеров, `brokers` у брокеров, `workers` у Trino, `regionServers` у HBase, `replicaSetSize` ×
+`shardCount` у MongoDB, `cores` у батча, `1 + readReplicas` у Aurora и Timescale. Проверяется это
+тестом `tests/engine/instance-count.test.ts`: у каждого блока с почасовой ценой есть счётчик, и
+увеличение счётчика увеличивает счёт.
+
+Счётчика нет там, где считать нечего: клиентские блоки, управляемые сервисы с оплатой за запросы и
+объём (`s3`, `dynamodb`, `sqs`, `bigquery`, `glb`, наблюдаемость), а также `sqlite` и `local-cache`,
+которые по определению живут в одном экземпляре.
+
+Обратное тоже проверяется: у блока с `instances` рост числа инстансов **обязан** поднимать ёмкость —
+кроме четырёх случаев, где потолок физически не в инстансах, и это видно по имени ограничителя:
+
+| Блок | Ограничитель | Почему инстансы не помогают |
+|---|---|---|
+| `rate-limiter` | `counter-store` | Счётчики живут в общем Redis: его `maxOpsPerSec` и есть потолок (при `backingStore = local` ёмкость растёт с инстансами) |
+| `stream-processor` | `partitions` | Параллелизм упирается в число партиций источника |
+| `dist-lock` | `lock-serialization` | Замок сериализует держателей, сколько бы узлов ни стояло |
+| `saga-orchestrator` | `state-transitions` | Потолок — переходы в хранилище состояния |
+
 ---
 
 ## 3. Вычисления и сервисы (`compute`)
@@ -350,7 +373,7 @@ poolerFactor:  none 1 · pgbouncer-session 2 · proxy-managed 5 · pgbouncer-tra
 | `redis-store` | Redis как основное хранилище | V1 | `persistence` (none/RDB/AOF), `durabilityRisk`, `memoryGb`, `evictionPolicy: noeviction` | Память и durability |
 | `neo4j` | Neo4j / графовая БД | V1 | `nodeCount`, `edgeCount`, `traversalDepth`, `cacheGb`, `queryComplexity` | Память / глубина обхода |
 | `timescale` | TimescaleDB | V1 | `metricsPerSec`, `chunkIntervalHours`, `compressionAfterDays`, `retentionDays` | Запись и сжатие |
-| `influx` | InfluxDB | V1 | `seriesCardinality`, `pointsPerSec`, `retentionPolicy` | **Кардинальность** |
+| `influx` | InfluxDB | V1 | `instances`, `seriesCardinality`, `pointsPerSec`, `retentionPolicy` | **Кардинальность** |
 | `prometheus` | Prometheus / VictoriaMetrics | V1 | `activeSeries`, `scrapeIntervalSec`, `samplesPerSec`, `bytesPerSample` (~1.7 сжатых), `retentionDays` | Кардинальность и память |
 | `etcd` | etcd / ZooKeeper / Consul (KV, координация) | V1 | `nodes` (нечётное), `writeQuorumMs`, `maxDbSizeMb`, `watchers`, `leaseCount` | Кворум записи, **не масштабируется записью** |
 | `s3-table` | Iceberg / Delta Lake поверх объектного хранилища | V2 | `fileSizeMb`, `partitioning`, `compaction`, `manifestOverhead` | Метаданные и compaction |
@@ -511,7 +534,7 @@ H(n, α)       = Σ_{k=1..n} k^(−α)
 | `nfs` | Сетевая ФС (EFS / NFS) | V1 | `throughputMbs`, `iops`, `burstCredits`, `costPerGbMonth` | Пропускная способность |
 | `block` | Блочное устройство (EBS / локальный NVMe) | V1 | `sizeGb`, `type` (gp3/io2/nvme), `iops`, `throughputMbs`, `latencyUs` (100–500) | IOPS |
 | `hdfs` | HDFS | V2 | `nodes`, `blockSizeMb`, `replication` (3), `namenodeMemoryGb` | Метаданные namenode |
-| `ftp-legacy` | Legacy файловый сервер | V2 | `throughputMbs`, `concurrency` | — |
+| `ftp-legacy` | Legacy файловый сервер | V2 | `instances`, `throughputMbs`, `concurrency` | — |
 
 ---
 

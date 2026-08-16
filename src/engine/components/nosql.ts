@@ -1448,6 +1448,7 @@ const timescale = defineComponent({
 });
 
 const influxDefaults = {
+    instances: 1,
     seriesCardinality: 5000000,
     pointsPerSec: 200000,
     batchSize: 500,
@@ -1503,8 +1504,9 @@ const influxModel = defineModel<typeof influxDefaults>({
         return [
             weightedUnitBound(
                 'cardinality',
-                'cpuCores / (readShare × readSec + writeShare × writeSec)',
+                'instances × cpuCores / (readShare × readSec + writeShare × writeSec)',
                 {
+                    instances: ctx.instances,
                     cpuCores: ctx.params.cpuCores,
                     readSec,
                     writeSec,
@@ -1514,14 +1516,14 @@ const influxModel = defineModel<typeof influxDefaults>({
                     readShare: ctx.readShare,
                     writeShare: ctx.writeShare,
                 },
-                readSec / ctx.params.cpuCores,
-                writeSec / ctx.params.cpuCores,
+                readSec / (ctx.instances * ctx.params.cpuCores),
+                writeSec / (ctx.instances * ctx.params.cpuCores),
                 ctx.readShare,
                 ctx.writeShare,
             ),
             memoryResidencyBound(
                 'memory',
-                ctx.params.memoryGb * INFLUX_CACHE_MEMORY_SHARE,
+                ctx.instances * ctx.params.memoryGb * INFLUX_CACHE_MEMORY_SHARE,
                 (ctx.params.batchSize *
                     ctx.params.bytesPerSample *
                     INFLUX_CACHE_SNAPSHOT_SEC *
@@ -1530,7 +1532,7 @@ const influxModel = defineModel<typeof influxDefaults>({
             ),
             iopsBound(
                 'iops',
-                ctx.params.provisionedIops,
+                ctx.instances * ctx.params.provisionedIops,
                 ctx.params.seriesPerQuery * IOPS_PER_SCANNED_SERIES,
                 ctx.params.batchSize * IOPS_PER_WRITTEN_POINT + TSM_COMPACTION_IOPS_PER_WRITE,
                 ctx.readShare,
@@ -1576,7 +1578,7 @@ const influxModel = defineModel<typeof influxDefaults>({
     },
     cost: (ctx) =>
         totalCost({
-            compute: ctx.params.costPerInstanceHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
+            compute: ctx.instances * ctx.params.costPerInstanceHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
             storage: ctx.storageGb * ctx.params.costPerGbMonth,
             network: 0,
             requests: 0,
@@ -1593,6 +1595,7 @@ const influx = defineComponent({
     ports: NOSQL_PORTS,
     defaultParams: influxDefaults,
     paramSchema: {
+        instances: num('scale', { min: 1, max: 200, realistic: { min: 1, max: 12 } }),
         seriesCardinality: num('scale', { min: 1000, max: 1000000000, realistic: { min: 100000, max: 10000000 } }),
         pointsPerSec: num('scale', { min: 0, max: 100000000 }),
         batchSize: num('behaviour', { min: 1, max: 100000, realistic: { min: 100, max: 5000 } }),
