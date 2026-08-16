@@ -270,6 +270,38 @@ export default function SdEditor() {
         [],
     );
 
+    const reparentOnDrop = useCallback(
+        (node: Node) => {
+            const nodes = useGraphStore.getState().nodes;
+            const model = nodes.find((item) => item.id === node.id);
+            if (!model || model.type === 'group') return;
+
+            const absolute = absolutePosition(model, nodes);
+            const size = nodeSize(model);
+            const centre = { x: absolute.x + size.width / 2, y: absolute.y + size.height / 2 };
+            const container = containerAt(nodes, centre);
+
+            if ((container?.id ?? undefined) === model.parentId) return;
+
+            if (!container) {
+                setNodeParent(model.id, undefined, absolute);
+                return;
+            }
+
+            const origin = absolutePosition(container, nodes);
+            setNodeParent(model.id, container.id, { x: absolute.x - origin.x, y: absolute.y - origin.y });
+        },
+        [setNodeParent],
+    );
+
+    const handleNodeDragStop = useCallback(
+        (_: React.MouseEvent | MouseEvent | TouchEvent, node: Node) => {
+            reparentOnDrop(node);
+            commitTransaction();
+        },
+        [commitTransaction, reparentOnDrop],
+    );
+
     const handleSelectionChange = useCallback(
         ({ nodes: selectedNodes, edges: selectedEdges }: { nodes: Node[]; edges: Edge[] }) => {
             setSelection(
@@ -310,7 +342,7 @@ export default function SdEditor() {
                 onConnectEnd={endConnection}
                 isValidConnection={isValidConnection}
                 onNodeDragStart={beginTransaction}
-                onNodeDragStop={commitTransaction}
+                onNodeDragStop={handleNodeDragStop}
                 onNodeContextMenu={openMenu}
                 onEdgeContextMenu={openEdgeMenu}
                 onPaneContextMenu={openPaneMenu}

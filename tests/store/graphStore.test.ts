@@ -253,3 +253,31 @@ describe('копирование и вставка', () => {
         expect(useGraphStore.getState().nodes).toHaveLength(2);
     });
 });
+
+describe('перенос узла между группами', () => {
+    it('запоминает нового родителя и новую позицию', () => {
+        const store = useGraphStore.getState();
+        const region = store.addComponent('region', { x: 0, y: 0 }) ?? '';
+        const service = store.addComponent('service', { x: 400, y: 120 }) ?? '';
+
+        useGraphStore.getState().setNodeParent(service, region, { x: 40, y: 30 });
+
+        const moved = useGraphStore.getState().nodes.find((node) => node.id === service);
+        expect(moved?.parentId).toBe(region);
+        expect(moved?.extent).toBe('parent');
+        expect(moved?.position).toEqual({ x: 40, y: 30 });
+    });
+
+    it('вынос из группы возвращает узел в координаты холста', () => {
+        const store = useGraphStore.getState();
+        const region = store.addComponent('region', { x: 100, y: 100 }) ?? '';
+        const service = store.addComponent('service', { x: 20, y: 20 }, region) ?? '';
+
+        useGraphStore.getState().setNodeParent(service, undefined, { x: 120, y: 120 });
+
+        const moved = useGraphStore.getState().nodes.find((node) => node.id === service);
+        expect(moved?.parentId).toBeUndefined();
+        expect(moved?.extent).toBeUndefined();
+        expect(moved?.position).toEqual({ x: 120, y: 120 });
+    });
+});

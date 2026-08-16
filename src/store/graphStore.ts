@@ -66,7 +66,7 @@ export interface GraphState extends GraphSnapshot {
     updateEdgeCall: (edgeId: string, callId: string, share: number) => void;
     updateEdgeKind: (edgeId: string, kind: EdgeKind) => void;
     updateEdgeLabel: (edgeId: string, label: string) => void;
-    setNodeParent: (nodeId: string, parentId: string | undefined) => void;
+    setNodeParent: (nodeId: string, parentId: string | undefined, position?: XYPosition) => void;
     duplicateNode: (nodeId: string) => void;
     removeElements: (nodeIds: string[], edgeIds: string[]) => void;
     replaceGraph: (nodes: SdNode[], edges: SdEdge[]) => void;
@@ -319,10 +319,13 @@ export const useGraphStore = create<GraphState>((set, get) => {
             });
         },
 
-        setNodeParent: (nodeId, parentId) => {
+        setNodeParent: (nodeId, parentId, position) => {
             mutate((draft) => {
                 const node = draft.nodes.find((item) => item.id === nodeId);
                 if (!node) return;
+
+                if (position) node.position = position;
+
                 if (parentId) {
                     node.parentId = parentId;
                     node.extent = 'parent';

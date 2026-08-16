@@ -5,6 +5,8 @@ import ResizeHandle from '../../common/ResizeHandle/ResizeHandle';
 import registry from '../../../engine/ComponentRegistry';
 import type { ComponentDefinition } from '../../../engine/types/component';
 import { useTouchContext } from '../../../contexts/TouchContext';
+import useReference from '../../../hooks/useReference';
+import { referenceLanguage } from '../../../services/referenceBundle';
 import { useChallengeStore } from '../../../store/challengeStore';
 import { useUiStore } from '../../../store/uiStore';
 import TrafficLegend from './TrafficLegend';
@@ -79,6 +81,23 @@ export default function Palette() {
     );
 
     const needle = query.trim().toLowerCase();
+    const summariesReady = useReference(['help'], needle.length >= 2);
+
+    const summaryOf = useCallback(
+        (component: ComponentDefinition): string => {
+            if (!summariesReady) return '';
+
+            const value = i18n.getResource(
+                referenceLanguage(i18n.language),
+                'help',
+                `${component.helpId}.summary`,
+            );
+
+            return typeof value === 'string' ? value.toLowerCase() : '';
+        },
+        [i18n, summariesReady],
+    );
+
     const visibleGroups = needle
         ? groups
               .map((group) => ({
@@ -86,7 +105,8 @@ export default function Palette() {
                   components: group.components.filter(
                       (component) =>
                           blockName(component.id).toLowerCase().includes(needle) ||
-                          component.id.includes(needle),
+                          component.id.includes(needle) ||
+                          summaryOf(component).includes(needle),
                   ),
               }))
               .filter((group) => group.components.length > 0)
