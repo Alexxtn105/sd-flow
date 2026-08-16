@@ -1,8 +1,10 @@
 import { buildScheme } from '../services/schemeBuilder';
+import type { LocalizedText } from '../engine/challenges/types';
 import type { SchemeV1 } from '../engine/types/scheme';
 
 export interface DemoScheme {
     id: string;
+    name: LocalizedText;
     build: () => SchemeV1;
 }
 
@@ -157,6 +159,10 @@ function twoRegionPayments(): SchemeV1 {
 }
 
 export const DEMO_SCHEMES: DemoScheme[] = [
-    { id: 'video-platform', build: videoPlatform },
-    { id: 'two-region-payments', build: twoRegionPayments },
+    { id: 'video-platform', name: { ru: 'Видеоплатформа', en: 'Video platform' }, build: videoPlatform },
+    {
+        id: 'two-region-payments',
+        name: { ru: 'Платежи в двух регионах', en: 'Two-region payments' },
+        build: twoRegionPayments,
+    },
 ];

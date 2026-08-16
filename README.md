@@ -160,10 +160,18 @@ the check, so incompatible ports surface in the editor instead of on the canvas.
   That means designing a bounded expression language, which no document specifies yet.
 * The whole scheme is always recomputed; there is no incremental recomputation by subgraph.
 
-## Demo schemes
+## Sample schemes
 
-Both open from the dropdown in the header and double as an acceptance test
-(`tests/engine/demo-schemes.test.ts`).
+The header dropdown holds 48 ready schemes: two demos below and, grouped by challenge and level,
+all 46 reference solutions of the catalogue. A reference opens in the sandbox under the name
+"challenge · solution" — it is a way to read someone else's design, not a submission.
+
+Every block of a shipped scheme is titled by its role — "Hot links" rather than "Redis", with the
+block type on the line below. Roles live in `locales/{ru,en}/nodes.json` keyed by node id, so they
+follow the interface language instead of being baked into the scheme, and a renamed block keeps the
+name you gave it.
+
+The two demos double as an acceptance test (`tests/engine/demo-schemes.test.ts`).
 
 **"Video platform"** — 1 B DAU, a CDN on top of S3 and a separate API branch: load balancer,
 service, Redis, Postgres, Kafka and 2000 transcoding workers. The test pins down: 80–130 PB/day of
@@ -191,7 +199,7 @@ npm run dev        # http://localhost:5173/sd-flow/
 | `npm run preview` | Local preview of the built bundle |
 | `npm run lint` | ESLint 9 (flat config) |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Vitest: 709 tests in 35 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, practice sets, the authoring format, locales, demo schemes |
+| `npm test` | Vitest: 719 tests in 37 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, practice sets, the authoring format, locales, node names, sample schemes, demo schemes |
 
 Deployment is GitHub Actions on a push to `main`: lint → typecheck → tests → build → GitHub Pages.
 The app installs as a PWA and runs offline; a scheme can be shared as a link, the canvas exported

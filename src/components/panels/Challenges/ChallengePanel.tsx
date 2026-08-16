@@ -5,6 +5,7 @@ import ResizeHandle from '../../common/ResizeHandle/ResizeHandle';
 import { AuthoredList, GolfList, IncidentList, InterviewList } from './PracticeLists';
 import { CHALLENGES, challengesByLevel } from '../../../data/challenges';
 import { golfById, incidentById, interviewById } from '../../../data/practice';
+import { referenceSchemeName } from '../../../data/sampleSchemes';
 import { evaluateLive } from '../../../engine/challenges/accept';
 import { golfMedal } from '../../../engine/practice/derive';
 import { compileTopology } from '../../../engine/sim/compile';
@@ -13,7 +14,6 @@ import type {
     Challenge,
     ComparisonRow,
     LintHit,
-    LocalizedText,
     Penalty,
     RealismViolation,
     ReferenceSolution,
@@ -22,6 +22,8 @@ import type {
     ScenarioRun,
     SolutionComparison,
 } from '../../../engine/challenges/types';
+import useLocalized from '../../../hooks/useLocalized';
+import useNodeLabels from '../../../hooks/useNodeLabels';
 import { parseChallengeSource } from '../../../services/authoredChallenges';
 import type { AuthoredChallenge } from '../../../services/authoredChallenges';
 import { removeAuthored } from '../../../services/authoredChallenges';
@@ -58,10 +60,6 @@ const DIRECTION_ARROW: Record<ComparisonRow['better'], string> = {
     higher: '↑',
 };
 
-function pickLanguage(code: string): keyof LocalizedText {
-    return code.startsWith('en') ? 'en' : 'ru';
-}
-
 function solutionLetter(index: number): string {
     if (index >= LETTER_ALPHABET_SIZE) return String(index + 1);
 
@@ -84,8 +82,8 @@ function Stars({ value }: { value: number }) {
 }
 
 export default function ChallengePanel() {
-    const { t, i18n } = useTranslation(['common', 'params', 'blocks', 'groups']);
-    const language = pickLanguage(i18n.language);
+    const { t } = useTranslation(['common', 'params', 'blocks', 'groups']);
+    const localized = useLocalized();
 
     const width = useUiStore((state) => state.panels.challenge);
     const collapsed = useUiStore((state) => state.challengeCollapsed);
@@ -126,25 +124,11 @@ export default function ChallengePanel() {
         return () => window.clearInterval(timer);
     }, [session, tick]);
 
-    const localized = useCallback((text: LocalizedText) => text[language], [language]);
-
     const golfTask = activeRef?.kind === 'golf' ? golfById(activeRef.taskId) : undefined;
     const incident = activeRef?.kind === 'incident' ? incidentById(activeRef.caseId) : undefined;
     const interview = activeRef?.kind === 'interview' ? interviewById(activeRef.sessionId) : undefined;
 
-    const labels = useMemo(() => {
-        const map = new Map<string, string>();
-
-        for (const node of nodes) {
-            const fallback = t(node.data.componentType, {
-                ns: 'blocks',
-                defaultValue: node.data.componentType,
-            });
-            map.set(node.id, node.data.label || fallback);
-        }
-
-        return map;
-    }, [nodes, t]);
+    const labelOf = useNodeLabels();
 
     const live = useMemo<RequirementEvaluation[]>(() => {
         if (!challenge || !result) return [];
@@ -201,12 +185,12 @@ export default function ChallengePanel() {
                 decorated.boundBy = t(`bound.${values.boundBy}`, { defaultValue: values.boundBy });
             }
             if (typeof values.node === 'string') {
-                decorated.node = labels.get(values.node) ?? values.node;
+                decorated.node = labelOf(values.node);
             }
 
             return decorated;
         },
-        [labels, t],
+        [labelOf, t],
     );
 
     const requirementDesc = useCallback(
@@ -244,9 +228,14 @@ export default function ChallengePanel() {
         submit(useSchemeStore.getState().exportScheme());
     }, [submit]);
 
-    const loadSolution = useCallback((solution: ReferenceSolution) => {
-        useSchemeStore.getState().importScheme(solution.build());
-    }, []);
+    const loadSolution = useCallback(
+        (item: Challenge, solution: ReferenceSolution) => {
+            const scheme = solution.build();
+            scheme.meta.name = localized(referenceSchemeName(item, solution));
+            useSchemeStore.getState().importScheme(scheme);
+        },
+        [localized],
+    );
 
     const openAuthored = useCallback(
         (item: AuthoredChallenge) => {
@@ -389,12 +378,12 @@ export default function ChallengePanel() {
         </div>
     );
 
-    const renderSolution = (solution: ReferenceSolution, index: number) => (
+    const renderSolution = (item: Challenge, solution: ReferenceSolution, index: number) => (
         <article key={solution.id} className="chl-solution">
             <div className="chl-solution-head">
                 <span className="chl-solution-letter">{solutionLetter(index)}</span>
                 <span className="chl-solution-name">{localized(solution.name)}</span>
-                <button type="button" className="chl-btn" onClick={() => loadSolution(solution)}>
+                <button type="button" className="chl-btn" onClick={() => loadSolution(item, solution)}>
                     {t('challenge.loadSolution')}
                 </button>
             </div>
@@ -822,7 +811,9 @@ export default function ChallengePanel() {
                 {item.referenceSolutions.length > 0 && (
                     <section className="chl-section">
                         <h3 className="chl-section-title">{t('challenge.section.solutions')}</h3>
-                        {item.referenceSolutions.map(renderSolution)}
+                        {item.referenceSolutions.map((solution, index) =>
+                            renderSolution(item, solution, index),
+                        )}
                     </section>
                 )}
 

@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Icon from '../../common/Icons/Icon';
 import { LANGUAGES } from '../../../locales/i18n';
 import { SCENARIOS } from '../../../engine/sim/scenarios';
-import { DEMO_SCHEMES } from '../../../data/demoSchemes';
+import { sampleGroups } from '../../../data/sampleSchemes';
+import type { SampleGroup } from '../../../data/sampleSchemes';
+import useLocalized from '../../../hooks/useLocalized';
 import { useThemeContext } from '../../../contexts/ThemeContext';
 import { useGraphStore } from '../../../store/graphStore';
 import { useIsDirty, useSchemeStore } from '../../../store/schemeStore';
@@ -21,7 +23,7 @@ export interface HeaderProps {
     onLoad: () => void;
     onExport: () => void;
     onImport: () => void;
-    onLoadDemo: (demoId: string) => void;
+    onLoadSample: (sampleId: string) => void;
     onShare: () => void;
     onExportImage: () => void;
     onExportReport: () => void;
@@ -34,12 +36,13 @@ export default function Header({
     onLoad,
     onExport,
     onImport,
-    onLoadDemo,
+    onLoadSample,
     onShare,
     onExportImage,
     onExportReport,
 }: HeaderProps) {
     const { t, i18n } = useTranslation();
+    const localized = useLocalized();
     const { isDarkTheme, toggleTheme } = useThemeContext();
     const [langOpen, setLangOpen] = useState(false);
     const langRef = useRef<HTMLDivElement>(null);
@@ -72,6 +75,12 @@ export default function Header({
     }, [langOpen]);
 
     const currentLang = LANGUAGES.find((language) => i18n.language.startsWith(language.code)) ?? LANGUAGES[0];
+    const groups = useMemo(() => sampleGroups(), []);
+
+    const groupLabel = (group: SampleGroup) =>
+        group.level === null
+            ? localized(group.name)
+            : `${t('challenge.level', { level: group.level })} · ${localized(group.name)}`;
 
     return (
         <header className="hdr">
@@ -119,16 +128,20 @@ export default function Header({
                         className="hdr-select"
                         value=""
                         onChange={(event) => {
-                            if (event.target.value) onLoadDemo(event.target.value);
+                            if (event.target.value) onLoadSample(event.target.value);
                         }}
-                        title={t('header.demos')}
-                        aria-label={t('header.demos')}
+                        title={t('header.samples')}
+                        aria-label={t('header.samples')}
                     >
-                        <option value="">{t('header.demos')}</option>
-                        {DEMO_SCHEMES.map((demo) => (
-                            <option key={demo.id} value={demo.id}>
-                                {t(`demo.${demo.id}`)}
-                            </option>
+                        <option value="">{t('header.samples')}</option>
+                        {groups.map((group) => (
+                            <optgroup key={group.id} label={groupLabel(group)}>
+                                {group.items.map((item) => (
+                                    <option key={item.id} value={item.id}>
+                                        {localized(item.name)}
+                                    </option>
+                                ))}
+                            </optgroup>
                         ))}
                     </select>
                     <span className="hdr-divider" />

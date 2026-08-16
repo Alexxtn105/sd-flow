@@ -19,9 +19,10 @@ import Toast from './components/common/Toast/Toast';
 import type { ToastTone } from './components/common/Toast/Toast';
 import Tutorial from './components/tutorial/Tutorial';
 
-import { DEMO_SCHEMES } from './data/demoSchemes';
+import { sampleById } from './data/sampleSchemes';
 import { useAutoSave } from './hooks/useAutoSave';
 import { useDialogManager } from './hooks/useDialogManager';
+import useLocalized from './hooks/useLocalized';
 import { useSimulation } from './hooks/useSimulation';
 import { useChallengeStore } from './store/challengeStore';
 import { useGraphStore } from './store/graphStore';
@@ -56,6 +57,7 @@ interface ToastState {
 
 export default function App() {
     const { t, i18n } = useTranslation();
+    const localized = useLocalized();
     const dialogs = useDialogManager();
     const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
     const [toast, setToast] = useState<ToastState | null>(null);
@@ -226,18 +228,18 @@ export default function App() {
         showToast(t('export.reportDone'));
     }, [exportScheme, i18n.language, showToast, t]);
 
-    const handleLoadDemo = useCallback(
-        (demoId: string) => {
-            const demo = DEMO_SCHEMES.find((item) => item.id === demoId);
-            if (!demo) return;
+    const handleLoadSample = useCallback(
+        (sampleId: string) => {
+            const sample = sampleById(sampleId);
+            if (!sample) return;
 
             guard(t('dialog.confirmLoad.title'), t('dialog.confirmLoad.message'), () => {
-                const scheme = demo.build();
-                scheme.meta.name = t(`demo.${demoId}`);
+                const scheme = sample.build();
+                scheme.meta.name = localized(sample.schemeName);
                 importScheme(scheme);
             });
         },
-        [guard, importScheme, t],
+        [guard, importScheme, localized, t],
     );
 
     return (
@@ -250,7 +252,7 @@ export default function App() {
                     onLoad={handleLoad}
                     onExport={handleExport}
                     onImport={handleImport}
-                    onLoadDemo={handleLoadDemo}
+                    onLoadSample={handleLoadSample}
                     onShare={() => void handleShare()}
                     onExportImage={() => void handleExportImage()}
                     onExportReport={handleExportReport}
