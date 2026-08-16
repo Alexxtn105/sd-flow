@@ -14,7 +14,7 @@ import type {
     WaterfallHop,
 } from './types';
 
-const MAX_WALK_DEPTH = 12;
+export const MAX_WALK_DEPTH = 12;
 const MAX_CALLS_PER_EDGE = 16;
 const MAX_TAIL_SIGMA = 2;
 const BACKOFF_BASE_SEC = 0.05;
@@ -78,6 +78,7 @@ export interface LatencyRollup {
     flows: FlowResult[];
     waterfalls: FlowWaterfall[];
     samples: LatencySamples;
+    truncated: boolean;
 }
 
 export interface HistogramRequest {
@@ -211,7 +212,7 @@ function trafficShareOf(
 ): number {
     if (!BALANCING_GROUPS.has(source.definition.group)) return 1;
 
-    const siblings = routableEdges(source, topology);
+    const siblings = routableEdges(source, topology).filter((item) => !item.isAsync);
     const weights = branchWeights(siblings, edgeFlows);
     const total = weights.reduce((sum, value) => sum + value, 0);
     const index = siblings.findIndex((item) => item.id === edge.id);
@@ -354,14 +355,16 @@ export function rollUpLatency(
     const waterfalls: FlowWaterfall[] = [];
     const plans = new Map<string, CallPlan>();
     const sitesByFlow = new Map<string, CallSite[]>();
+    let truncated = false;
 
     const planFor = (node: CompiledNode): CallPlan => {
         const known = plans.get(node.id);
         if (known) return known;
 
         const edges = routableEdges(node, topology);
-        const live = edges.filter((edge) => runtimes.get(edge.target)?.boundBy !== 'disabled');
-        const liveEdges = live.length > 0 ? live : edges;
+        const synchronous = edges.filter((edge) => !edge.isAsync);
+        const live = synchronous.filter((edge) => runtimes.get(edge.target)?.boundBy !== 'disabled');
+        const liveEdges = live.length > 0 ? live : synchronous;
         const plan: CallPlan = {
             edges,
             callsPerRequest: edges.map(callsPerRequestOf),
@@ -510,6 +513,8 @@ export function rollUpLatency(
         ): WalkOutcome => {
             const node = topology.nodeById.get(nodeId);
             const runtime = runtimes.get(nodeId);
+
+            if (depth > MAX_WALK_DEPTH) truncated = true;
 
             if (!node || !runtime || depth > MAX_WALK_DEPTH || visited.has(nodeId)) {
                 return { seconds: 0, failed: false, timedOut: false };
@@ -753,7 +758,7 @@ export function rollUpLatency(
         },
     };
 
-    return { flows: flowResults, waterfalls, samples };
+    return { flows: flowResults, waterfalls, samples, truncated };
 }
 
 function shouldFollow(

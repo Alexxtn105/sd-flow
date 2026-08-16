@@ -375,7 +375,7 @@ const queueProbe: ProbeCalculator = (spec, node, metrics, context) => {
         thresholdStatus(lagSec, alarm * QUEUE_WARN_SHARE, alarm),
         lagSec,
         'sec',
-        explain('lag = producerRps / consumerCapacity', inputs, lagSec, 'sec'),
+        explain('lag = (queueDepth + backlogRps × 60 с) / consumerCapacity', inputs, lagSec, 'sec'),
     );
 };
 

@@ -2,7 +2,7 @@ import { MODEL_VERSION } from '../types/scheme';
 import type { SchemeV1 } from '../types/scheme';
 import { computeAvailability } from './availability';
 import { compileTopology } from './compile';
-import { pricingFor } from './constants';
+import { LAG_WINDOW_SEC, pricingFor } from './constants';
 import { analyseConsistency } from './consistency';
 import { computeCost } from './cost';
 import { deriveNodes } from './derived';
@@ -127,6 +127,7 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
         cost,
         clusters: placement.plans,
         converged,
+        latencyTruncated: rollup.truncated,
     });
 
     const nodes: Record<string, NodeResult> = {};
@@ -207,7 +208,10 @@ export function simulate(scheme: SchemeV1, options: SimulateOptions = {}): SimRe
             scope: edge.scope,
             retryShare: target?.retryAmplification ?? 0,
             backlog: backlogGrowth,
-            lagSec: consumerCapacity > 0 && edge.isAsync ? producerRps / consumerCapacity : 0,
+            lagSec:
+                consumerCapacity > 0 && edge.isAsync
+                    ? ((target?.queue.queueDepth ?? 0) + backlogGrowth * LAG_WINDOW_SEC) / consumerCapacity
+                    : 0,
         };
     }
 

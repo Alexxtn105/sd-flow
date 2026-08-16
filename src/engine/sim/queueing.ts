@@ -69,7 +69,7 @@ export function sakasegawaWaitSec(
 export function solveQueue(input: QueueInput): QueueResult {
     const { lambdaOffered, capacity, servers, serviceSec, timeoutSec, queueLimit } = input;
 
-    if (!Number.isFinite(capacity) || capacity <= 0) {
+    if (!Number.isFinite(capacity)) {
         return {
             utilization: 0,
             waitSec: 0,
@@ -78,6 +78,20 @@ export function solveQueue(input: QueueInput): QueueResult {
             overflowProbability: 0,
             timeoutProbability: 0,
             failureProbability: 0,
+        };
+    }
+
+    if (capacity <= 0) {
+        const offered = lambdaOffered > 0 ? 1 : 0;
+
+        return {
+            utilization: offered,
+            waitSec: 0,
+            queueDepth: 0,
+            throughput: 0,
+            overflowProbability: offered,
+            timeoutProbability: 0,
+            failureProbability: offered,
         };
     }
 

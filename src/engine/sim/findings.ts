@@ -1,4 +1,5 @@
 import type { CostBreakdown } from '../types/component';
+import { MAX_WALK_DEPTH } from './latency';
 import type { ClusterPodPlan } from './clusters';
 import type { CompiledTopology } from './compile';
 import { clusterNodesCostMonth } from './cost';
@@ -22,6 +23,7 @@ interface FindingInput {
     cost: { byNode: Map<string, CostBreakdown>; total: CostBreakdown };
     clusters: readonly ClusterPodPlan[];
     converged: boolean;
+    latencyTruncated: boolean;
 }
 
 const SEVERITY_ORDER: Record<Severity, number> = { error: 0, warning: 1, info: 2 };
@@ -41,6 +43,8 @@ export function buildFindings(input: FindingInput): Finding[] {
     };
 
     if (!converged) push('retry-storm', 'error', [], [], {});
+
+    if (input.latencyTruncated) push('latency-truncated', 'warning', [], [], { depth: MAX_WALK_DEPTH });
 
     for (const node of topology.nodes) {
         if (node.definition.shape !== 'node') continue;

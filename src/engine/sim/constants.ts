@@ -85,6 +85,8 @@ export const CLIENT_RTT_MS: Record<string, number> = {
     nr5g: 20,
 };
 
+export const LAG_WINDOW_SEC = 60;
+
 export const SECONDS_PER_MONTH = 2_628_000;
 
 export const HOURS_PER_MONTH = 730;

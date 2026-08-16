@@ -19,6 +19,7 @@ const ABSORBING_TARGET_GROUPS = new Set(['sql', 'nosql', 'search', 'olap', 'stor
 const FULL_SHARE: RouteShare = { read: 1, write: 1 };
 const EMPTY_SHARE: RouteShare = { read: 0, write: 0 };
 const BALANCING_GROUPS = new Set(['edge', 'clients']);
+const QUEUE_PER_SERVER = 64;
 const MIX_READ_OPERATIONS = new Set<CallOperation>(['read', 'scan']);
 const MIX_WRITE_OPERATIONS = new Set<CallOperation>(['write', 'delete']);
 
@@ -172,11 +173,12 @@ function balancingShares(
         .map((edgeId) => topology.edgeById.get(edgeId))
         .filter((edge): edge is CompiledEdge => edge !== undefined && !edge.isReplication);
 
-    const reachable = outgoing.filter((edge) => !disabledNodes.has(edge.target));
-    const routed = reachable.length > 0 ? reachable : outgoing;
+    const balanced = outgoing.filter((edge) => !edge.isAsync);
+    const reachable = balanced.filter((edge) => !disabledNodes.has(edge.target));
+    const routed = reachable.length > 0 ? reachable : balanced;
     const totalWeight = routed.reduce((sum, edge) => sum + Math.max(edge.weight, 0), 0);
 
-    for (const edge of outgoing) shares.set(edge.id, { read: 0, write: 0 });
+    for (const edge of outgoing) shares.set(edge.id, edge.isAsync ? FULL_SHARE : { read: 0, write: 0 });
 
     for (const edge of routed) {
         const share = totalWeight > 0 ? Math.max(edge.weight, 0) / totalWeight : 1 / routed.length;
@@ -441,7 +443,8 @@ function timeoutSecFor(node: CompiledNode): number {
 
 function queueLimitFor(node: CompiledNode, servers: number): number {
     const limit = node.params.queueLimit;
-    return typeof limit === 'number' ? limit : servers;
+
+    return typeof limit === 'number' ? limit : servers * QUEUE_PER_SERVER;
 }
 
 function entryFlowsOf(flows: Flow[]): Map<string, OperationFlow> {
@@ -611,8 +614,8 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
             const lambdaOffered =
                 lambdaNominal * (1 + amplification) + lambdaNominal * writeShare * retryShare;
             const servers = serversOf(node, instances);
-            const queueLimit = queueLimitFor(node, servers);
             const timeoutSec = timeoutSecFor(node);
+            const queueLimit = queueLimitFor(node, servers);
 
             const queue = solveQueue({
                 lambdaOffered,

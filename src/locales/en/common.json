@@ -641,6 +641,7 @@
         "overloaded": "Overloaded: {{nodeNames}} runs at {{utilizationPct}}% and is bound by {{boundBy}} at a capacity of {{capacity}} req/s; {{dropped}} req/s are dropped. Add instances, shard it, or cut the traffic.",
         "saturated": "Close to the limit: {{nodeNames}} runs at {{utilizationPct}}%, bound by {{boundBy}} at a capacity of {{capacity}} req/s. The queue will grow at peak.",
         "node-down": "Node is down: {{nodeNames}} serves nothing and {{lostRps}} req/s are lost. That is an outage, not a saving: the traffic turns into errors while the bill for instances and storage keeps running.",
+        "latency-truncated": "Latency is understated: the call chain runs deeper than {{depth}} hops and the walk counts only the first {{depth}} — everything beyond is missing from p50/p95/p99. Shorten the chain or measure it in parts.",
         "retry-storm": "Retry storm: the model did not converge — retries add load faster than the system drains it. Reduce the retry count, add backoff and a circuit breaker.",
         "retry-amplification": "Retries inflate the load: {{nodeNames}} receives {{amplificationPct}}% more requests because of repeats. Raise the timeout or enable exponential backoff.",
         "contention-retries": "Key contention: {{sharePct}}% of writes on {{nodeNames}} are repeated because of optimistic locking. Spread writes across keys or move to a per-key queue.",
