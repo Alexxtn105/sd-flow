@@ -1008,5 +1008,7 @@
         "year": "Year",
         "zk": "ZooKeeper",
         "zstd": "Zstd"
-    }
+    },
+    "hitRatioMode": "Hit ratio mode",
+    "hitRatioOverride": "Manual hit ratio"
 }

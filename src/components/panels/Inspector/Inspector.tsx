@@ -2,8 +2,17 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import Icon from '../../common/Icons/Icon';
 import ResizeHandle from '../../common/ResizeHandle/ResizeHandle';
+import ParamInput from '../../common/ParamInput/ParamInput';
 import registry from '../../../engine/ComponentRegistry';
-import type { ParamField, ParamValue } from '../../../engine/types/component';
+import {
+    applyInstancePreset,
+    detectInstancePreset,
+    INSTANCE_PRESETS,
+    supportsInstancePreset,
+} from '../../../engine/instancePresets';
+import type { InstancePreset } from '../../../engine/instancePresets';
+import { clientRpsOf, dauForRps } from '../../../engine/sim/flows';
+import type { ComponentParams } from '../../../engine/types/component';
 import type { EdgeKind } from '../../../engine/types/scheme';
 import useParamHelp from '../../../hooks/useParamHelp';
 import useReference from '../../../hooks/useReference';
@@ -11,30 +20,18 @@ import { useGraphStore } from '../../../store/graphStore';
 import { useNodeResult } from '../../../store/simStore';
 import { useUiStore } from '../../../store/uiStore';
 import { formatNumber } from '../../../utils/format';
+import { rangeStatus } from '../../../utils/paramRange';
 import { groupParams } from '../../../utils/paramSections';
 import './Inspector.css';
 
 const EDGE_KINDS: EdgeKind[] = ['sync', 'async', 'replication', 'stream', 'cdc', 'batch'];
-
-type RangeStatus = 'ok' | 'warn' | 'error';
+const CUSTOM_PRESET = 'custom';
 
 function utilizationTone(utilization: number): string {
     if (utilization >= 1) return 'ins-metric-hot';
     if (utilization >= 0.8) return 'ins-metric-warm';
 
     return '';
-}
-
-function rangeStatus(value: ParamValue, field: ParamField | undefined): RangeStatus {
-    if (field?.kind !== 'number' || typeof value !== 'number') return 'ok';
-
-    if ((field.min !== undefined && value < field.min) || (field.max !== undefined && value > field.max)) {
-        return 'error';
-    }
-
-    if (field.realistic && (value < field.realistic.min || value > field.realistic.max)) return 'warn';
-
-    return 'ok';
 }
 
 export default function Inspector() {
@@ -50,6 +47,8 @@ export default function Inspector() {
     const nodes = useGraphStore((state) => state.nodes);
     const edges = useGraphStore((state) => state.edges);
     const updateNodeParam = useGraphStore((state) => state.updateNodeParam);
+    const beginTransaction = useGraphStore((state) => state.beginTransaction);
+    const commitTransaction = useGraphStore((state) => state.commitTransaction);
     const updateNodeLabel = useGraphStore((state) => state.updateNodeLabel);
     const updateEdgeCall = useGraphStore((state) => state.updateEdgeCall);
     const updateEdgeKind = useGraphStore((state) => state.updateEdgeKind);
@@ -68,68 +67,27 @@ export default function Inspector() {
         [definition, node],
     );
 
-    const renderField = (key: string, value: ParamValue, field: ParamField | undefined) => {
-        if (!node) return null;
-        const inputId = `ins-param-${key}`;
+    const defaults: ComponentParams = definition ? registry.getDefaultParams(definition.id) : {};
+    const presetSupported = definition !== null && supportsInstancePreset(defaults);
+    const preset = presetSupported && node ? detectInstancePreset(defaults, node.data.params) : null;
+    const clientRps = node && definition?.group === 'clients' ? clientRpsOf(definition.id, node.data.params) : null;
+    const rpsEditable = node !== undefined && dauForRps(node?.data.params ?? {}, 1) !== null;
 
-        if (field?.kind === 'boolean') {
-            return (
-                <input
-                    id={inputId}
-                    type="checkbox"
-                    className="ins-checkbox"
-                    checked={Boolean(value)}
-                    onChange={(event) => updateNodeParam(node.id, key, event.target.checked)}
-                />
-            );
+    const applyPreset = (value: InstancePreset) => {
+        if (!node) return;
+
+        beginTransaction();
+        for (const [key, patched] of Object.entries(applyInstancePreset(defaults, value))) {
+            updateNodeParam(node.id, key, patched);
         }
+        commitTransaction();
+    };
 
-        if (field?.kind === 'enum') {
-            return (
-                <select
-                    id={inputId}
-                    className="ins-input"
-                    value={String(value)}
-                    onChange={(event) => updateNodeParam(node.id, key, event.target.value)}
-                >
-                    {field.options.map((option) => (
-                        <option key={option} value={option}>
-                            {t(`enum.${option}`, { ns: 'params', defaultValue: option })}
-                        </option>
-                    ))}
-                </select>
-            );
-        }
+    const applyRps = (rps: number) => {
+        if (!node) return;
 
-        if (field?.kind === 'number') {
-            const status = rangeStatus(value, field);
-
-            return (
-                <input
-                    id={inputId}
-                    type="number"
-                    className={`ins-input ${status === 'ok' ? '' : `ins-input-${status}`}`}
-                    value={Number(value)}
-                    min={field.min}
-                    max={field.max}
-                    step={field.step ?? 'any'}
-                    onChange={(event) => {
-                        const parsed = Number.parseFloat(event.target.value);
-                        if (Number.isFinite(parsed)) updateNodeParam(node.id, key, parsed);
-                    }}
-                />
-            );
-        }
-
-        return (
-            <input
-                id={inputId}
-                type="text"
-                className="ins-input"
-                value={String(value)}
-                onChange={(event) => updateNodeParam(node.id, key, event.target.value)}
-            />
-        );
+        const dau = dauForRps(node.data.params, rps);
+        if (dau !== null) updateNodeParam(node.id, 'dau', Math.round(dau));
     };
 
     return (
@@ -241,6 +199,55 @@ export default function Inspector() {
                             />
                         </div>
 
+                        {presetSupported && (
+                            <div className="ins-row">
+                                <label className="ins-label" htmlFor="ins-preset">
+                                    {t('inspector.preset')}
+                                </label>
+                                <select
+                                    id="ins-preset"
+                                    className="ins-input"
+                                    value={preset ?? CUSTOM_PRESET}
+                                    onChange={(event) => applyPreset(event.target.value as InstancePreset)}
+                                >
+                                    {preset === null && (
+                                        <option value={CUSTOM_PRESET}>{t('inspector.presetCustom')}</option>
+                                    )}
+                                    {INSTANCE_PRESETS.map((item) => (
+                                        <option key={item} value={item}>
+                                            {t(`inspector.presetSize.${item}`)}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
+                        {clientRps !== null && rpsEditable && (
+                            <div className="ins-param">
+                                <div className="ins-row">
+                                    <label className="ins-label" htmlFor="ins-derived-rps">
+                                        {t('inspector.derivedRps')}
+                                    </label>
+                                    <span className="ins-field">
+                                        <input
+                                            id="ins-derived-rps"
+                                            type="number"
+                                            className="ins-input"
+                                            min={0}
+                                            step="any"
+                                            value={Math.round(clientRps * 100) / 100}
+                                            onChange={(event) => {
+                                                const parsed = Number.parseFloat(event.target.value);
+                                                if (Number.isFinite(parsed) && parsed >= 0) applyRps(parsed);
+                                            }}
+                                        />
+                                        <span className="ins-unit">{t('dashboard.unit.rps')}</span>
+                                    </span>
+                                </div>
+                                <p className="ins-hint">{t('inspector.derivedRpsHint')}</p>
+                            </div>
+                        )}
+
                         {sections.map(({ section, entries }) => (
                             <section key={section} className="ins-section">
                                 <h3 className="ins-section-title">{t(`section.${section}`)}</h3>
@@ -268,7 +275,14 @@ export default function Inspector() {
                                                     {help.name}
                                                 </label>
                                                 <span className="ins-field">
-                                                    {renderField(key, value, field)}
+                                                    <ParamInput
+                                                        id={`ins-param-${key}`}
+                                                        field={field}
+                                                        value={value}
+                                                        label={help.name}
+                                                        withSlider
+                                                        onChange={(next) => updateNodeParam(node.id, key, next)}
+                                                    />
                                                     <span className="ins-unit">{help.unit}</span>
                                                 </span>
                                             </div>

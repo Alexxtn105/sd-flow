@@ -1,4 +1,4 @@
-import type { CacheProfile } from '../types/component';
+import type { CacheProfile, ComponentParams } from '../types/component';
 import { explain } from './resources';
 import type { Explain } from '../types/component';
 
@@ -23,6 +23,23 @@ export function generalizedHarmonic(count: number, alpha: number): number {
     if (Math.abs(alpha - 1) < 1e-9) return sum + Math.log(n / head);
 
     return sum + (Math.pow(n, 1 - alpha) - Math.pow(head, 1 - alpha)) / (1 - alpha);
+}
+
+function clampRatio(value: number): number {
+    return Math.max(0, Math.min(1, value));
+}
+
+export function resolveHitRatio(
+    params: ComponentParams,
+    computed: number | null,
+    warmth: number,
+): number | null {
+    const override = params.hitRatioOverride;
+    const manual = typeof override === 'number' ? clampRatio(override) : null;
+    const mode = String(params.hitRatioMode ?? (computed === null ? 'manual' : 'auto'));
+    const base = mode === 'manual' && manual !== null ? manual : computed;
+
+    return base === null ? null : clampRatio(base * warmth);
 }
 
 export function cacheHitRatio(profile: CacheProfile, writeShare: number, readRps: number): CacheResult {

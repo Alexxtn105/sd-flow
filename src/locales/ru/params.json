@@ -777,7 +777,7 @@
         "asia": "Азия",
         "async": "Асинхронно",
         "attributes": "По атрибутам",
-        "auto": "Автоматически",
+        "auto": "Авто",
         "av1": "AV1",
         "best-effort": "По возможности",
         "bidirectional": "Двунаправленная",
@@ -1008,5 +1008,7 @@
         "year": "Год",
         "zk": "ZooKeeper",
         "zstd": "Zstd"
-    }
+    },
+    "hitRatioMode": "Режим hit ratio",
+    "hitRatioOverride": "Hit ratio вручную"
 }

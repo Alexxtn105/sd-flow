@@ -43,10 +43,23 @@ const RPS_BY_CLIENT_TYPE = new Map<string, (params: ComponentParams) => number>(
     ['client-internal', (params) => numeric(params.rps)],
 ]);
 
-function clientRps(node: CompiledNode): number {
-    const formula = RPS_BY_CLIENT_TYPE.get(node.type);
+export function clientRpsOf(type: string, params: ComponentParams): number {
+    const formula = RPS_BY_CLIENT_TYPE.get(type);
 
-    return formula ? formula(node.params) : sessionRps(node.params);
+    return formula ? formula(params) : sessionRps(params);
+}
+
+export function dauForRps(params: ComponentParams, rps: number): number | null {
+    const sessions = numeric(params.sessionsPerUserDay);
+    const requests = numeric(params.requestsPerSession);
+
+    if (sessions <= 0 || requests <= 0 || rps < 0) return null;
+
+    return (rps * SECONDS_PER_DAY) / (sessions * requests);
+}
+
+function clientRps(node: CompiledNode): number {
+    return clientRpsOf(node.type, node.params);
 }
 
 function clientRequestBytes(params: ComponentParams): number {

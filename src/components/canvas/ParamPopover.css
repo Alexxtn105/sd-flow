@@ -1,0 +1,96 @@
+.sd-popover {
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 0;
+    z-index: 20;
+    width: 226px;
+    padding: 8px;
+    border: 1px solid var(--panel-border-hover);
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    box-shadow: var(--shadow-md, 0 6px 20px rgba(0, 0, 0, 0.35));
+    cursor: default;
+}
+
+.sd-popover-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.sd-popover-title {
+    flex: 1;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--panel-text-1);
+}
+
+.sd-popover-close {
+    display: flex;
+    padding: 1px;
+    border: none;
+    background: none;
+    color: var(--panel-text-4);
+    cursor: pointer;
+}
+
+.sd-popover-close:hover {
+    color: var(--accent-primary);
+}
+
+.sd-popover-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 5px;
+}
+
+.sd-popover-label {
+    flex: 1;
+    min-width: 0;
+    font-size: 10px;
+    color: var(--panel-text-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sd-popover-field {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.sd-popover-field .ins-input {
+    width: 88px;
+    padding: 3px 5px;
+    border: 1px solid var(--panel-border);
+    border-radius: 4px;
+    background: var(--panel-input-bg);
+    color: var(--panel-text-1);
+    font-size: 11px;
+}
+
+.sd-popover-unit {
+    width: 24px;
+    font-size: 9.5px;
+    color: var(--panel-text-5);
+}
+
+.sd-popover-more {
+    width: 100%;
+    margin-top: 8px;
+    padding: 4px;
+    border: 1px solid var(--panel-border);
+    border-radius: 4px;
+    background: var(--panel-input-bg);
+    color: var(--panel-text-3);
+    font-size: 10.5px;
+    cursor: pointer;
+}
+
+.sd-popover-more:hover {
+    color: var(--accent-primary);
+    border-color: var(--panel-border-hover);
+}

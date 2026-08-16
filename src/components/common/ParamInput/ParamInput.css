@@ -1,0 +1,18 @@
+.param-number {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    align-items: flex-end;
+}
+
+.param-slider {
+    width: 100%;
+    height: 12px;
+    accent-color: var(--accent-primary);
+    cursor: pointer;
+}
+
+.param-slider:disabled {
+    cursor: not-allowed;
+    accent-color: var(--panel-text-6);
+}

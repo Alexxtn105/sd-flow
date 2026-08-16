@@ -1,6 +1,6 @@
 import type { CapacityResult, ComponentParams, NodeContext, ResourceLimit } from '../types/component';
 import type { CallOperation } from '../types/scheme';
-import { cacheHitRatio } from './cacheModel';
+import { cacheHitRatio, resolveHitRatio } from './cacheModel';
 import type { CompiledEdge, CompiledNode, CompiledTopology } from './compile';
 import { contentionRetryShare, keySerializationLimit } from './contention';
 import type { Flow } from './flows';
@@ -474,6 +474,9 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
                 ? cacheHitRatio(cacheProfile, writeShare, lambdaNominal * readShare)
                 : null;
             const warmth = options.hitRatioScale?.get(node.id) ?? 1;
+            const hitRatio = cacheProfile
+                ? resolveHitRatio(node.params, cacheResult?.hitRatio ?? null, warmth)
+                : null;
 
             const incomingRetries = node.incoming
                 .map((edgeId) => topology.edgeById.get(edgeId))
@@ -524,7 +527,7 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
                 queue,
                 queueLimit,
                 timeoutSec,
-                hitRatio: cacheResult ? cacheResult.hitRatio * warmth : null,
+                hitRatio,
                 residentKeys: cacheResult ? cacheResult.residentKeys : 0,
                 hotKeyShare: cacheResult ? cacheResult.hotKeyShare : 0,
                 retryAmplification: amplification,
@@ -536,7 +539,7 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
             const isBalancer = BALANCING_GROUPS.has(node.definition.group);
             const shares = isBalancer ? balancingShares(node, topology, disabledNodes, routes) : null;
             const siblingAbsorption = cacheAbsorptionFor(node, topology, previous);
-            const ownAbsorption = cacheEnabled ? selfAbsorption(node) * warmth : 0;
+            const ownAbsorption = cacheEnabled ? ownAbsorptionOf(node, hitRatio, warmth) : 0;
 
             for (const edgeId of node.outgoing) {
                 const edge = topology.edgeById.get(edgeId);
@@ -572,6 +575,12 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
     }
 
     return { nodes: previous, edges: edgeFlows, iterations, converged };
+}
+
+function ownAbsorptionOf(node: CompiledNode, hitRatio: number | null, warmth: number): number {
+    if (String(node.params.hitRatioMode ?? '') === 'auto' && hitRatio !== null) return hitRatio;
+
+    return selfAbsorption(node) * warmth;
 }
 
 export function selfAbsorption(node: CompiledNode): number {

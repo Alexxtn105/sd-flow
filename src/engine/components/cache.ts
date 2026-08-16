@@ -69,6 +69,8 @@ const redisDefaults = {
     conflictResolution: 'lww',
     availability: 0.999,
     costPerInstanceHour: 0.25,
+    hitRatioMode: 'auto',
+    hitRatioOverride: 0.8,
 };
 
 function redisEntryBytes(params: typeof redisDefaults): number {
@@ -200,6 +202,8 @@ const redis = defineComponent({
         conflictResolution: choice('consistency', CONFLICT_RESOLUTION),
         availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
         costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.001 }),
+        hitRatioMode: choice('performance', ['auto', 'manual']),
+        hitRatioOverride: num('performance', { min: 0, max: 1, step: 0.01 }),
     },
     model: redisModel,
     helpId: 'redis',
@@ -229,6 +233,8 @@ const memcachedDefaults = {
     conflictResolution: 'lww',
     availability: 0.999,
     costPerInstanceHour: 0.18,
+    hitRatioMode: 'auto',
+    hitRatioOverride: 0.8,
 };
 
 function memcachedSlabPageBytes(params: typeof memcachedDefaults): number {
@@ -356,6 +362,8 @@ const memcached = defineComponent({
         conflictResolution: choice('consistency', CONFLICT_RESOLUTION),
         availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
         costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.001 }),
+        hitRatioMode: choice('performance', ['auto', 'manual']),
+        hitRatioOverride: num('performance', { min: 0, max: 1, step: 0.01 }),
     },
     model: memcachedModel,
     helpId: 'memcached',
@@ -381,6 +389,8 @@ const localCacheDefaults = {
     replicaLagSigma: 0.8,
     concurrencyControl: 'none',
     conflictResolution: 'lww',
+    hitRatioMode: 'auto',
+    hitRatioOverride: 0.8,
 };
 
 function localCacheEntryBytes(params: typeof localCacheDefaults): number {
@@ -459,6 +469,8 @@ const localCache = defineComponent({
         replicaLagSigma: num('consistency', { min: 0.1, max: 3, step: 0.1 }),
         concurrencyControl: choice('consistency', CONCURRENCY_CONTROL),
         conflictResolution: choice('consistency', CONFLICT_RESOLUTION),
+        hitRatioMode: choice('performance', ['auto', 'manual']),
+        hitRatioOverride: num('performance', { min: 0, max: 1, step: 0.01 }),
     },
     model: localCacheModel,
     helpId: 'local-cache',
@@ -494,6 +506,8 @@ const hazelcastDefaults = {
     conflictResolution: 'lww',
     availability: 0.999,
     costPerInstanceHour: 0.3,
+    hitRatioMode: 'auto',
+    hitRatioOverride: 0.8,
 };
 
 function hazelcastEntryBytes(params: typeof hazelcastDefaults): number {
@@ -677,6 +691,8 @@ const hazelcast = defineComponent({
         conflictResolution: choice('consistency', CONFLICT_RESOLUTION),
         availability: num('reliability', { min: 0.9, max: 0.99999, step: 0.0001 }),
         costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.001 }),
+        hitRatioMode: choice('performance', ['auto', 'manual']),
+        hitRatioOverride: num('performance', { min: 0, max: 1, step: 0.01 }),
     },
     model: hazelcastModel,
     helpId: 'hazelcast',

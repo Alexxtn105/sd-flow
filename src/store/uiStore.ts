@@ -35,11 +35,15 @@ export interface UiState {
     heatmapOn: boolean;
     minimapOn: boolean;
     defaultConsistencyModel: SchemeSettings['consistencyModel'];
+    paramPopoverNodeId: string | null;
     connectionSource: ConnectionSource | null;
     setMode: (mode: AppMode) => void;
     togglePalette: () => void;
     toggleChallengePanel: () => void;
     toggleInspector: () => void;
+    openInspector: () => void;
+    toggleParamPopover: (nodeId: string) => void;
+    closeParamPopover: () => void;
     toggleXray: () => void;
     setPanelSize: (key: PanelKey, value: number) => void;
     resetPanelSize: (key: PanelKey) => void;
@@ -150,12 +154,21 @@ export const useUiStore = create<UiState>((set, get) => ({
     heatmapOn: loadHeatmapOn(),
     minimapOn: loadMinimapOn(),
     defaultConsistencyModel: loadDefaultConsistencyModel(),
+    paramPopoverNodeId: null,
     connectionSource: null,
 
     setMode: (mode) => set({ mode }),
     togglePalette: () => set((state) => ({ paletteCollapsed: !state.paletteCollapsed })),
     toggleChallengePanel: () => set((state) => ({ challengeCollapsed: !state.challengeCollapsed })),
     toggleInspector: () => set((state) => ({ inspectorOpen: !state.inspectorOpen })),
+    openInspector: () => set({ inspectorOpen: true }),
+
+    toggleParamPopover: (nodeId) =>
+        set((state) => ({ paramPopoverNodeId: state.paramPopoverNodeId === nodeId ? null : nodeId })),
+    closeParamPopover: () => {
+        if (get().paramPopoverNodeId === null) return;
+        set({ paramPopoverNodeId: null });
+    },
     toggleXray: () => set((state) => ({ xray: !state.xray })),
 
     setPanelSize: (key, value) => {

@@ -661,6 +661,8 @@ const reverseCacheDefaults = {
     networkMbps: 10000,
     availability: 0.999,
     costPerInstanceHour: 0.12,
+    hitRatioMode: 'manual',
+    hitRatioOverride: 0.85,
 };
 
 function reverseCacheEntryBytes(params: typeof reverseCacheDefaults): number {
@@ -745,6 +747,8 @@ const reverseCache = defineComponent({
         networkMbps: num('capacity', { unitKey: 'mbps', min: 10, max: 100000 }),
         availability: num('reliability', { min: 0.99, max: 0.999999, step: 0.0001 }),
         costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 1000, step: 0.001 }),
+        hitRatioMode: choice('performance', ['auto', 'manual']),
+        hitRatioOverride: num('performance', { min: 0, max: 1, step: 0.01 }),
     },
     model: reverseCacheModel,
     helpId: 'reverse-cache',

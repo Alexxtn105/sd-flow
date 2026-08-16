@@ -299,7 +299,9 @@
         "minimapShow": "Показать миникарту",
         "minimapHide": "Скрыть миникарту",
         "heatFromUtilization": "Тепловая карта: утилизация",
-        "heatFromProbe": "Тепловая карта: проба"
+        "heatFromProbe": "Тепловая карта: проба",
+        "popoverMore": "Ещё {{count}} параметров — в инспекторе",
+        "popoverAll": "Открыть инспектор"
     },
     "inspector": {
         "title": "Инспектор",
@@ -332,7 +334,18 @@
             "boundBy": "Упирается в «{{bound}}»: ёмкость {{capacity}} запр./с при {{instances}} экз."
         },
         "outOfLimits": "Значение вне допустимого — {{span}}; расчёт будет бессмысленным",
-        "outOfRealistic": "Так не бывает — {{span}}"
+        "outOfRealistic": "Так не бывает — {{span}}",
+        "preset": "Пресет инстанса",
+        "presetCustom": "свой",
+        "presetSize": {
+            "xs": "XS — четверть от базового",
+            "s": "S — половина",
+            "m": "M — базовый",
+            "l": "L — вдвое",
+            "xl": "XL — вчетверо"
+        },
+        "derivedRps": "Нагрузка",
+        "derivedRpsHint": "Производная от DAU, сессий и запросов в сессии. Правка пересчитывает DAU обратно."
     },
     "blockHelp": {
         "title": "Справка по блоку",

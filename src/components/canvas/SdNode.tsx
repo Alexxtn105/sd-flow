@@ -12,6 +12,7 @@ import { useUiStore } from '../../store/uiStore';
 import { formatParamValue, formatPercent, formatRps, utilizationLevel } from '../../utils/format';
 import { heatValueOf, nodeHeat } from '../../utils/heatmap';
 import { blockName, nodeName } from '../../utils/nodeName';
+import ParamPopover from './ParamPopover';
 import { useHandleCompatibility } from './useHandleCompatibility';
 import type { HandleCompatibility, HandleDirection } from './useHandleCompatibility';
 import './SdNode.css';
@@ -48,6 +49,8 @@ function SdNodeView({ id, data, selected }: NodeProps<SdNodeType>) {
     const metrics = useNodeResult(id);
     const heatmapProbeId = useUiStore((state) => state.heatmapProbeId);
     const heatmapOn = useUiStore((state) => state.heatmapOn);
+    const popoverOpen = useUiStore((state) => state.paramPopoverNodeId === id);
+    const toggleParamPopover = useUiStore((state) => state.toggleParamPopover);
     const heatmap = useSimStore((state) =>
         heatmapProbeId ? (state.result?.probes[heatmapProbeId]?.heatmap ?? null) : null,
     );
@@ -150,6 +153,10 @@ function SdNodeView({ id, data, selected }: NodeProps<SdNodeType>) {
     return (
         <div
             className={`sd-node sd-node-${definition.group} ${selected ? 'selected' : ''} ${heat ? `sd-node-heat sd-node-load-${heat.level}` : ''}`}
+            onDoubleClick={(event) => {
+                event.stopPropagation();
+                toggleParamPopover(id);
+            }}
         >
             {renderHandles(definition.ports.in, Position.Left, 'target', compatibility)}
 
@@ -204,6 +211,8 @@ function SdNodeView({ id, data, selected }: NodeProps<SdNodeType>) {
             )}
 
             {renderHandles(definition.ports.out, Position.Right, 'source', compatibility)}
+
+            {popoverOpen && <ParamPopover nodeId={id} componentType={data.componentType} />}
         </div>
     );
 }

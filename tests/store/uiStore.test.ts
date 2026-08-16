@@ -283,3 +283,38 @@ describe('модель согласованности по умолчанию', 
         expect(useSchemeStore.getState().settings.pricingProfile).toBe(DEFAULT_SETTINGS.pricingProfile);
     });
 });
+
+describe('поповер параметров', () => {
+    beforeEach(() => {
+        useUiStore.getState().closeParamPopover();
+    });
+
+    it('открывается на узле и закрывается повторным вызовом', () => {
+        useUiStore.getState().toggleParamPopover('node-1');
+        expect(useUiStore.getState().paramPopoverNodeId).toBe('node-1');
+
+        useUiStore.getState().toggleParamPopover('node-1');
+        expect(useUiStore.getState().paramPopoverNodeId).toBeNull();
+    });
+
+    it('переезжает на другой узел, а не открывается вторым', () => {
+        useUiStore.getState().toggleParamPopover('node-1');
+        useUiStore.getState().toggleParamPopover('node-2');
+
+        expect(useUiStore.getState().paramPopoverNodeId).toBe('node-2');
+    });
+
+    it('закрытие уже закрытого не трогает состояние', () => {
+        const before = useUiStore.getState();
+        useUiStore.getState().closeParamPopover();
+
+        expect(useUiStore.getState()).toBe(before);
+    });
+
+    it('кнопка «все параметры» открывает инспектор', () => {
+        useUiStore.setState({ inspectorOpen: false });
+        useUiStore.getState().openInspector();
+
+        expect(useUiStore.getState().inspectorOpen).toBe(true);
+    });
+});
