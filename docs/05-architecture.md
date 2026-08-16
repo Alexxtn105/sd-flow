@@ -79,7 +79,7 @@ sd-flow/
 │   ├── workers/simulation.worker.ts   ← расчёт схемы и приёмка задания вне главного потока
 │   ├── store/                         ← Zustand: graphStore, schemeStore, uiStore, simStore, challengeStore
 │   ├── components/
-│   │   ├── canvas/                    ← SdEditor, SdNode, GroupNode, ProbeNode, ProbeWindows, TrafficEdge,
+│   │   ├── canvas/                    ← SdEditor, SdNode, GroupNode, ProbeNode, ProbeWindows, HeatLegend, TrafficEdge,
 │   │   │                                CanvasContextMenu (узел, ребро, холст)
 │   │   ├── panels/                    ← Palette, Inspector, Dashboard (+ Timeline), Challenges
 │   │   ├── tutorial/                  ← Tutorial + tutorialSteps.ts (чистый редьюсер шагов)
@@ -330,6 +330,12 @@ type WorkerResponse = { id: number; payload?: SimResult | CeilingResult | Challe
 она выключена, чтобы не занимать половину экрана телефона, но выбор пользователя сильнее ширины —
 однажды нажатая кнопка в панели управления холстом запоминается.
 
+Уровень заливки узла выбирает `nodeHeat` из `utils/heatmap.ts` — чистая функция от выключателя,
+проекции пробы и утилизации. Источников два, и приоритет у пробы: пока `probe-heatmap` красит схему,
+цвет берётся из её показаний и её порогов, иначе — из ρ узла по шкале `utilizationLevel`. Легенда
+на холсте показывает ту шкалу, которая сейчас работает; тест сверяет её ступени с функцией
+раскраски, чтобы подпись не разошлась с цветом.
+
 Undo/redo — на патчах Immer, ограничение 100 шагов. Тема и язык остаются в Context (как в dsp-flow):
 меняются редко, глобальны.
 
@@ -518,9 +524,10 @@ install → lint → typecheck → test → build → deploy (GitHub Pages)
 | Настройки схемы (FR-PLT-7) | `dialogs/SettingsDialog.tsx` | Модель согласованности, профиль цен с датой, глубина модели и зерно — в одном диалоге; задание с `requiredConsistencyModel` блокирует селект |
 | Живые метрики и диапазоны в инспекторе (FR-PRM-4/8) | `panels/Inspector` | Нагрузка, ρ, время ответа, $/мес и строка ограничителя; поле краснеет при выходе за `min`/`max` и предупреждает при выходе за реалистичный диапазон |
 | Холст: копирование, снап, меню, перенос в группу (FR-CNV-3/4/5/6) | `canvas/SdEditor.tsx`, `canvas/CanvasContextMenu.tsx`, `store/graphStore.ts` | Ctrl+C/Ctrl+V с новыми идентификаторами, сетка 18 px, меню на ребре и на холсте, перенос узла в контейнер мышью |
-| Тепловая карта, фокус, миникарта (FR-DSH-2/3) | `layout/Header`, `store/uiStore.ts`, `canvas/SdEditor.tsx` | Переключатель заливки по загрузке, подвод камеры к узлам находки, миникарта кнопкой в панели холста (на узком экране выключена по умолчанию) |
+| Тепловая карта, фокус, миникарта (FR-DSH-2/3) | `layout/Header`, `store/uiStore.ts`, `canvas/SdEditor.tsx` | Переключатель заливки по загрузке, подвод камеры к узлам находки, миникарта кнопкой в панели холста (на узком экране выключена по умолчанию); сама заливка заработала в 1.4.3 |
 | Размер контейнера в схеме | `utils/nodeSize.ts`, `services/schemeSerializer.ts` | Растянутый регион переживает сохранение и открытие: размер читается из `node.width`/`height` React Flow, а не из `style` |
 | Обновление после релиза (1.4.2) | `public/sw.js`, `services/serviceWorker.ts`, `layout/Header` | Документ запрашивается из сети, смена версии чистит кеш, номер версии виден в шапке — открытая вкладка больше не остаётся на прошлой сборке (ADR-16) |
+| Тепловая карта на холсте (1.4.3) | `utils/heatmap.ts`, `canvas/SdNode.tsx`, `canvas/HeatLegend.tsx` | Кнопка в шапке красит блоки по ρ и показывает легенду со шкалой; проекция пробы главнее и красит по своим порогам |
 
 ### 12.6. Что осталось на следующие фазы
 

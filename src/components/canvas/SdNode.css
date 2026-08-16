@@ -301,38 +301,43 @@
     font-variant-numeric: tabular-nums;
 }
 
-.sd-node-load-hot {
+.sd-node.sd-node-load-hot {
     border-color: var(--util-hot);
 }
 
-.sd-node-load-hot .sd-util-track {
+.sd-node.sd-node-load-hot .sd-util-track {
     background: color-mix(in srgb, var(--util-hot) 30%, transparent);
 }
 
-.sd-node-heat {
+.sd-node.sd-node-heat {
     --heat-color: var(--util-idle);
+    --heat-tint: color-mix(in srgb, var(--util-idle) 10%, transparent);
+    --heat-ring: color-mix(in srgb, var(--util-idle) 30%, transparent);
     border-color: var(--heat-color);
-    background-image: linear-gradient(
-        color-mix(in srgb, var(--heat-color) 16%, transparent),
-        color-mix(in srgb, var(--heat-color) 16%, transparent)
-    );
+    background-image: linear-gradient(var(--heat-tint), var(--heat-tint));
     box-shadow:
-        0 0 0 1px color-mix(in srgb, var(--heat-color) 45%, transparent),
+        0 0 0 1px var(--heat-ring),
         var(--shadow-sm);
 }
 
-.sd-node-heat.sd-node-load-ok {
+.sd-node.sd-node-heat.sd-node-load-ok {
     --heat-color: var(--util-ok);
+    --heat-tint: color-mix(in srgb, var(--util-ok) 13%, transparent);
+    --heat-ring: color-mix(in srgb, var(--util-ok) 40%, transparent);
 }
 
-.sd-node-heat.sd-node-load-warn {
+.sd-node.sd-node-heat.sd-node-load-warn {
     --heat-color: var(--util-warn);
+    --heat-tint: color-mix(in srgb, var(--util-warn) 22%, transparent);
+    --heat-ring: color-mix(in srgb, var(--util-warn) 55%, transparent);
 }
 
-.sd-node-heat.sd-node-load-hot {
+.sd-node.sd-node-heat.sd-node-load-hot {
     --heat-color: var(--util-hot);
+    --heat-tint: color-mix(in srgb, var(--util-hot) 30%, transparent);
+    --heat-ring: color-mix(in srgb, var(--util-hot) 70%, transparent);
 }
 
-.sd-node-heat.selected {
+.sd-node.sd-node-heat.selected {
     border-color: var(--accent-primary);
 }

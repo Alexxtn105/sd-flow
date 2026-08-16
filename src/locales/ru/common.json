@@ -277,7 +277,9 @@
         "fitView": "Вписать в экран",
         "deleteEdge": "Удалить связь",
         "minimapShow": "Показать миникарту",
-        "minimapHide": "Скрыть миникарту"
+        "minimapHide": "Скрыть миникарту",
+        "heatFromUtilization": "Тепловая карта: утилизация",
+        "heatFromProbe": "Тепловая карта: проба"
     },
     "inspector": {
         "title": "Инспектор",

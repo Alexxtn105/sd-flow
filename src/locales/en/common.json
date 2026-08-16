@@ -277,7 +277,9 @@
         "fitView": "Fit to screen",
         "deleteEdge": "Delete connection",
         "minimapShow": "Show minimap",
-        "minimapHide": "Hide minimap"
+        "minimapHide": "Hide minimap",
+        "heatFromUtilization": "Heat map: utilisation",
+        "heatFromProbe": "Heat map: probe"
     },
     "inspector": {
         "title": "Inspector",

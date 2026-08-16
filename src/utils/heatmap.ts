@@ -1,6 +1,9 @@
 import type { ProbeHeatmap } from '../engine/sim/types';
+import { formatNumber, utilizationLevel } from './format';
 
 export type HeatLevel = 'idle' | 'ok' | 'warn' | 'hot';
+
+export type HeatSource = 'utilization' | 'probe';
 
 export const HEAT_LEVELS: HeatLevel[] = ['idle', 'ok', 'warn', 'hot'];
 
@@ -51,4 +54,41 @@ export function heatValueOf(heatmap: ProbeHeatmap, nodeId: string): number | nul
     const cell = heatmap.cells.find((item) => item.nodeId === nodeId);
 
     return cell ? cell.value : null;
+}
+
+export const UTILIZATION_SCALE: HeatStop[] = [
+    { level: 'idle', from: 0, to: 0.02 },
+    { level: 'ok', from: 0.02, to: 0.8 },
+    { level: 'warn', from: 0.8, to: 1 },
+    { level: 'hot', from: 1, to: null },
+];
+
+export function formatHeatRange(stop: HeatStop): string {
+    const percent = (share: number) => `${formatNumber(share * 100)}%`;
+
+    if (stop.to === null) return `≥ ${percent(stop.from)}`;
+    if (stop.to === stop.from) return percent(stop.from);
+
+    return `${percent(stop.from)} – ${percent(stop.to)}`;
+}
+
+export interface NodeHeatInput {
+    heatmapOn: boolean;
+    projected: number | null;
+    thresholds: HeatThresholds | null;
+    utilization: number | null;
+}
+
+export interface NodeHeat {
+    level: HeatLevel;
+    source: HeatSource;
+}
+
+export function nodeHeat({ heatmapOn, projected, thresholds, utilization }: NodeHeatInput): NodeHeat | null {
+    if (!heatmapOn) return null;
+
+    if (projected !== null && thresholds) return { level: heatLevel(projected, thresholds), source: 'probe' };
+    if (utilization === null) return null;
+
+    return { level: utilizationLevel(utilization), source: 'utilization' };
 }

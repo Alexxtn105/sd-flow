@@ -19,8 +19,7 @@ import { useGraphStore } from '../../store/graphStore';
 import { useSimStore } from '../../store/simStore';
 import { useUiStore } from '../../store/uiStore';
 import { formatNumber } from '../../utils/format';
-import { heatLevel, heatScale } from '../../utils/heatmap';
-import type { HeatStop } from '../../utils/heatmap';
+import { formatHeatRange, heatLevel, heatScale } from '../../utils/heatmap';
 import { WATERFALL_PERCENTILES } from '../../utils/waterfall';
 import type { WaterfallPercentile } from '../../utils/waterfall';
 import './ProbeWindows.css';
@@ -105,13 +104,6 @@ function percentOf(share: number): string {
     return `${formatNumber(share * 100)}%`;
 }
 
-function rangeOf(stop: HeatStop): string {
-    if (stop.to === null) return `≥ ${percentOf(stop.from)}`;
-    if (stop.to === stop.from) return percentOf(stop.from);
-
-    return `${percentOf(stop.from)} – ${percentOf(stop.to)}`;
-}
-
 function historyOf(reading: ProbeReading, timeline: Timeline | null): number[] {
     const metric = HISTORY_METRICS[reading.componentType];
     const nodeId = reading.targetNodeId;
@@ -180,7 +172,7 @@ function HeatmapPanel({ heatmap, projecting, labelOf, onToggle }: HeatmapPanelPr
                     <li key={stop.level} className={`probe-heat-stop probe-heat-${stop.level}`}>
                         <span className="probe-heat-swatch" />
                         <span className="probe-heat-label">{t(`probe.heatLevel.${stop.level}`)}</span>
-                        <span className="probe-heat-range">{rangeOf(stop)}</span>
+                        <span className="probe-heat-range">{formatHeatRange(stop)}</span>
                     </li>
                 ))}
             </ul>

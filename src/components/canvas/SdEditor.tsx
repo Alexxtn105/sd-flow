@@ -8,6 +8,7 @@ import SdNode from './SdNode';
 import GroupNode from './GroupNode';
 import ProbeNode from './ProbeNode';
 import ProbeWindows from './ProbeWindows';
+import HeatLegend from './HeatLegend';
 import Icon from '../common/Icons/Icon';
 import TrafficEdge from './TrafficEdge';
 import CanvasContextMenu from './CanvasContextMenu';
@@ -364,6 +365,7 @@ export default function SdEditor() {
                         <Icon name="map" size="small" />
                     </ControlButton>
                 </Controls>
+                <HeatLegend />
                 {minimapOn && (
                     <MiniMap
                         pannable

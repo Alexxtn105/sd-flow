@@ -1,0 +1,72 @@
+.sd-heat-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 7px 9px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    border-radius: 6px;
+    box-shadow: var(--shadow-sm);
+    pointer-events: none;
+}
+
+.sd-heat-legend-title {
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+
+.sd-heat-legend-scale {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.sd-heat-stop {
+    display: grid;
+    grid-template-columns: 10px 1fr auto;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--text-secondary);
+}
+
+.sd-heat-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--heat-swatch) 55%, transparent);
+    border: 1px solid var(--heat-swatch);
+}
+
+.sd-heat-range {
+    color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+}
+
+.sd-heat-idle {
+    --heat-swatch: var(--util-idle);
+}
+
+.sd-heat-ok {
+    --heat-swatch: var(--util-ok);
+}
+
+.sd-heat-warn {
+    --heat-swatch: var(--util-warn);
+}
+
+.sd-heat-hot {
+    --heat-swatch: var(--util-hot);
+}
+
+@media (max-width: 768px) {
+    .sd-heat-legend {
+        display: none;
+    }
+}
