@@ -127,6 +127,16 @@ export function findPath(
     return null;
 }
 
+export function servingNodes(topology: CompiledTopology): Set<string> {
+    const serving = new Set<string>();
+
+    for (const entry of topology.entryNodes) {
+        for (const nodeId of reachableFrom(topology, entry)) serving.add(nodeId);
+    }
+
+    return serving;
+}
+
 export function reachableFrom(topology: CompiledTopology, from: string): Set<string> {
     const seen = new Set<string>([from]);
     const queue = [from];
@@ -460,8 +470,11 @@ function evaluateBudget(requirement: BudgetRequirement, input: PredicateInput): 
 
 function evaluateStorage(requirement: StorageRequirement, input: PredicateInput): RequirementEvaluation {
     const needed = input.result.totals.growthGbDay * DAYS_PER_YEAR * requirement.horizonYears * requirement.headroom;
+    const serving = servingNodes(input.topology);
 
     const provisioned = input.topology.nodes.reduce((sum, node) => {
+        if (!serving.has(node.id)) return sum;
+
         const capacity = PROVISIONED_STORAGE_GB[node.type];
         return capacity ? sum + capacity(node.params) : sum;
     }, 0);

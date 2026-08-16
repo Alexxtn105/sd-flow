@@ -185,6 +185,7 @@ export interface Challenge {
     scenarios: { required: ScenarioId[]; bonus: ScenarioId[] };
     relaxation: Partial<Record<ScenarioId, ScenarioRelaxation>>;
     requiredConsistencyModel?: 'anomalies';
+    pricingProfile?: string;
     lockedParams: Record<string, ComponentParams>;
     starter: () => SchemeV1;
     hints: ChallengeHint[];

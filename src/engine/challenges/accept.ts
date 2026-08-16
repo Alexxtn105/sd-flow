@@ -124,9 +124,23 @@ function comparisonMetrics(result: SimResult): ComparisonMetrics {
     };
 }
 
+export const ACCEPTANCE_SEED = 1;
+export const ACCEPTANCE_PRICING = 'aws-2026-q2';
+
+export function judgedScheme(challenge: Challenge, scheme: SchemeV1): SchemeV1 {
+    return {
+        ...scheme,
+        settings: {
+            ...scheme.settings,
+            seed: ACCEPTANCE_SEED,
+            pricingProfile: challenge.pricingProfile ?? ACCEPTANCE_PRICING,
+        },
+    };
+}
+
 function runReferences(challenge: Challenge, sampleCount: number): ReferenceRun[] {
     return challenge.referenceSolutions.map((solution) => {
-        const scheme = solution.build();
+        const scheme = judgedScheme(challenge, solution.build());
         const result = simulate(scheme, { sampleCount, scenario: 'baseline' });
 
         return {
@@ -218,7 +232,8 @@ export function acceptChallenge(input: AcceptInput): ChallengeVerdict {
         return emptyVerdict(challenge, attempt);
     }
 
-    const baseline = simulate(scheme, { sampleCount, scenario: 'baseline' });
+    const judged = judgedScheme(challenge, scheme);
+    const baseline = simulate(judged, { sampleCount, scenario: 'baseline' });
 
     const realism = checkRealism({
         challenge,
@@ -254,7 +269,7 @@ export function acceptChallenge(input: AcceptInput): ChallengeVerdict {
             continue;
         }
 
-        const result = simulate(scheme, { sampleCount, scenario: item.scenario });
+        const result = simulate(judged, { sampleCount, scenario: item.scenario });
         const relaxation = challenge.relaxation[item.scenario] ?? {};
         const evaluations = requirementsFor(challenge, item.scenario).map((requirement) =>
             evaluateRequirement(requirement, predicateInput(topology, result, item.scenario, relaxation)),
