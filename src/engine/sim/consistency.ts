@@ -16,6 +16,8 @@ const ORDERED_DELIVERY = new Set(['per-key', 'per-partition', 'global', 'fifo'])
 const PARTITION_PARAMS = ['partitions', 'shards'];
 const CONSUMER_SLOT_PARAMS = ['concurrencyPerInstance', 'concurrency'];
 const STORE_GROUPS = new Set(['sql', 'nosql', 'cache', 'search', 'olap']);
+const READ_YOUR_WRITES_MODELS = new Set(['read-your-writes']);
+const MONOTONIC_MODELS = new Set(['monotonic']);
 
 const ISOLATION_ANOMALIES: Record<string, string[]> = {
     'read-uncommitted': ['dirty-read', 'non-repeatable-read', 'phantom-read'],
@@ -125,11 +127,35 @@ function replicaReadShare(node: CompiledNode): number {
     return mode === 'async' ? 1 : 0;
 }
 
+function quorumIsStrong(params: ComponentParams): boolean {
+    const total = params.quorumN;
+    const read = params.quorumR;
+    const write = params.quorumW;
+
+    if (typeof total !== 'number' || typeof read !== 'number' || typeof write !== 'number') return false;
+
+    return read + write > total;
+}
+
 function staleReadsEliminated(node: CompiledNode): boolean {
     const model = String(node.params.consistencyModel ?? '');
     const replication = String(node.params.replicationMode ?? '');
 
+    if (quorumIsStrong(node.params)) return true;
+
     return model === 'linearizable' && replication === 'sync';
+}
+
+function readYourWritesGuaranteed(node: CompiledNode): boolean {
+    return READ_YOUR_WRITES_MODELS.has(String(node.params.consistencyModel ?? ''));
+}
+
+function monotonicGuaranteed(node: CompiledNode): boolean {
+    return MONOTONIC_MODELS.has(String(node.params.consistencyModel ?? ''));
+}
+
+function mergesConflicts(node: CompiledNode): boolean {
+    return String(node.params.concurrencyControl ?? '') === 'crdt';
 }
 
 export function analyseConsistency(
@@ -148,7 +174,8 @@ export function analyseConsistency(
         policy.params.mode === 'active-active' &&
         policy.params.replicationDirection === 'bidirectional' &&
         topology.regions.length > 1 &&
-        conflictResolution !== 'single-writer-per-key';
+        conflictResolution !== 'single-writer-per-key' &&
+        conflictResolution !== 'crdt';
 
     for (const node of topology.nodes) {
         if (node.definition.shape !== 'node') continue;
@@ -188,8 +215,11 @@ export function analyseConsistency(
                 });
             }
 
+            const sticky = stickyReadShare(node);
             const rywProbability = logNormalTail(READ_AFTER_WRITE_GAP_SEC, lagSec, sigma);
-            const rywRate = runtime.write * READ_AFTER_WRITE_SHARE * replicaShare * rywProbability;
+            const rywRate = readYourWritesGuaranteed(node)
+                ? 0
+                : runtime.write * READ_AFTER_WRITE_SHARE * replicaShare * rywProbability * (1 - sticky);
 
             if (rywRate > 0) {
                 anomalies.push({
@@ -198,11 +228,12 @@ export function analyseConsistency(
                     shareOfOperations: runtime.write > 0 ? rywRate / runtime.write : 0,
                     nodeIds: [node.id],
                     explain: explain(
-                        'λ_write × readAfterWriteShare × replicaShare × P(L > Δt)',
+                        'λ_write × readAfterWriteShare × replicaShare × (1 − stickyReadShare) × P(L > Δt)',
                         {
                             lambdaWrite: runtime.write,
                             readAfterWriteShare: READ_AFTER_WRITE_SHARE,
                             replicaShare,
+                            stickyReadShare: sticky,
                             deltaSec: READ_AFTER_WRITE_GAP_SEC,
                             medianLagSec: lagSec,
                         },
@@ -213,11 +244,11 @@ export function analyseConsistency(
             }
 
             const replicaPool = replicaPoolSize(node);
-            const sticky = stickyReadShare(node);
             const pairSigma = sigma * Math.SQRT2;
             const divergenceProbability = logNormalTail(MONOTONIC_READ_GAP_SEC, lagSec, pairSigma);
-            const monotonicRate =
-                rate * (1 - sticky) * (1 - 1 / replicaPool) * divergenceProbability;
+            const monotonicRate = monotonicGuaranteed(node)
+                ? 0
+                : rate * (1 - sticky) * (1 - 1 / replicaPool) * divergenceProbability;
 
             if (monotonicRate > 0) {
                 anomalies.push({
@@ -296,7 +327,7 @@ export function analyseConsistency(
             }
         }
 
-        if (multiMaster && runtime.write > 0) {
+        if (multiMaster && runtime.write > 0 && !mergesConflicts(node)) {
             const regionCount = Math.max(topology.regions.length, 2);
             const propagationSec = meanLagSec > 0 ? meanLagSec : 0.1;
             const foreignWritePerKey = writePerKey * (regionCount - 1);

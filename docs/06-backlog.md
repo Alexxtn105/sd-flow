@@ -29,10 +29,11 @@
 | `[x]` | FR-SIM-15 | P0 | ~~Гео-маршрутизация~~ — `sim/routing.ts`: зона клиента из `geoDistribution` → регион по политике `latency` / `geo` / `failover`, раздельные доли чтений и записей на ребре, выключенный регион выпадает из выбора. `weighted` и `simple` сохраняют прежнее поведение | `sim/routing.ts`, `sim/solver.ts` |
 | `[ ]` | FR-SIM-15 | P1 | `clientGeo` — одна зона на клиента, а не распределение; `stickyRegion` у `glb` по-прежнему не читается; «чужие» ключи `sharded-by-geo` не получают лишний хоп | `components/clients.ts`, `sim/routing.ts` |
 | `[x]` | FR-SIM-16 | P0 | ~~Режимы репликации~~ — `single` и `active-passive` уводят всё в активный регион, `read-local-write-global` оставляет чтения локальными и уводит записи в `writeRegion`, RTT приходит из `scope = cross-region` ребра | `sim/routing.ts` |
-| `[ ]` | FR-SIM-18 | P0 | Кворум `R + W > N` не гасит A1: `quorumN/R/W` читаются только в ёмкости | `sim/consistency.ts` |
-| `[ ]` | FR-SIM-18 | P0 | `version-token` (RYW-токен) и `wait-for-lag` — параметров нет ни у одного блока | `components/sql.ts`, `components/nosql.ts`, `sim/consistency.ts` |
-| `[ ]` | FR-SIM-18 | P0 | `sticky-primary` гасит только A3, хотя по §7а.3 убирает A2 и A3; цена (нагрузка на primary, `+RTT` до `writeRegion`) не считается | `sim/consistency.ts` |
-| `[ ]` | FR-SIM-18 | P0 | `crdt` неотличим от `optimistic`/`pessimistic` — общая ветка `!== 'none'`; по §7а.3 он должен убирать и A5. Поблочный `conflictResolution` движком не читается | `sim/consistency.ts` |
+| `[x]` | FR-SIM-18 | P0 | ~~Кворум `R + W > N`~~ — обнуляет A1 и производные от неё A2 и A3 | `sim/consistency.ts` |
+| `[x]` | FR-SIM-18 | P0 | ~~`sticky-primary` гасит A2~~ — доля липких чтений вычитается и из read-your-writes, не только из монотонности | `sim/consistency.ts` |
+| `[x]` | FR-SIM-18 | P0 | ~~RYW-гарантия~~ — вместо отдельного параметра работает объявленная `consistencyModel`: `read-your-writes` снимает A2, `monotonic` — A3, `linearizable` поверх async не снимает ничего | `sim/consistency.ts` |
+| `[x]` | FR-SIM-18 | P0 | ~~`crdt` отличается от прочих~~ — `conflictResolution = crdt` на политике и `concurrencyControl = crdt` на хранилище убирают A5 целиком | `sim/consistency.ts` |
+| `[ ]` | FR-SIM-18 | P1 | Не считается цена средств смягчения: нагрузка на primary от липких чтений, `+RTT` до `writeRegion`, ретраи при контенции, `wait-for-lag` как надбавка к задержке чтения | `sim/consistency.ts`, `sim/latency.ts` |
 | `[ ]` | FR-SIM-18 | P0 | Цена `optimistic`/`pessimistic` не считается: ни ретраев при контенции, ни ограничителя ёмкости «сериализация на ключе» | `sim/consistency.ts`, `sim/resources.ts` |
 | `[ ]` | FR-SIM-18 | P0 | Хранение ключей идемпотентности и их TTL не моделируются; `idempotencyRequired` не читается | `sim/derived.ts`, `components/platform.ts` |
 | `[ ]` | FR-SIM-9 | P0 | Сценария `split-brain` нет: нужна модель расхождения и слияния реплик за время разрыва | `sim/scenarios.ts`, `sim/consistency.ts` |
