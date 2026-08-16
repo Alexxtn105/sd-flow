@@ -16,6 +16,7 @@ import type {
 
 const MAX_WALK_DEPTH = 12;
 const MAX_CALLS_PER_EDGE = 16;
+const MAX_TAIL_SIGMA = 2;
 const BACKOFF_BASE_SEC = 0.05;
 const PERCENTILE_WINDOW_SHARE = 0.005;
 const BALANCING_GROUPS = new Set(['edge', 'clients']);
@@ -208,6 +209,20 @@ function callsPerRequestOf(edge: CompiledEdge): number {
     return edge.calls.reduce((sum, call) => sum + call.share * Math.max(call.fanout, 0), 0);
 }
 
+export function tailAtScaleFactor(sample: number[], total: number, drawn: number): number {
+    if (total <= drawn || drawn < 2) return 1;
+
+    const logs = sample.filter((value) => value > 0).map(Math.log);
+    if (logs.length < 2) return 1;
+
+    const mean = logs.reduce((sum, value) => sum + value, 0) / logs.length;
+    const variance = logs.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (logs.length - 1);
+    const sigma = Math.min(Math.sqrt(variance), MAX_TAIL_SIGMA);
+    if (!(sigma > 0)) return 1;
+
+    return Math.exp(sigma * (Math.sqrt(2 * Math.log(total)) - Math.sqrt(2 * Math.log(drawn))));
+}
+
 function sampleCallCount(callsPerRequest: number, rng: Rng): number {
     if (callsPerRequest <= 0) return 0;
 
@@ -397,6 +412,10 @@ export function rollUpLatency(
             for (let index = from; index < logSec.length; index += 1) logSec[index] *= factor;
         };
 
+        const scaleRange = (from: number, to: number, factor: number): void => {
+            for (let index = from; index < to; index += 1) logSec[index] *= factor;
+        };
+
         const discard = (from: number, to: number): void => {
             for (let index = from; index < to; index += 1) logSec[index] = 0;
         };
@@ -439,11 +458,26 @@ export function rollUpLatency(
                     if (outcome.timedOut) timedOut = true;
                 }
 
-                if (calls > sampled && !plan.parallel && durations.length > durationsFrom) {
+                if (calls <= sampled || durations.length === durationsFrom) continue;
+
+                if (!plan.parallel) {
                     const scale = calls / sampled;
                     rescale(edgeFrom, scale);
                     for (let item = durationsFrom; item < durations.length; item += 1) durations[item] *= scale;
+                    continue;
                 }
+
+                const drawn = durations.slice(durationsFrom);
+                const factor = tailAtScaleFactor(drawn, calls, drawn.length);
+                if (factor <= 1) continue;
+
+                let slowest = durationsFrom;
+                for (let item = durationsFrom + 1; item < durations.length; item += 1) {
+                    if (durations[item] > durations[slowest]) slowest = item;
+                }
+
+                durations[slowest] *= factor;
+                scaleRange(spans[slowest].from, spans[slowest].to, factor);
             }
 
             return { durations, spans, failed, timedOut };
