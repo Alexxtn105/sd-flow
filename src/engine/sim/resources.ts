@@ -175,6 +175,7 @@ export interface ModelSpec<P extends ComponentParams> {
     cost?: (ctx: CostContext<P>) => CostBreakdown;
     storage?: (ctx: StorageContext<P>) => StorageResult;
     availability?: (params: P) => number;
+    quorum?: (params: P) => number;
     cache?: (ctx: NodeContext<P>) => CacheProfile;
 }
 
@@ -186,6 +187,7 @@ export function defineModel<P extends ComponentParams>(spec: ModelSpec<P>): Comp
         ...(spec.cost ? { cost: spec.cost } : {}),
         ...(spec.storage ? { storage: spec.storage } : {}),
         ...(spec.availability ? { availability: spec.availability } : {}),
+        ...(spec.quorum ? { quorum: spec.quorum } : {}),
         ...(spec.cache ? { cache: spec.cache } : {}),
     };
 }

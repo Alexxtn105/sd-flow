@@ -447,6 +447,7 @@ const auroraModel = defineModel<typeof auroraDefaults>({
         });
     },
     availability: (params) => params.availability,
+    quorum: (params) => params.quorumW,
 });
 
 const aurora = defineComponent({

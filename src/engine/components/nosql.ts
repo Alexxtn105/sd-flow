@@ -272,6 +272,7 @@ const mongodbModel = defineModel<typeof mongodbDefaults>({
         });
     },
     availability: (params) => params.availability,
+    quorum: (params) => params.quorumW,
 });
 
 const mongodb = defineComponent({
@@ -432,6 +433,7 @@ const cassandraModel = defineModel<typeof cassandraDefaults>({
             requests: 0,
         }),
     availability: (params) => params.availability,
+    quorum: (params) => params.quorumW,
 });
 
 const cassandra = defineComponent({
@@ -792,6 +794,7 @@ const scyllaModel = defineModel<typeof scyllaDefaults>({
             requests: 0,
         }),
     availability: (params) => params.availability,
+    quorum: (params) => params.quorumW,
 });
 
 const scylla = defineComponent({
@@ -1984,6 +1987,7 @@ const etcdModel = defineModel<typeof etcdDefaults>({
             requests: 0,
         }),
     availability: (params) => params.availability,
+    quorum: (params) => Math.floor(params.nodes / 2) + 1,
 });
 
 const etcd = defineComponent({

@@ -91,6 +91,8 @@ export const HOURS_PER_MONTH = 730;
 
 export const SECONDS_PER_DAY = 86_400;
 
+export const SECONDS_PER_YEAR = 31_536_000;
+
 export const DAYS_PER_MONTH = 30.44;
 
 export const ARRIVAL_VARIABILITY: Record<string, number> = {

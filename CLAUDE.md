@@ -171,7 +171,7 @@ D1: мультирегион в MVP; D2: симуляция аномалий с�
 
 Контракт — `ComponentModel<P>` в `src/engine/types/component.ts`: обязательны `serviceSec(ctx)`
 (время обслуживания одного запроса, секунды) и `capacity(ctx)` (ёмкость плюс список ограничителей);
-опциональны `autoscale`, `cost`, `storage`, `availability`, `cache`. На вход приходит
+опциональны `autoscale`, `cost`, `storage`, `availability`, `quorum`, `cache`. На вход приходит
 `NodeContext`: `params`, `instances` (уже после автоскейлинга), `lambda`, `readShare`/`writeShare`,
 `requestBytes`/`responseBytes`. У `cost` контекст шире (`pricing`, `storageGb`, `egressGbMonth`,
 `regionCostMultiplier`), у `storage` — тоже (`writeRps`, `recordBytes`, `horizonDays`).

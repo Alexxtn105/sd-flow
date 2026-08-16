@@ -438,7 +438,7 @@ install → lint → typecheck → test → build → deploy (GitHub Pages)
 
 | Появилось | Где | Суть |
 |---|---|---|
-| Слот модели у блока | `types/component.ts` | `ComponentModel` = `serviceSec` + `capacity` (+ опционально `autoscale`, `cost`, `storage`, `availability`, `cache`). Заполнен у всех блоков MVP, несущих трафик |
+| Слот модели у блока | `types/component.ts` | `ComponentModel` = `serviceSec` + `capacity` (+ опционально `autoscale`, `cost`, `storage`, `availability`, `quorum`, `cache`). Заполнен у всех блоков MVP, несущих трафик |
 | Декларативные ограничители | `sim/resources.ts` | `littleLaw`, `explicitRps`, `connectionBound`, `iopsBound`, `vendorUnitBound`, `bandwidthBound`, `partitionBound`, `quotaBound`, `memoryResidencyBound`. Каждый отдаёт `Explain` с формулой и подставленными значениями, поэтому `boundBy` всегда объясним |
 | Расчёт вне UI | `workers/simulation.worker.ts`, `services/simulationService.ts` | Web Worker с отменой устаревших расчётов (§5.1) и отбрасыванием поздних ответов; в Node и при отказе воркера — синхронный fallback через динамический импорт |
 | Метрики на канвасе | `SdNode`, `TrafficEdge` | Полоса утилизации с цветом по порогу, RPS, переведённое имя ограничителя; толщина жилы по RPS, красный отлив при ρ > 0.8, подписи в X-ray |

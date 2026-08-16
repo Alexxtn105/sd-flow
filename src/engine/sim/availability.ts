@@ -1,9 +1,13 @@
 import type { ComponentParams } from '../types/component';
-import type { CompiledNode, CompiledTopology } from './compile';
+import type { CompiledEdge, CompiledNode, CompiledTopology } from './compile';
+import { SECONDS_PER_YEAR } from './constants';
 import type { NodeRuntime } from './solver';
 
 const CORRELATED_FAILURE_SHARE = 0.05;
 const DEFAULT_AVAILABILITY = 0.999;
+const FAILURES_PER_YEAR = 2;
+const DEFAULT_FAILOVER_SEC = 30;
+const ALTERNATIVE_GROUPS = new Set(['edge']);
 
 export interface AvailabilityResult {
     byNode: Map<string, number>;
@@ -39,36 +43,104 @@ export function redundancyOf(node: CompiledNode, runtime: NodeRuntime | undefine
     return redundancyOfNode(node, runtime?.instances ?? Number(node.params.instances ?? 1));
 }
 
+export function requiredReplicas(node: CompiledNode, redundancy: number): number {
+    const quorum = node.definition.model?.quorum;
+    if (!quorum) return 1;
+
+    const required = quorum(node.params as ComponentParams);
+    if (!Number.isFinite(required)) return 1;
+
+    return Math.max(1, Math.min(Math.round(redundancy), Math.round(required)));
+}
+
+function binomial(total: number, chosen: number): number {
+    let value = 1;
+
+    for (let step = 1; step <= chosen; step += 1) {
+        value = (value * (total - chosen + step)) / step;
+    }
+
+    return value;
+}
+
+export function quorumAvailability(single: number, total: number, required: number): number {
+    const nodes = Math.max(1, Math.round(total));
+    const quorum = Math.max(1, Math.min(nodes, Math.round(required)));
+
+    if (quorum === 1) return 1 - Math.pow(1 - single, nodes);
+
+    let alive = 0;
+
+    for (let count = quorum; count <= nodes; count += 1) {
+        alive += binomial(nodes, count) * Math.pow(single, count) * Math.pow(1 - single, nodes - count);
+    }
+
+    return alive;
+}
+
+function failoverPenalty(node: CompiledNode, redundancy: number): number {
+    if (redundancy <= 1) return 0;
+
+    const declared = node.params.failoverSec;
+    const failoverSec = typeof declared === 'number' ? declared : DEFAULT_FAILOVER_SEC;
+
+    return (FAILURES_PER_YEAR * failoverSec) / SECONDS_PER_YEAR;
+}
+
 export function effectiveAvailability(node: CompiledNode, runtime: NodeRuntime | undefined): number {
     const base = baseAvailability(node);
     const redundancy = redundancyOf(node, runtime);
     const single = 1 - base;
 
-    const independent = Math.pow(single, redundancy);
-    const unavailable = independent * (1 - CORRELATED_FAILURE_SHARE) + single * CORRELATED_FAILURE_SHARE;
+    const group = 1 - quorumAvailability(base, redundancy, requiredReplicas(node, redundancy));
+    const unavailable = group * (1 - CORRELATED_FAILURE_SHARE) + single * CORRELATED_FAILURE_SHARE;
 
-    return 1 - unavailable;
+    return Math.max(0, 1 - unavailable - failoverPenalty(node, redundancy));
 }
 
-function reachableFrom(topology: CompiledTopology, entries: string[]): Set<string> {
-    const visited = new Set<string>(entries);
-    const queue = [...entries];
+function servingTargets(topology: CompiledTopology, node: CompiledNode): string[] {
+    const targets = new Set<string>();
 
-    while (queue.length > 0) {
-        const current = queue.shift() as string;
-        const node = topology.nodeById.get(current);
-        if (!node) continue;
+    for (const edgeId of node.outgoing) {
+        const edge: CompiledEdge | undefined = topology.edgeById.get(edgeId);
+        if (!edge || edge.isReplication || edge.target === node.id) continue;
 
-        for (const edgeId of node.outgoing) {
-            const edge = topology.edgeById.get(edgeId);
-            if (!edge || edge.isReplication || visited.has(edge.target)) continue;
-
-            visited.add(edge.target);
-            queue.push(edge.target);
-        }
+        targets.add(edge.target);
     }
 
-    return visited;
+    return [...targets];
+}
+
+function flowAvailability(topology: CompiledTopology, byNode: Map<string, number>, entry: string): number {
+    const known = new Map<string, number>();
+    const walking = new Set<string>();
+
+    const downstream = (nodeId: string): number => {
+        const cached = known.get(nodeId);
+        if (cached !== undefined) return cached;
+        if (walking.has(nodeId)) return 1;
+
+        const node = topology.nodeById.get(nodeId);
+        if (!node) return 1;
+
+        walking.add(nodeId);
+        const targets = servingTargets(topology, node);
+        const branches = targets.map((target) => (byNode.get(target) ?? 1) * downstream(target));
+
+        const value =
+            branches.length === 0
+                ? 1
+                : ALTERNATIVE_GROUPS.has(node.definition.group) && branches.length > 1
+                  ? 1 - branches.reduce((product, branch) => product * (1 - branch), 1)
+                  : branches.reduce((product, branch) => product * branch, 1);
+
+        walking.delete(nodeId);
+        known.set(nodeId, value);
+
+        return value;
+    };
+
+    return downstream(entry);
 }
 
 export function computeAvailability(
@@ -86,13 +158,7 @@ export function computeAvailability(
     let overall = 1;
 
     for (const entry of topology.entryNodes) {
-        const reachable = reachableFrom(topology, [entry]);
-        let availability = 1;
-
-        for (const nodeId of reachable) {
-            if (nodeId === entry) continue;
-            availability *= byNode.get(nodeId) ?? 1;
-        }
+        const availability = flowAvailability(topology, byNode, entry);
 
         byFlow.set(entry, availability);
         overall = Math.min(overall, availability);

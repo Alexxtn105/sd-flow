@@ -173,6 +173,7 @@ export interface ComponentModel<P extends ComponentParams = ComponentParams> {
     cost?(ctx: CostContext<P>): CostBreakdown;
     storage?(ctx: StorageContext<P>): StorageResult;
     availability?(params: P): number;
+    quorum?(params: P): number;
     cache?(ctx: NodeContext<P>): CacheProfile;
 }
 
