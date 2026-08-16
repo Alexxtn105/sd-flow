@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { fromSlider, sliderScaleOf, SLIDER_STEPS, toSlider } from '../../src/utils/paramSlider';
+import {
+    fromSlider,
+    normaliseParamValue,
+    sliderScaleOf,
+    SLIDER_STEPS,
+    toSlider,
+} from '../../src/utils/paramSlider';
 import type { ParamField } from '../../src/engine/types/component';
 
 function numberField(extra: Partial<Extract<ParamField, { kind: 'number' }>>): ParamField {
@@ -68,6 +74,14 @@ describe('шкала слайдера', () => {
         const wide = sliderScaleOf(numberField({ min: 1, max: 5_000_000_000 }), 2_000_000)!;
 
         expect(Number.isInteger(fromSlider(wide, 421))).toBe(true);
+    });
+
+    it('введённое руками значение округляется там, где шага нет', () => {
+        expect(normaliseParamValue(numberField({ min: 1, max: 40 }), 3.5)).toBe(4);
+        expect(normaliseParamValue(numberField({ min: 1, max: 40 }), 3.2)).toBe(3);
+        expect(normaliseParamValue(numberField({ min: 0, max: 1, step: 0.01 }), 0.85)).toBe(0.85);
+        expect(normaliseParamValue(numberField({ min: 1, max: 64, step: 0.25 }), 0.5)).toBe(0.5);
+        expect(normaliseParamValue(undefined, 3.5)).toBe(3.5);
     });
 
     it('позиция не выпадает за пределы даже для значения вне шкалы', () => {

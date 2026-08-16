@@ -23,6 +23,12 @@ export function sliderScaleOf(field: ParamField | undefined, value: number): Sli
     return { min, max, log, step: field.step ?? null };
 }
 
+export function normaliseParamValue(field: ParamField | undefined, value: number): number {
+    if (field?.kind !== 'number' || field.step !== undefined) return value;
+
+    return Math.round(value);
+}
+
 export function toSlider(scale: SliderScale, value: number): number {
     const bounded = Math.min(Math.max(value, scale.min), scale.max);
     const share = scale.log

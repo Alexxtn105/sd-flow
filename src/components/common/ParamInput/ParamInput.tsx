@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import type { ParamField, ParamValue } from '../../../engine/types/component';
 import { defaultMarkPercent, formatDefault } from '../../../utils/paramDefault';
 import { rangeStatus } from '../../../utils/paramRange';
-import { fromSlider, sliderScaleOf, SLIDER_STEPS, toSlider } from '../../../utils/paramSlider';
+import { fromSlider, normaliseParamValue, sliderScaleOf, SLIDER_STEPS, toSlider } from '../../../utils/paramSlider';
 import './ParamInput.css';
 
 interface ParamInputProps {
@@ -78,7 +78,7 @@ export default function ParamInput({
                     disabled={disabled}
                     onChange={(event) => {
                         const parsed = Number.parseFloat(event.target.value);
-                        if (Number.isFinite(parsed)) onChange(parsed);
+                        if (Number.isFinite(parsed)) onChange(normaliseParamValue(field, parsed));
                     }}
                 />
                 {scale && (
