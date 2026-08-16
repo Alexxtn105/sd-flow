@@ -134,7 +134,7 @@ const serviceModel = defineModel<typeof serviceDefaults>({
         totalCost({
             compute: ctx.instances * ctx.params.costPerInstanceHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
             storage: 0,
-            network: ctx.egressGbMonth * ctx.pricing.egressPerGb,
+            network: 0,
             requests: 0,
         }),
     availability: (params) => params.availability,
@@ -211,7 +211,7 @@ const monolithModel = defineModel<typeof monolithDefaults>({
         totalCost({
             compute: ctx.instances * ctx.params.costPerInstanceHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
             storage: 0,
-            network: ctx.egressGbMonth * ctx.pricing.egressPerGb,
+            network: 0,
             requests: 0,
         }),
     availability: (params) => params.availability,
@@ -300,7 +300,7 @@ const bffModel = defineModel<typeof bffDefaults>({
         totalCost({
             compute: ctx.instances * ctx.params.costPerInstanceHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
             storage: 0,
-            network: ctx.egressGbMonth * ctx.pricing.egressPerGb,
+            network: 0,
             requests: 0,
         }),
     availability: (params) => params.availability,
@@ -369,7 +369,7 @@ const serverlessModel = defineModel<typeof serverlessDefaults>({
         return totalCost({
             compute: gbSeconds * ctx.params.costPerGbSecond * ctx.regionCostMultiplier,
             storage: 0,
-            network: ctx.egressGbMonth * ctx.pricing.egressPerGb,
+            network: 0,
             requests: invocationsMillions * ctx.params.costPerMillionInvocations,
         });
     },
@@ -740,7 +740,7 @@ const transcoderModel = defineModel<typeof transcoderDefaults>({
         totalCost({
             compute: ctx.instances * ctx.params.costPerInstanceHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
             storage: 0,
-            network: ctx.egressGbMonth * ctx.pricing.egressPerGb,
+            network: 0,
             requests: 0,
         }),
     availability: (params) => params.availability,
@@ -820,7 +820,7 @@ const mlInferenceModel = defineModel<typeof mlInferenceDefaults>({
         totalCost({
             compute: ctx.instances * ctx.params.costPerInstanceHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
             storage: 0,
-            network: ctx.egressGbMonth * ctx.pricing.egressPerGb,
+            network: 0,
             requests: 0,
         }),
     availability: (params) => params.availability,
@@ -986,7 +986,7 @@ const edgeFunctionModel = defineModel<typeof edgeFunctionDefaults>({
         return totalCost({
             compute: cpuMsMillions * ctx.params.costPerMillionCpuMs * ctx.regionCostMultiplier,
             storage: 0,
-            network: ctx.egressGbMonth * ctx.pricing.egressPerGb,
+            network: 0,
             requests: requestsMillions * ctx.params.costPerMillionRequests,
         });
     },
@@ -1076,7 +1076,7 @@ const webrtcSfuModel = defineModel<typeof webrtcSfuDefaults>({
         totalCost({
             compute: ctx.instances * ctx.params.costPerInstanceHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
             storage: 0,
-            network: ctx.egressGbMonth * ctx.pricing.egressPerGb,
+            network: 0,
             requests: 0,
         }),
     availability: (params) => params.availability,

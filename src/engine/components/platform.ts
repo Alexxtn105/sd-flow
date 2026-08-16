@@ -853,7 +853,7 @@ const webhookModel = defineModel<typeof webhookDefaults>({
         totalCost({
             compute: ctx.instances * ctx.params.costPerInstanceHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
             storage: 0,
-            network: ctx.egressGbMonth * ctx.pricing.egressPerGb,
+            network: 0,
             requests: 0,
         }),
     availability: (params) => params.availability,

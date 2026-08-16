@@ -59,13 +59,16 @@ function containerCost(
     topology: CompiledTopology,
     natGbMonth: number,
     clusterNodes: ReadonlyMap<string, number>,
+    hosted: boolean,
 ): CostBreakdown | null {
     if (node.type === 'k8s-cluster') {
         const nodeCount = clusterNodes.get(node.id) ?? Number(node.params.nodes ?? 0);
-        const controlPlane = Number(node.params.controlPlaneCostMonth ?? 0);
+        const own = hosted
+            ? 0
+            : clusterNodesCostMonth(node, topology, nodeCount) + Number(node.params.controlPlaneCostMonth ?? 0);
 
         return totalCost({
-            compute: clusterNodesCostMonth(node, topology, nodeCount) + controlPlane,
+            compute: own,
             storage: 0,
             network: 0,
             requests: 0,
@@ -99,6 +102,54 @@ function withManagedPremium(
     });
 }
 
+function egressRateOf(node: CompiledNode, pricing: PricingProfile): number {
+    const declared = node.params.costPerGbEgress;
+
+    return typeof declared === 'number' ? declared : pricing.egressPerGb;
+}
+
+function withEgress(cost: CostBreakdown, egressCost: number): CostBreakdown {
+    if (egressCost <= 0) return cost;
+
+    return totalCost({
+        compute: cost.compute,
+        storage: cost.storage,
+        network: cost.network + egressCost,
+        requests: cost.requests,
+    });
+}
+
+function clusterComputeShares(
+    topology: CompiledTopology,
+    runtimes: Map<string, NodeRuntime>,
+    clusters: readonly ClusterPodPlan[],
+): Map<string, number> {
+    const shares = new Map<string, number>();
+
+    for (const plan of clusters) {
+        const cluster = topology.nodeById.get(plan.clusterId);
+        if (!cluster) continue;
+
+        const members = topology.nodes.filter(
+            (node) => node.clusterId === plan.clusterId && node.definition.shape === 'node',
+        );
+        if (members.length === 0) continue;
+
+        const pods = members.map((node) => Math.max(runtimes.get(node.id)?.instances ?? 0, 0));
+        const total = pods.reduce((sum, value) => sum + value, 0);
+        const clusterCost =
+            clusterNodesCostMonth(cluster, topology, plan.effectiveNodes) +
+            Number(cluster.params.controlPlaneCostMonth ?? 0);
+
+        members.forEach((node, index) => {
+            const share = total > 0 ? pods[index] / total : 1 / members.length;
+            shares.set(node.id, clusterCost * share);
+        });
+    }
+
+    return shares;
+}
+
 function add(target: CostBreakdown, source: CostBreakdown): CostBreakdown {
     return {
         compute: target.compute + source.compute,
@@ -119,19 +170,24 @@ export function computeCost(
 ): CostResult {
     const byNode = new Map<string, CostBreakdown>();
     const clusterNodes = new Map(clusters.map((plan) => [plan.clusterId, plan.effectiveNodes]));
+    const clusterShares = clusterComputeShares(topology, runtimes, clusters);
     let total = emptyCost();
 
     for (const node of topology.nodes) {
         if (node.definition.shape !== 'node') continue;
 
         const runtime = runtimes.get(node.id);
+        const nodeDerived = derived.get(node.id);
+        const egressCost = (nodeDerived?.egressGbDay ?? 0) * DAYS_PER_MONTH * egressRateOf(node, pricing);
         const model = node.definition.model;
+
         if (!runtime || !model?.cost) {
-            byNode.set(node.id, emptyCost());
+            const bare = withEgress(emptyCost(), egressCost);
+            byNode.set(node.id, bare);
+            total = add(total, bare);
             continue;
         }
 
-        const nodeDerived = derived.get(node.id);
         const context: CostContext<ComponentParams> = {
             nodeId: node.id,
             params: node.params,
@@ -148,7 +204,13 @@ export function computeCost(
             regionCostMultiplier: regionMultiplierOf(node.regionId, topology),
         };
 
-        const cost = withManagedPremium(node, model.cost(context), pricing);
+        const modelled = withManagedPremium(node, model.cost(context), pricing);
+        const hostedCompute = clusterShares.get(node.id);
+        const placed =
+            hostedCompute === undefined
+                ? modelled
+                : totalCost({ ...modelled, compute: hostedCompute });
+        const cost = withEgress(placed, egressCost);
 
         byNode.set(node.id, cost);
         total = add(total, cost);
@@ -159,7 +221,10 @@ export function computeCost(
     for (const node of topology.nodes) {
         if (node.definition.shape !== 'container') continue;
 
-        const cost = containerCost(node, topology, natGbMonth.get(node.id) ?? 0, clusterNodes);
+        const hosted = topology.nodes.some(
+            (member) => member.clusterId === node.id && member.definition.shape === 'node',
+        );
+        const cost = containerCost(node, topology, natGbMonth.get(node.id) ?? 0, clusterNodes, hosted);
         if (!cost) continue;
 
         byNode.set(node.id, cost);

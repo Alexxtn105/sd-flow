@@ -164,7 +164,7 @@ const cdnModel = defineModel<typeof cdnDefaults>({
         totalCost({
             compute: 0,
             storage: 0,
-            network: ctx.egressGbMonth * ctx.params.costPerGbEgress,
+            network: 0,
             requests: requestsPerMonthMillions(ctx.lambda) * ctx.params.costPerMillionRequests,
         }),
     availability: (params) => params.availability,
@@ -371,7 +371,7 @@ const lbL7Model = defineModel<typeof lbL7Defaults>({
         totalCost({
             compute: ctx.instances * ctx.params.costPerInstanceHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
             storage: 0,
-            network: ctx.egressGbMonth * ctx.pricing.egressPerGb,
+            network: 0,
             requests: 0,
         }),
     availability: (params) => params.availability,
@@ -443,7 +443,7 @@ const apiGatewayModel = defineModel<typeof apiGatewayDefaults>({
         totalCost({
             compute: 0,
             storage: 0,
-            network: ctx.egressGbMonth * ctx.pricing.egressPerGb,
+            network: 0,
             requests: requestsPerMonthMillions(ctx.lambda) * ctx.params.costPerMillionRequests,
         }),
     availability: (params) => params.availability,
@@ -707,7 +707,7 @@ const reverseCacheModel = defineModel<typeof reverseCacheDefaults>({
         totalCost({
             compute: ctx.instances * ctx.params.costPerInstanceHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
             storage: 0,
-            network: ctx.egressGbMonth * ctx.pricing.egressPerGb,
+            network: 0,
             requests: 0,
         }),
     availability: (params) => params.availability,
@@ -833,7 +833,7 @@ const wsGatewayModel = defineModel<typeof wsGatewayDefaults>({
         totalCost({
             compute: ctx.instances * ctx.params.costPerInstanceHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
             storage: 0,
-            network: ctx.egressGbMonth * ctx.pricing.egressPerGb,
+            network: 0,
             requests: 0,
         }),
     availability: (params) => params.availability,
@@ -1007,7 +1007,7 @@ const natEgressModel = defineModel<typeof natEgressDefaults>({
         totalCost({
             compute: ctx.params.gateways * ctx.params.costPerGatewayHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
             storage: 0,
-            network: ctx.egressGbMonth * (ctx.params.costPerGb + ctx.pricing.egressPerGb),
+            network: ctx.egressGbMonth * ctx.params.costPerGb,
             requests: 0,
         }),
     availability: (params) => params.availability,

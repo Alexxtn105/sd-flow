@@ -271,13 +271,10 @@ describe('группы VPC и Kubernetes', () => {
         expect(grown.nodes.svc.instances).toBe(40);
         expect(grown.findings.some((item) => item.code === 'k8s-pods-exceeded')).toBe(false);
 
-        expect(grown.totals.cost.compute).toBeCloseTo(40 * 0.17 * 730 + 5 * 0.5 * 730 + 100, 6);
+        expect(grown.totals.cost.compute).toBeCloseTo(5 * 0.5 * 730 + 100, 6);
         expect(grown.totals.costMonth).toBeCloseTo(declared.totals.costMonth, 9);
         expect(grown.totals.costMonth).toBeGreaterThan(clamped.totals.costMonth);
-        expect(grown.totals.cost.compute - clamped.totals.cost.compute).toBeCloseTo(
-            (5 - 1) * 0.5 * 730 + (40 - 8) * 0.17 * 730,
-            6,
-        );
+        expect(grown.totals.cost.compute - clamped.totals.cost.compute).toBeCloseTo((5 - 1) * 0.5 * 730, 6);
     });
 
     it('рост кластера объясняется находкой k8s-nodes-scaled', () => {

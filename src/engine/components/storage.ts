@@ -169,7 +169,7 @@ const s3Model = defineModel<typeof s3Defaults>({
         return totalCost({
             compute: 0,
             storage: ctx.storageGb * ctx.params.costPerGbMonth,
-            network: ctx.egressGbMonth * ctx.params.costPerGbEgress,
+            network: 0,
             requests:
                 requestsMillions *
                 (ctx.readShare * ctx.params.costPerMillionGet + ctx.writeShare * ctx.params.costPerMillionPut),
