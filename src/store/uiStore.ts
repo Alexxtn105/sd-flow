@@ -98,7 +98,7 @@ function saveTutorialDone(): void {
 }
 
 function loadParamHints(): boolean {
-    return StorageService.load<StoredPreferences>(STORAGE_KEYS.PREFERENCES)?.paramHints !== false;
+    return StorageService.load<StoredPreferences>(STORAGE_KEYS.PREFERENCES)?.paramHints === true;
 }
 
 function saveParamHints(paramHints: boolean): void {

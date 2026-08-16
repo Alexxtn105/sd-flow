@@ -36,7 +36,7 @@ export default function Inspector() {
     const edge = selectedEdgeIds.length === 1 ? edges.find((item) => item.id === selectedEdgeIds[0]) : undefined;
     const definition = node ? registry.get(node.data.componentType) : null;
 
-    useReference(['hints'], Boolean(node) && paramHints);
+    useReference(['hints'], Boolean(node));
     const paramHelp = useParamHelp();
 
     const sections = useMemo(
@@ -112,15 +112,6 @@ export default function Inspector() {
 
             <div className="ins-header">
                 <span className="ins-title">{t('inspector.title')}</span>
-                <button
-                    className={`ins-hints-toggle ${paramHints ? 'active' : ''}`}
-                    onClick={toggleParamHints}
-                    title={t('inspector.hints')}
-                    aria-label={t('inspector.hints')}
-                    aria-pressed={paramHints}
-                >
-                    <Icon name="lightbulb_outline" size="small" />
-                </button>
                 <button className="ins-close" onClick={toggleInspector} aria-label={t('dialog.close')}>
                     <Icon name="chevron_right" size="small" />
                 </button>
@@ -159,6 +150,16 @@ export default function Inspector() {
                             </button>
                         </div>
 
+                        <button
+                            className={`ins-descriptions ${paramHints ? 'active' : ''}`}
+                            onClick={toggleParamHints}
+                            title={t('inspector.descriptionsTitle')}
+                            aria-pressed={paramHints}
+                        >
+                            <Icon name={paramHints ? 'visibility' : 'visibility_off'} size="small" />
+                            <span className="ins-descriptions-text">{t('inspector.descriptions')}</span>
+                        </button>
+
                         <div className="ins-row">
                             <label className="ins-label" htmlFor="ins-label-input">
                                 {t('inspector.label')}
@@ -182,14 +183,20 @@ export default function Inspector() {
                                     const spanLabel = help.realistic
                                         ? t('inspector.realistic')
                                         : t('inspector.limits');
+                                    const spanText = span
+                                        ? `${spanLabel}: ${span}${help.unit ? ` ${help.unit}` : ''}`
+                                        : '';
+                                    const labelTitle = [`${help.name} · ${key}`, help.hint, spanText]
+                                        .filter(Boolean)
+                                        .join('\n');
 
                                     return (
                                         <div key={key} className="ins-param">
                                             <div className="ins-row">
                                                 <label
-                                                    className="ins-label"
+                                                    className="ins-label ins-label-help"
                                                     htmlFor={`ins-param-${key}`}
-                                                    title={`${help.name} · ${key}`}
+                                                    title={labelTitle}
                                                 >
                                                     {help.name}
                                                 </label>
@@ -198,14 +205,11 @@ export default function Inspector() {
                                                     <span className="ins-unit">{help.unit}</span>
                                                 </span>
                                             </div>
-                                            {paramHints && (help.hint || span) && (
+                                            {paramHints && (help.hint || spanText) && (
                                                 <p className="ins-hint">
                                                     {help.hint}
-                                                    {span && (
-                                                        <span className="ins-hint-span">
-                                                            {spanLabel}: {span}
-                                                            {help.unit ? ` ${help.unit}` : ''}
-                                                        </span>
+                                                    {spanText && (
+                                                        <span className="ins-hint-span">{spanText}</span>
                                                     )}
                                                 </p>
                                             )}

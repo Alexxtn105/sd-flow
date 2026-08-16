@@ -294,7 +294,8 @@
         "edgeLabelPlaceholder": "connection name",
         "realistic": "Typical range",
         "limits": "Allowed",
-        "hints": "Parameter hints"
+        "descriptions": "Parameter descriptions",
+        "descriptionsTitle": "Parameter descriptions: text under every field; with it off the hint comes from hovering the name"
     },
     "blockHelp": {
         "title": "Block reference",

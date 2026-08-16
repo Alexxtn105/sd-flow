@@ -164,19 +164,19 @@ describe('справка по блоку', () => {
     });
 });
 
-describe('подсказки к параметрам', () => {
+describe('описания параметров', () => {
     beforeEach(() => {
         localStorage.clear();
     });
 
-    it('включены по умолчанию и переживают перезагрузку выключенными', () => {
+    it('выключены по умолчанию и переживают перезагрузку включёнными', () => {
+        expect(useUiStore.getState().paramHints).toBe(false);
+
+        useUiStore.getState().toggleParamHints();
         expect(useUiStore.getState().paramHints).toBe(true);
+        expect(StorageService.load<{ paramHints?: boolean }>(STORAGE_KEYS.PREFERENCES)?.paramHints).toBe(true);
 
         useUiStore.getState().toggleParamHints();
         expect(useUiStore.getState().paramHints).toBe(false);
-        expect(StorageService.load<{ paramHints?: boolean }>(STORAGE_KEYS.PREFERENCES)?.paramHints).toBe(false);
-
-        useUiStore.getState().toggleParamHints();
-        expect(useUiStore.getState().paramHints).toBe(true);
     });
 });
