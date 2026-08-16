@@ -19,6 +19,12 @@ top of the challenge catalogue — **Interview**, **Incident** and **Golf** — 
 editor**: write your own task in YAML or JSON and run it through the same acceptance engine.
 Version 1.3.2 makes the catalogue explain itself: every block has a reference window, every
 parameter has a hint with its unit, and a connection can be given a name.
+After that the MVP gaps listed in [docs/06-backlog.md](docs/06-backlog.md) started closing:
+the **scheme ceiling** (binary search for the load at saturation, naming the limiter),
+**geo routing** and replication modes, availability with «k of n» quorums and the price of a
+failover, consistency mitigations, backup volume, cancellation of a stale computation,
+**scheme settings** (consistency model, pricing profile, model depth), live node metrics in the
+inspector, and copy/paste on the canvas.
 
 * **Catalogue — 127 blocks in 14 groups: the whole planned catalogue**, MVP (44) plus V1 (65)
   plus V2 (18). A capacity model is filled in for 101 blocks — every block that carries traffic;
@@ -206,7 +212,7 @@ npm run dev        # http://localhost:5173/sd-flow/
 | `npm run preview` | Local preview of the built bundle |
 | `npm run lint` | ESLint 9 (flat config) |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Vitest: 731 tests in 38 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, practice sets, the authoring format, locales, node names, block reference and parameter hints, sample schemes, demo schemes |
+| `npm test` | Vitest: 780 tests in 44 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, practice sets, the authoring format, locales, node names, block reference and parameter hints, sample schemes, demo schemes |
 
 Deployment is GitHub Actions on a push to `main`: lint → typecheck → tests → build → GitHub Pages.
 The app installs as a PWA and runs offline; a scheme can be shared as a link, the canvas exported
