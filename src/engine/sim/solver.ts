@@ -6,6 +6,8 @@ import type { Flow } from './flows';
 import { isReadOperation } from './flows';
 import { retryAmplification, serviceVariabilityFromSigma, solveQueue } from './queueing';
 import type { QueueResult } from './queueing';
+import { routingShares } from './routing';
+import type { RouteShare } from './routing';
 import { UNBOUNDED } from './resources';
 
 const DAMPING = 0.5;
@@ -13,6 +15,8 @@ const MAX_ITERATIONS = 50;
 const CONVERGENCE_THRESHOLD = 0.001;
 export const RETRY_BUDGET = 0.5;
 const ABSORBING_TARGET_GROUPS = new Set(['sql', 'nosql', 'search', 'olap', 'storage']);
+const FULL_SHARE: RouteShare = { read: 1, write: 1 };
+const EMPTY_SHARE: RouteShare = { read: 0, write: 0 };
 const BALANCING_GROUPS = new Set(['edge', 'clients']);
 
 export interface OperationFlow {
@@ -132,8 +136,9 @@ function balancingShares(
     node: CompiledNode,
     topology: CompiledTopology,
     disabledNodes: ReadonlySet<string>,
-): Map<string, number> {
-    const shares = new Map<string, number>();
+    routes: ReadonlyMap<string, RouteShare>,
+): Map<string, RouteShare> {
+    const shares = new Map<string, RouteShare>();
     const outgoing = node.outgoing
         .map((edgeId) => topology.edgeById.get(edgeId))
         .filter((edge): edge is CompiledEdge => edge !== undefined && !edge.isReplication);
@@ -142,10 +147,16 @@ function balancingShares(
     const routed = reachable.length > 0 ? reachable : outgoing;
     const totalWeight = routed.reduce((sum, edge) => sum + Math.max(edge.weight, 0), 0);
 
-    for (const edge of outgoing) shares.set(edge.id, 0);
+    for (const edge of outgoing) shares.set(edge.id, { read: 0, write: 0 });
 
     for (const edge of routed) {
-        shares.set(edge.id, totalWeight > 0 ? Math.max(edge.weight, 0) / totalWeight : 1 / routed.length);
+        const share = totalWeight > 0 ? Math.max(edge.weight, 0) / totalWeight : 1 / routed.length;
+        shares.set(edge.id, { read: share, write: share });
+    }
+
+    for (const edge of outgoing) {
+        const routed = routes.get(edge.id);
+        if (routed) shares.set(edge.id, routed);
     }
 
     return shares;
@@ -154,7 +165,7 @@ function balancingShares(
 function computeEdgeFlow(
     edge: CompiledEdge,
     source: NodeRuntime,
-    splitShare: number,
+    splitShare: RouteShare,
     absorption: number,
     payloadScale: number,
 ): OperationFlow {
@@ -171,12 +182,13 @@ function computeEdgeFlow(
         return flow;
     }
 
-    const base = source.throughput * splitShare;
     let requestWeighted = 0;
     let responseWeighted = 0;
 
     for (const call of edge.calls) {
-        const served = isReadOperation(call.op) ? 1 - absorption : 1;
+        const reading = isReadOperation(call.op);
+        const served = reading ? 1 - absorption : 1;
+        const base = source.throughput * (reading ? splitShare.read : splitShare.write);
         const rps = base * served * call.share * Math.max(call.fanout, 0);
         if (rps <= 0) continue;
 
@@ -295,6 +307,7 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
     const retryBudget = options.retryBudget ?? RETRY_BUDGET;
     const payloadScale = options.payloadScale ?? 1;
 
+    const routes = routingShares(topology, flows, disabledNodes);
     const trafficNodes = topology.nodes.filter((node) => node.definition.shape === 'node');
     const nodeOrder = topology.order
         .map((id) => topology.nodeById.get(id))
@@ -432,7 +445,7 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
             current.set(node.id, runtime);
 
             const isBalancer = BALANCING_GROUPS.has(node.definition.group);
-            const shares = isBalancer ? balancingShares(node, topology, disabledNodes) : null;
+            const shares = isBalancer ? balancingShares(node, topology, disabledNodes, routes) : null;
             const siblingAbsorption = cacheAbsorptionFor(node, topology, previous);
             const ownAbsorption = cacheEnabled ? selfAbsorption(node) * warmth : 0;
 
@@ -443,7 +456,7 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
                 const target = topology.nodeById.get(edge.target);
                 if (!target) continue;
 
-                const splitShare = shares ? (shares.get(edge.id) ?? 0) : 1;
+                const splitShare = shares ? (shares.get(edge.id) ?? EMPTY_SHARE) : FULL_SHARE;
                 const applied =
                     ownAbsorption > 0
                         ? ownAbsorption
