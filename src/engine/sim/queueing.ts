@@ -39,6 +39,19 @@ export function queueFullShareOf(waitSec: number, drainSec: number): number {
     return Math.min(waitSec / drainSec, 1);
 }
 
+export function erlangBlocking(servers: number, offeredErlangs: number): number {
+    if (offeredErlangs <= 0) return 0;
+
+    const places = Math.max(1, Math.round(servers));
+    let blocking = 1;
+
+    for (let taken = 1; taken <= places; taken += 1) {
+        blocking = (offeredErlangs * blocking) / (taken + offeredErlangs * blocking);
+    }
+
+    return Math.min(Math.max(blocking, 0), 1);
+}
+
 export function sakasegawaWaitSec(
     serviceSec: number,
     servers: number,
@@ -69,18 +82,20 @@ export function solveQueue(input: QueueInput): QueueResult {
     }
 
     const utilization = lambdaOffered / capacity;
-    const markovianWait = sakasegawaWaitSec(
-        serviceSec,
-        bindingServers(servers, capacity, serviceSec),
-        utilization,
-    );
+    const places = bindingServers(servers, capacity, serviceSec);
+    const markovianWait = sakasegawaWaitSec(serviceSec, places, utilization);
     const variabilityFactor = (input.arrivalVariability + input.serviceVariability) / 2;
     const unboundedWait = markovianWait * variabilityFactor;
     const drainWait = queueLimit > 0 ? queueLimit / capacity : 0;
     const waitSec = queueLimit > 0 ? Math.min(unboundedWait, drainWait) : 0;
 
-    const throughput = Math.min(lambdaOffered, capacity);
-    const overflowProbability = lambdaOffered > capacity ? 1 - capacity / lambdaOffered : 0;
+    const saturationLoss = lambdaOffered > capacity ? 1 - capacity / lambdaOffered : 0;
+    const overflowProbability =
+        queueLimit > 0
+            ? saturationLoss
+            : Math.max(saturationLoss, erlangBlocking(places, utilization * places));
+
+    const throughput = Math.min(lambdaOffered * (1 - overflowProbability), capacity);
     const responseSec = serviceSec + waitSec;
     const timeoutProbability =
         timeoutSec > 0 && responseSec > 0

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { cacheHitRatio, generalizedHarmonic } from '../../src/engine/sim/cacheModel';
 import { logNormalTail, normalCdf } from '../../src/engine/sim/consistency';
 import { createRng } from '../../src/engine/sim/rng';
-import { retryAmplification, sakasegawaWaitSec, solveQueue } from '../../src/engine/sim/queueing';
+import { erlangBlocking, retryAmplification, sakasegawaWaitSec, solveQueue } from '../../src/engine/sim/queueing';
 
 const EULER_MASCHERONI = 0.5772156649;
 
@@ -53,11 +53,31 @@ describe('теория очередей', () => {
             arrivalVariability: 1,
             serviceVariability: 1,
             timeoutSec: 1,
-            queueLimit: 0,
+            queueLimit: 100,
         });
 
         expect(result.throughput).toBe(1000);
         expect(result.overflowProbability).toBeCloseTo(0.5, 6);
+    });
+
+    it('без очереди теряет запросы по формуле Эрланга B даже ниже насыщения', () => {
+        const result = solveQueue({
+            lambdaOffered: 300,
+            capacity: 400,
+            servers: 4,
+            serviceSec: 0.01,
+            arrivalVariability: 1,
+            serviceVariability: 1,
+            timeoutSec: 1,
+            queueLimit: 0,
+        });
+
+        const blocking = erlangBlocking(4, 3);
+
+        expect(blocking).toBeGreaterThan(0.1);
+        expect(result.waitSec).toBe(0);
+        expect(result.overflowProbability).toBeCloseTo(blocking, 9);
+        expect(result.throughput).toBeCloseTo(300 * (1 - blocking), 6);
     });
 
     it('усиление ретраями растёт с числом попыток и вероятностью отказа', () => {

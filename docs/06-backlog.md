@@ -37,7 +37,7 @@
 | `[ ]` | FR-SIM-18 | P0 | Цена `optimistic`/`pessimistic` не считается: ни ретраев при контенции, ни ограничителя ёмкости «сериализация на ключе» | `sim/consistency.ts`, `sim/resources.ts` |
 | `[ ]` | FR-SIM-18 | P0 | Хранение ключей идемпотентности и их TTL не моделируются; `idempotencyRequired` не читается | `sim/derived.ts`, `components/platform.ts` |
 | `[ ]` | FR-SIM-9 | P0 | Сценария `split-brain` нет: нужна модель расхождения и слияния реплик за время разрыва | `sim/scenarios.ts`, `sim/consistency.ts` |
-| `[ ]` | FR-SIM-3 | P0 | При `queueLimit = 0` ожидание принудительно обнуляется | `sim/queueing.ts` |
+| `[x]` | FR-SIM-3 | P0 | ~~`queueLimit = 0`~~ — ожидание по-прежнему нулевое, но появился отказ вместо ожидания: доля потерь по формуле Эрланга B, ненулевая и ниже насыщения (§5.1) | `sim/queueing.ts` |
 | `[ ]` | FR-SIM-8 | P0 | Медленная зависимость не удлиняет обслуживание вызывающего: `serviceSec` статичен, каскад доезжает ошибками, но не ёмкостью | `sim/queueing.ts`, `sim/solver.ts` |
 | `[ ]` | FR-SIM-4 | P0 | Веер в `parallel` ограничен `MAX_CALLS_PER_EDGE = 16` без поправки на порядковую статистику — при `fanout > 16` хвост занижен | `sim/latency.ts` |
 | `[ ]` | FR-SIM-11 | P1 | Таймлайн-скраббер: ряды `SimResult.timeline` есть, ползунка времени и курсора нет | `panels/Dashboard/Timeline.tsx` |
