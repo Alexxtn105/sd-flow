@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Icon from '../../common/Icons/Icon';
-import { LANGUAGES } from '../../../locales/i18n';
+import { LANGUAGES, rememberLanguage } from '../../../locales/i18n';
 import { SCENARIOS } from '../../../engine/sim/scenarios';
 import { sampleGroups } from '../../../data/sampleSchemes';
 import type { SampleGroup } from '../../../data/sampleSchemes';
@@ -267,6 +267,7 @@ export default function Header({
                                     className={`hdr-lang-option ${language.code === currentLang.code ? 'active' : ''}`}
                                     onClick={() => {
                                         i18n.changeLanguage(language.code);
+                                        rememberLanguage(language.code);
                                         setLangOpen(false);
                                     }}
                                 >

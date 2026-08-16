@@ -26,6 +26,24 @@ export const LANGUAGES: LanguageOption[] = [
 
 export const DEFAULT_LANGUAGE = 'en';
 
+export const LANGUAGE_STORAGE_KEY = 'sd-flow-language-choice';
+
+const AUTO_CACHED_KEY = 'sd-flow-language';
+
+function forgetAutoCachedLanguage(): void {
+    if (typeof localStorage === 'undefined') return;
+
+    localStorage.removeItem(AUTO_CACHED_KEY);
+}
+
+export function rememberLanguage(language: string): void {
+    if (typeof localStorage === 'undefined') return;
+
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+}
+
+forgetAutoCachedLanguage();
+
 i18n.use(LanguageDetector)
     .use(initReactI18next)
     .init({
@@ -41,8 +59,8 @@ i18n.use(LanguageDetector)
         interpolation: { escapeValue: false },
         detection: {
             order: ['localStorage'],
-            lookupLocalStorage: 'sd-flow-language',
-            caches: ['localStorage'],
+            lookupLocalStorage: LANGUAGE_STORAGE_KEY,
+            caches: [],
         },
     });
 
