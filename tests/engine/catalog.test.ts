@@ -36,7 +36,7 @@ beforeAll(() => {
 });
 
 describe('каталог блоков', () => {
-    it('содержит ровно 109 блоков волн MVP и V1', () => {
+    it('содержит ровно 127 блоков волн MVP, V1 и V2', () => {
         expect(registry.size()).toBe(EXPECTED_SHIPPED_COUNT);
         expect(registry.list().every((component) => SHIPPED_WAVES.has(component.wave))).toBe(true);
     });

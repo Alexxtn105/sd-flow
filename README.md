@@ -88,7 +88,7 @@ override used to repaint it grey.
   practice, common mistakes, a parameter table and links to the neighbours in its group — opened
   from the palette, the inspector or the node's context menu. 127 articles and 666 parameter
   hints per language, loaded on demand rather than shipped in the main bundle.
-* **16 scenarios**, ten of which run over time.
+* **17 scenarios**, ten of which run over time.
 * The computation is deterministic: the seed is derived from the scheme, the scenario and the
   model version; `Math.random()` is banned inside the engine.
 
@@ -125,9 +125,9 @@ override used to repaint it grey.
   last-write-wins, duplicate processing under at-least-once, ordering violation, and the three
   SQL isolation anomalies derived from `isolationLevel` — dirty read, non-repeatable read and
   phantom read.
-* **16 scenarios** — steady-state `baseline`, `peak`, `az-failure`, `region-failure`, `stale-read`,
-  `write-conflict`, and transient `spike`, `growth`, `black-friday`, `db-failover`, `cache-flush`,
-  `thundering-herd`, `hot-key`, `slow-dependency`, `retry-storm`, `poison-message`.
+* **17 scenarios** — steady-state `baseline`, `peak`, `az-failure`, `region-failure`, `stale-read`,
+  `write-conflict`, `split-brain`, and transient `spike`, `growth`, `black-friday`, `db-failover`,
+  `cache-flush`, `thundering-herd`, `hot-key`, `slow-dependency`, `retry-storm`, `poison-message`.
 * **Findings** — 15 engine rules (overload, saturation, retry storm, SPOF, hot key, growing
   backlog, read-heavy without a cache, retries without idempotency, egress eating the bill and
   others), the compiler's structural checks and the consistency anomalies — each with an
@@ -262,7 +262,7 @@ npm run dev        # http://localhost:5173/sd-flow/
 | `npm run preview` | Local preview of the built bundle |
 | `npm run lint` | ESLint 9 (flat config) |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Vitest: 931 tests in 57 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, practice sets, the authoring format, locales, node names, block reference and parameter hints, sample schemes, demo schemes |
+| `npm test` | Vitest: 1044 tests in 72 files — registry, catalogue, ports, store, serialisation, engine, model checked against queueing theory, transient, probes, challenges, practice sets, the authoring format, locales, node names, block reference and parameter hints, sample schemes, demo schemes |
 
 Deployment is GitHub Actions on a push to `main`: lint → typecheck → tests → build → GitHub Pages.
 The app installs as a PWA and runs offline; a scheme can be shared as a link, the canvas exported
