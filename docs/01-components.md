@@ -89,6 +89,9 @@
 | `conflictResolution` | `lww` / `vector-clock` / `crdt` / `single-writer-per-key` / `manual` | Что происходит при конфликте мульти-мастера |
 | `transactionScope` | `none` / `single-row` / `single-shard` / `cross-shard` / `distributed-2pc` | Стоимость и хрупкость транзакций |
 | `isolationLevel` | `read-uncommitted` … `serializable` | Для SQL: какие аномалии в принципе возможны |
+| `readFromReplica` | 0–1 | Доля чтений, которую разрешено уводить на реплики: ровно на неё разгружается лидер и ровно на неё же приходят устаревшие данные |
+| `stickyReadShare` | 0–1 | Доля чтений, закреплённых за primary ради read-your-writes. Гасит A2 и A3 пропорционально доле — и на ту же долю перестаёт разгружать лидер: в ёмкость идёт `readFromReplica · (1 − stickyReadShare)` |
+| `staleReadPolicy` | `accept` / `wait-for-lag` | Что делает реплика, когда данные не догнали primary: отдаёт устаревшую версию или ждёт догона. `wait-for-lag` снимает A1, A2 и A3, но добавляет к чтению с реплики средний лаг `E[L]` — прямо в p99 |
 
 **Лаг репликации: дефолты по блокам первой волны.** Пара `replicaLagMs` + `replicaLagSigma` есть
 у девяти блоков MVP — у всех, где в модели вообще есть реплики:
@@ -123,7 +126,7 @@ p99(L) = median · e^(2.3263 · σ)   при σ = 0.8 → 6.43 × медианы
 | Параметр | Значения | Роль в модели |
 |---|---|---|
 | `readRouting` | `primary` / `replica` / `nearest` / `sticky-after-write` | Доля чтений, способных увидеть устаревшие данные |
-| `readYourWrites` | `none` / `sticky-primary` / `version-token` / `wait-for-lag` | Средство смягчения; каждое имеет свою цену в latency |
+| `readYourWrites` | `none` / `sticky-primary` / `version-token` / `wait-for-lag` | Планировалось как поле ребра; в коде эту роль делят три параметра хранилища — `consistencyModel` (заявленная гарантия), `stickyReadShare` (липкие чтения) и `staleReadPolicy = wait-for-lag` (ожидание догона) |
 | `idempotencyKey` | bool | Убирает аномалию «дубликат обработки» при ретраях и at-least-once |
 | `deliverySemantics` | `at-most-once` / `at-least-once` / `effectively-once` | Для async-рёбер |
 | `orderingGuarantee` | `none` / `per-key` / `per-partition` / `global` | Аномалия «нарушение порядка» |
@@ -148,13 +151,19 @@ p99(L) = median · e^(2.3263 · σ)   при σ = 0.8 → 6.43 × медианы
 
 | ID | Название | Волна | Специфичные параметры |
 |---|---|---|---|
-| `client-web` | Веб-клиенты (браузер) | **M** | `dau`, `sessionsPerUserDay`, `requestsPerSession`, `sessionDurationMin`, `peakFactor`, `diurnalPattern` (flat/business/evening/global), `readWriteMix`, `avgRequestKb`, `avgResponseKb`, `geoDistribution`, `growthPerYear`, `cacheableShare` |
+| `client-web` | Веб-клиенты (браузер) | **M** | `dau`, `sessionsPerUserDay`, `requestsPerSession`, `sessionDurationMin`, `peakFactor`, `diurnalPattern` (flat/business/evening/global), `readWriteMix`, `avgRequestKb`, `avgResponseKb`, `geoDistribution`, `geoSpread`, `growthPerYear`, `cacheableShare` |
 | `client-mobile` | Мобильные клиенты | **M** | то же + `pollIntervalSec`, `offlineSyncBurst`, `pushEnabled`, `networkRtt` (3G/4G/5G/Wi-Fi) |
 | `client-iot` | IoT/устройства | V1 | `deviceCount`, `reportIntervalSec`, `payloadBytes`, `batchSize`, `alwaysConnected` |
 | `client-api` | Внешние API-потребители (партнёры) | V1 | `clients`, `rpsPerClient`, `quota`, `burstiness` (c_a²), `authMode` |
 | `client-bot` | Боты/скраперы/поисковые краулеры | V1 | `rps`, `respectRobots`, `cacheBusting` (доля запросов, обходящих кэш) |
 | `client-loadtest` | Нагрузочный генератор | V1 | `pattern` (constant/ramp/spike/sawtooth), `targetRps`, `durationSec` — для transient-сценариев |
 | `client-internal` | Внутренний потребитель (другая команда/сервис) | V1 | `rps`, `slaTier` |
+
+**География клиента — пара параметров.** `geoDistribution` задаёт основную зону (шесть континентов
+либо `global`), `geoSpread` — долю трафика вне неё. Пара есть у всех семи блоков клиентов. Остаток
+раскладывается по остальным зонам обратно пропорционально RTT до основной, поэтому «европейский
+сервис с 30% зарубежной аудитории» задаётся двумя значениями, а не шестью долями; формулы —
+[02-simulation.md](02-simulation.md) §3.4.
 
 **Двусторонний пересчёт (FR-PRM-7):** `rps_avg = dau × requestsPerUserDay / 86400`,
 `rps_peak = rps_avg × peakFactor`. Пользователь может править любую сторону.
@@ -685,7 +694,7 @@ V2 — из фазы 4. Каталог покрыт целиком, расхож
 
 ## 16. Справка по блоку в интерфейсе
 
-Каталог из 127 типов и 669 различных параметров бесполезен, если игрок не понимает, чем `scylla`
+Каталог из 127 типов и 671 различного параметра бесполезен, если игрок не понимает, чем `scylla`
 отличается от `cassandra` и что делает `zipfAlpha`. Поэтому у каждого блока есть окно справки, а у
 каждого параметра — подсказка с единицей измерения.
 

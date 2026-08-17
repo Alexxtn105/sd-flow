@@ -13,6 +13,31 @@ export interface CostResult {
     total: CostBreakdown;
 }
 
+export interface MeteredData {
+    egressGbMonth: number;
+    backupGb: number;
+    logsGbMonth: number;
+    idempotencyGb: number;
+}
+
+const NO_METERED_DATA: MeteredData = {
+    egressGbMonth: 0,
+    backupGb: 0,
+    logsGbMonth: 0,
+    idempotencyGb: 0,
+};
+
+function meteredDataOf(derived: DerivedNode | undefined): MeteredData {
+    if (!derived) return NO_METERED_DATA;
+
+    return {
+        egressGbMonth: derived.egressGbDay * DAYS_PER_MONTH,
+        backupGb: derived.backupGb,
+        logsGbMonth: derived.logsCollected ? 0 : derived.logsGbDay * DAYS_PER_MONTH,
+        idempotencyGb: derived.idempotencyGb,
+    };
+}
+
 function regionMultiplierOf(nodeRegionId: string | null, topology: CompiledTopology): number {
     if (!nodeRegionId) return 1;
 
@@ -135,18 +160,38 @@ function withProvisionedIops(cost: CostBreakdown, iopsCost: number): CostBreakdo
     });
 }
 
+export function retentionCostOf(data: MeteredData, pricing: PricingProfile): number {
+    return (
+        data.backupGb * pricing.backupPerGbMonth +
+        data.logsGbMonth * pricing.logsPerGbMonth +
+        data.idempotencyGb * pricing.keyStatePerGbMonth
+    );
+}
+
+function withRetention(cost: CostBreakdown, retentionCost: number): CostBreakdown {
+    if (retentionCost <= 0) return cost;
+
+    return totalCost({
+        compute: cost.compute,
+        storage: cost.storage + retentionCost,
+        network: cost.network,
+        requests: cost.requests,
+    });
+}
+
 export function withSurcharges(
     managed: boolean,
     params: ComponentParams,
     modelled: CostBreakdown,
     pricing: PricingProfile,
-    egressGbMonth: number,
+    data: MeteredData,
 ): CostBreakdown {
     const metered = withProvisionedIops(modelled, iopsCostOf(params, pricing));
+    const premium = withManagedPremium(managed, metered, pricing);
 
     return withEgress(
-        withManagedPremium(managed, metered, pricing),
-        egressGbMonth * egressRateOf(params, pricing),
+        withRetention(premium, retentionCostOf(data, pricing)),
+        data.egressGbMonth * egressRateOf(params, pricing),
     );
 }
 
@@ -209,11 +254,12 @@ export function computeCost(
 
         const runtime = runtimes.get(node.id);
         const nodeDerived = derived.get(node.id);
-        const egressGbMonth = (nodeDerived?.egressGbDay ?? 0) * DAYS_PER_MONTH;
+        const data = meteredDataOf(nodeDerived);
+        const egressGbMonth = data.egressGbMonth;
         const model = node.definition.model;
 
         if (!runtime || !model?.cost) {
-            const bare = withEgress(emptyCost(), egressGbMonth * egressRateOf(node.params, pricing));
+            const bare = withSurcharges(false, node.params, emptyCost(), pricing, data);
             byNode.set(node.id, bare);
             total = add(total, bare);
             continue;
@@ -240,7 +286,7 @@ export function computeCost(
             node.params,
             model.cost(context),
             pricing,
-            egressGbMonth,
+            data,
         );
         const hostedCompute = clusterShares.get(node.id);
         const cost =

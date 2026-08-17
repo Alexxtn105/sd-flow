@@ -1,6 +1,7 @@
 import { DEFAULT_RTT_MS } from './constants';
 import type { CompiledEdge, CompiledNode, CompiledTopology } from './compile';
 import type { Flow } from './flows';
+import { lagWaitSec, replicaReadShare } from './replication';
 import { selfAbsorption } from './solver';
 import type { NodeRuntime, OperationFlow } from './solver';
 import type { Rng } from './rng';
@@ -64,9 +65,12 @@ interface CallPlan {
     callsPerRequest: number[];
     balanced: boolean;
     liveEdges: CompiledEdge[];
-    liveWeights: number[];
+    liveReadWeights: number[];
+    liveWriteWeights: number[];
     parallel: boolean;
     replicationAckSec: number;
+    lagWaitSec: number;
+    lagReadShare: number;
 }
 
 export interface LatencySamples {
@@ -202,6 +206,21 @@ function branchWeights(edges: CompiledEdge[], edgeFlows: ReadonlyMap<string, Ope
     if (routed.some((value) => value > 0)) return routed;
 
     return edges.map((edge) => Math.max(edge.weight, 0));
+}
+
+function operationWeights(
+    edges: CompiledEdge[],
+    edgeFlows: ReadonlyMap<string, OperationFlow>,
+    pick: (flow: OperationFlow) => number,
+    fallback: number[],
+): number[] {
+    const routed = edges.map((edge) => {
+        const flow = edgeFlows.get(edge.id);
+
+        return flow ? Math.max(pick(flow), 0) : 0;
+    });
+
+    return routed.some((value) => value > 0) ? routed : fallback;
 }
 
 function trafficShareOf(
@@ -365,14 +384,19 @@ export function rollUpLatency(
         const synchronous = edges.filter((edge) => !edge.isAsync);
         const live = synchronous.filter((edge) => runtimes.get(edge.target)?.boundBy !== 'disabled');
         const liveEdges = live.length > 0 ? live : synchronous;
+        const liveWeights = branchWeights(liveEdges, edgeFlows);
+        const utilization = runtimes.get(node.id)?.queue.utilization ?? 0;
         const plan: CallPlan = {
             edges,
             callsPerRequest: edges.map(callsPerRequestOf),
             balanced: BALANCING_GROUPS.has(node.definition.group),
             liveEdges,
-            liveWeights: branchWeights(liveEdges, edgeFlows),
+            liveReadWeights: operationWeights(liveEdges, edgeFlows, (flow) => flow.read, liveWeights),
+            liveWriteWeights: operationWeights(liveEdges, edgeFlows, (flow) => flow.write, liveWeights),
             parallel: node.params.callMode === 'parallel',
             replicationAckSec: replicationAckSec(node, topology),
+            lagWaitSec: lagWaitSec(node.params, utilization),
+            lagReadShare: replicaReadShare(node.params),
         };
 
         plans.set(node.id, plan);
@@ -390,6 +414,7 @@ export function rollUpLatency(
         let failures = 0;
         let timeouts = 0;
         let deepest = 0;
+        let writeSample = false;
 
         const siteFor = (edge: CompiledEdge, depth: number): number => {
             const known = callSites.get(edge.id);
@@ -455,7 +480,8 @@ export function rollUpLatency(
 
             if (plan.edges.length === 0) return { durations, spans, failed, timedOut };
 
-            const chosen = plan.balanced ? pickBalancedEdge(plan.liveEdges, plan.liveWeights, rng) : null;
+            const weights = writeSample ? plan.liveWriteWeights : plan.liveReadWeights;
+            const chosen = plan.balanced ? pickBalancedEdge(plan.liveEdges, weights, rng) : null;
 
             for (let index = 0; index < plan.edges.length; index += 1) {
                 const edge = plan.edges[index];
@@ -527,11 +553,12 @@ export function rollUpLatency(
             const sigma = Number(node.params.serviceTimeSigma ?? 0.4);
             const serviceSec = runtime.serviceSec > 0 ? rng.logNormal(runtime.serviceSec, sigma) : 0;
             const queueWaitSec = sampleQueueWaitSec(runtime, rng);
-            const ackSec =
-                plan.replicationAckSec > 0 && rng.bernoulli(runtime.writeShare)
-                    ? plan.replicationAckSec
+            const ackSec = writeSample ? plan.replicationAckSec : 0;
+            const catchUpSec =
+                !writeSample && plan.lagWaitSec > 0 && rng.bernoulli(plan.lagReadShare)
+                    ? plan.lagWaitSec
                     : 0;
-            const waitSec = queueWaitSec + ackSec;
+            const waitSec = queueWaitSec + ackSec + catchUpSec;
 
             let selfSeconds = serviceSec + waitSec;
             let failed = rng.bernoulli(runtime.queue.overflowProbability);
@@ -648,6 +675,7 @@ export function rollUpLatency(
             let total = 0;
             let failed = false;
             let timedOut = false;
+            writeSample = rng.bernoulli(1 - flow.readShare);
 
             if (entry) {
                 const children = callChildren(entry, 1, new Set([flow.entryNodeId]));

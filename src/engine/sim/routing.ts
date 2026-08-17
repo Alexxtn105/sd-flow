@@ -1,5 +1,6 @@
 import type { CompiledEdge, CompiledNode, CompiledTopology } from './compile';
 import { GEO_ZONES, geoRttMs } from './constants';
+import { zoneShares } from './flows';
 import type { Flow } from './flows';
 
 export interface RouteShare {
@@ -18,6 +19,8 @@ interface Branch {
 }
 
 const LOCAL_MODES = new Set(['active-active', 'sharded-by-geo']);
+const SINGLE_WRITER_MODES = new Set(['active-passive', 'read-local-write-global', 'single']);
+const KEY_HOMED_MODE = 'sharded-by-geo';
 
 function regionOf(topology: CompiledTopology, nodeId: string): CompiledNode | null {
     const node = topology.nodeById.get(nodeId);
@@ -53,18 +56,29 @@ function branchesOf(
     return branches;
 }
 
-function clientZones(topology: CompiledTopology, flows: Flow[], nodeId: string): Map<string, number> {
+function operationRps(flow: Flow, operation: 'read' | 'write' | 'all'): number {
+    if (operation === 'read') return flow.rps * flow.readShare;
+    if (operation === 'write') return flow.rps * (1 - flow.readShare);
+
+    return flow.rps;
+}
+
+function clientZones(
+    topology: CompiledTopology,
+    flows: Flow[],
+    nodeId: string,
+    operation: 'read' | 'write' | 'all' = 'all',
+): Map<string, number> {
     const zones = new Map<string, number>();
 
     for (const flow of flows) {
         if (!reaches(topology, flow.entryNodeId, nodeId)) continue;
 
-        if (flow.geo === 'global') {
-            for (const zone of GEO_ZONES) zones.set(zone, (zones.get(zone) ?? 0) + flow.rps / GEO_ZONES.length);
-            continue;
-        }
+        const rps = operationRps(flow, operation);
 
-        zones.set(flow.geo, (zones.get(flow.geo) ?? 0) + flow.rps);
+        for (const [zone, share] of zoneShares(flow.geo, flow.geoSpread)) {
+            zones.set(zone, (zones.get(zone) ?? 0) + rps * share);
+        }
     }
 
     if (zones.size === 0) for (const zone of GEO_ZONES) zones.set(zone, 1);
@@ -138,6 +152,7 @@ function zoneAssignment(
     node: CompiledNode,
     branches: Branch[],
     zones: Map<string, number>,
+    keyHomed = false,
 ): Map<string, Map<string, number>> {
     const policy = String(node.params.routingPolicy ?? 'simple');
     const alive = branches.filter((branch) => branch.alive);
@@ -151,6 +166,14 @@ function zoneAssignment(
         const perZone = assignment.get(edgeId);
         if (perZone) perZone.set(zone, (perZone.get(zone) ?? 0) + rps);
     };
+
+    if (keyHomed) {
+        for (const [zone, rps] of zones) {
+            for (const branch of alive) add(branch.edgeId, zone, rps / alive.length);
+        }
+
+        return assignment;
+    }
 
     if (policy === 'failover') {
         const target = alive.find((branch) => branch.primary) ?? alive[0];
@@ -182,25 +205,64 @@ function zoneAssignment(
     return assignment;
 }
 
-function readWeights(node: CompiledNode, branches: Branch[], zones: Map<string, number>): Map<string, number> {
+function readWeights(
+    node: CompiledNode,
+    branches: Branch[],
+    zones: Map<string, number>,
+    keyHomed: boolean,
+): Map<string, number> {
     const policy = String(node.params.routingPolicy ?? 'simple');
     const alive = branches.filter((branch) => branch.alive);
     const weights = new Map<string, number>(branches.map((branch) => [branch.edgeId, 0]));
 
     if (alive.length === 0) return weights;
 
-    if (policy === 'failover') {
+    if (policy === 'failover' && !keyHomed) {
         const target = alive.find((branch) => branch.primary) ?? alive[0];
         weights.set(target.edgeId, 1);
 
         return weights;
     }
 
-    for (const [edgeId, perZone] of zoneAssignment(node, branches, zones)) {
+    for (const [edgeId, perZone] of zoneAssignment(node, branches, zones, keyHomed)) {
         weights.set(edgeId, [...perZone.values()].reduce((sum, rps) => sum + rps, 0));
     }
 
     return normalise(weights);
+}
+
+function writeAssignment(
+    branches: Branch[],
+    zones: Map<string, number>,
+    writeRegion: string,
+): Map<string, Map<string, number>> {
+    const assignment = new Map<string, Map<string, number>>(
+        branches.map((branch) => [branch.edgeId, new Map<string, number>()]),
+    );
+    const target = writeTarget(branches, writeRegion);
+    if (!target) return assignment;
+
+    assignment.set(target.edgeId, new Map(zones));
+
+    return assignment;
+}
+
+function mergedAssignment(
+    read: Map<string, Map<string, number>>,
+    write: Map<string, Map<string, number>>,
+): Map<string, Map<string, number>> {
+    const merged = new Map<string, Map<string, number>>();
+
+    for (const [edgeId, perZone] of read) merged.set(edgeId, new Map(perZone));
+
+    for (const [edgeId, perZone] of write) {
+        const target = merged.get(edgeId) ?? new Map<string, number>();
+
+        for (const [zone, rps] of perZone) target.set(zone, (target.get(zone) ?? 0) + rps);
+        merged.set(edgeId, target);
+    }
+
+    return merged;
 }
 
 export function geoDetourMs(
@@ -211,6 +273,11 @@ export function geoDetourMs(
     const detours = new Map<string, number>();
     if (topology.regions.length < 2) return detours;
 
+    const policy = topology.multiRegionPolicy;
+    const mode = policy ? String(policy.params.mode ?? 'single') : 'active-active';
+    const writeRegion = String(policy?.params.writeRegion ?? '');
+    const keyHomed = mode === KEY_HOMED_MODE;
+
     for (const node of topology.nodes) {
         if (node.regionId || node.definition.shape !== 'node') continue;
 
@@ -218,8 +285,14 @@ export function geoDetourMs(
         const regions = new Set(branches.map((branch) => branch.regionId));
         if (branches.length < 2 || regions.size < 2) continue;
 
-        const zones = clientZones(topology, flows, node.id);
-        const assignment = zoneAssignment(node, branches, zones);
+        const reads = clientZones(topology, flows, node.id, 'read');
+        const writes = clientZones(topology, flows, node.id, 'write');
+        const assignment = mergedAssignment(
+            zoneAssignment(node, branches, reads, keyHomed),
+            SINGLE_WRITER_MODES.has(mode)
+                ? writeAssignment(branches, writes, writeRegion)
+                : zoneAssignment(node, branches, writes, keyHomed),
+        );
 
         for (const branch of branches) {
             const perZone = assignment.get(branch.edgeId);
@@ -262,6 +335,7 @@ export function routingShares(
     const policy = topology.multiRegionPolicy;
     const mode = policy ? String(policy.params.mode ?? 'single') : 'active-active';
     const writeRegion = String(policy?.params.writeRegion ?? '');
+    const keyHomed = mode === KEY_HOMED_MODE;
 
     for (const node of topology.nodes) {
         const routingPolicy = node.params.routingPolicy;
@@ -271,14 +345,13 @@ export function routingShares(
         const regions = new Set(branches.map((branch) => branch.regionId).filter(Boolean));
         if (branches.length < 2 || regions.size < 2) continue;
 
-        if (routingPolicy === 'weighted' || routingPolicy === 'simple') continue;
+        if (!keyHomed && (routingPolicy === 'weighted' || routingPolicy === 'simple')) continue;
 
         const zones = clientZones(topology, flows, node.id);
-        const reads = readWeights(node, branches, zones);
-        const writes =
-            mode === 'active-passive' || mode === 'read-local-write-global' || mode === 'single'
-                ? new Map(branches.map((branch) => [branch.edgeId, 0]))
-                : reads;
+        const reads = readWeights(node, branches, zones, keyHomed);
+        const writes = SINGLE_WRITER_MODES.has(mode)
+            ? new Map(branches.map((branch) => [branch.edgeId, 0]))
+            : reads;
 
         if (writes !== reads) {
             const target = writeTarget(branches, writeRegion);

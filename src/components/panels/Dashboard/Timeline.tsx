@@ -1,7 +1,17 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Timeline as TimelineResult, TimelineSample } from '../../../engine/sim/types';
+import type { Timeline as TimelineResult } from '../../../engine/sim/types';
 import { formatNumber } from '../../../utils/format';
+import {
+    clampCursorIndex,
+    cursorIndexAt,
+    defaultCursorIndex,
+    scopedValue,
+    timelineCursor,
+    TIMELINE_METRICS,
+    TIMELINE_SYSTEM_SCOPE,
+} from '../../../utils/timeline';
+import type { TimelineMetric } from '../../../utils/timeline';
 import './Timeline.css';
 
 const CHART_WIDTH = 640;
@@ -9,11 +19,8 @@ const CHART_HEIGHT = 150;
 const PADDING_TOP = 10;
 const PADDING_BOTTOM = 18;
 const TICK_COUNT = 5;
-const SYSTEM_SCOPE = 'system';
 
-export type TimelineMetric = 'lambda' | 'utilization' | 'p99' | 'backlog' | 'errors' | 'instances';
-
-const METRICS: TimelineMetric[] = ['lambda', 'utilization', 'p99', 'backlog', 'errors', 'instances'];
+export type { TimelineMetric };
 
 interface Point {
     timeSec: number;
@@ -32,32 +39,11 @@ interface TimelineProps {
     labelOf: (nodeId: string) => string;
 }
 
-function systemValue(sample: TimelineSample, metric: TimelineMetric): number {
-    if (metric === 'lambda') return sample.lambda;
-    if (metric === 'utilization') return sample.peakUtilization;
-    if (metric === 'p99') return sample.worstP99Ms;
-    if (metric === 'backlog') return sample.backlog;
-    if (metric === 'errors') return sample.errorRate;
-    return sample.instances;
-}
-
-function nodeValue(sample: TimelineSample, nodeId: string, metric: TimelineMetric): number {
-    const node = sample.nodes[nodeId];
-    if (!node) return 0;
-
-    if (metric === 'lambda') return node.lambda;
-    if (metric === 'utilization') return node.utilization;
-    if (metric === 'p99') return node.p99Ms;
-    if (metric === 'backlog') return node.backlog;
-    if (metric === 'errors') return node.errorRate;
-    return node.instances;
-}
-
 function limitFor(timeline: TimelineResult, scope: string, metric: TimelineMetric): number | null {
     if (metric === 'utilization') return 1;
     if (metric === 'errors') return 0.01;
 
-    if (metric === 'lambda' && scope !== SYSTEM_SCOPE) {
+    if (metric === 'lambda' && scope !== TIMELINE_SYSTEM_SCOPE) {
         const capacities = timeline.samples
             .map((sample) => sample.nodes[scope]?.capacity ?? 0)
             .filter((value) => Number.isFinite(value) && value > 0);
@@ -71,7 +57,7 @@ function limitFor(timeline: TimelineResult, scope: string, metric: TimelineMetri
 function buildSeries(timeline: TimelineResult, scope: string, metric: TimelineMetric): Series {
     const points = timeline.samples.map((sample) => ({
         timeSec: sample.timeSec,
-        value: scope === SYSTEM_SCOPE ? systemValue(sample, metric) : nodeValue(sample, scope, metric),
+        value: scopedValue(sample, scope, metric),
         breach: sample.breach,
     }));
 
@@ -124,7 +110,9 @@ function breachSpans(points: Point[], stepSec: number): BreachSpan[] {
 export default function Timeline({ timeline, labelOf }: TimelineProps) {
     const { t } = useTranslation('common');
     const [metric, setMetric] = useState<TimelineMetric>('utilization');
-    const [scope, setScope] = useState<string>(SYSTEM_SCOPE);
+    const [scope, setScope] = useState<string>(TIMELINE_SYSTEM_SCOPE);
+    const [pinned, setPinned] = useState<{ timeline: TimelineResult; index: number } | null>(null);
+    const cursorIndex = pinned?.timeline === timeline ? pinned.index : defaultCursorIndex(timeline);
 
     const nodeIds = useMemo(() => {
         const first = timeline.samples[0];
@@ -135,10 +123,9 @@ export default function Timeline({ timeline, labelOf }: TimelineProps) {
         );
     }, [timeline]);
 
-    const series = useMemo(
-        () => buildSeries(timeline, nodeIds.includes(scope) ? scope : SYSTEM_SCOPE, metric),
-        [timeline, scope, metric, nodeIds],
-    );
+    const activeScope = nodeIds.includes(scope) ? scope : TIMELINE_SYSTEM_SCOPE;
+    const series = useMemo(() => buildSeries(timeline, activeScope, metric), [timeline, activeScope, metric]);
+    const cursor = timelineCursor(timeline, cursorIndex, activeScope, metric);
 
     const horizonSec = Math.max(timeline.horizonSec, timeline.stepSec);
     const peak = series.points.reduce((max, point) => Math.max(max, point.value), 0);
@@ -151,6 +138,12 @@ export default function Timeline({ timeline, labelOf }: TimelineProps) {
     const area = series.points.length > 0 ? `${line} ${CHART_WIDTH},${CHART_HEIGHT - PADDING_BOTTOM} 0,${CHART_HEIGHT - PADDING_BOTTOM}` : '';
     const spans = breachSpans(series.points, timeline.stepSec);
     const ticks = Array.from({ length: TICK_COUNT }, (_, index) => (horizonSec * index) / (TICK_COUNT - 1));
+    const cursorX = cursor ? scaleX(cursor.sample.timeSec, horizonSec) : 0;
+    const lastIndex = Math.max(timeline.samples.length - 1, 0);
+
+    const moveCursorTo = (index: number): void => {
+        setPinned({ timeline, index: clampCursorIndex(timeline, index) });
+    };
 
     return (
         <div className="dash-timeline">
@@ -161,7 +154,7 @@ export default function Timeline({ timeline, labelOf }: TimelineProps) {
                     onChange={(event) => setMetric(event.target.value as TimelineMetric)}
                     aria-label={t('timeline.metric.label')}
                 >
-                    {METRICS.map((item) => (
+                    {TIMELINE_METRICS.map((item) => (
                         <option key={item} value={item}>
                             {t(`timeline.metric.${item}`)}
                         </option>
@@ -170,11 +163,11 @@ export default function Timeline({ timeline, labelOf }: TimelineProps) {
 
                 <select
                     className="dash-timeline-select"
-                    value={scope}
+                    value={activeScope}
                     onChange={(event) => setScope(event.target.value)}
                     aria-label={t('timeline.scope')}
                 >
-                    <option value={SYSTEM_SCOPE}>{t('timeline.system')}</option>
+                    <option value={TIMELINE_SYSTEM_SCOPE}>{t('timeline.system')}</option>
                     {nodeIds.map((nodeId) => (
                         <option key={nodeId} value={nodeId}>
                             {labelOf(nodeId)}
@@ -201,6 +194,10 @@ export default function Timeline({ timeline, labelOf }: TimelineProps) {
                 preserveAspectRatio="none"
                 role="img"
                 aria-label={t(`timeline.metric.${metric}`)}
+                onMouseMove={(event) => {
+                    const box = event.currentTarget.getBoundingClientRect();
+                    if (box.width > 0) moveCursorTo(cursorIndexAt(timeline, (event.clientX - box.left) / box.width));
+                }}
             >
                 {spans.map((span) => (
                     <rect
@@ -235,6 +232,26 @@ export default function Timeline({ timeline, labelOf }: TimelineProps) {
 
                 {area && <polygon className="dash-timeline-area" points={area} />}
                 <polyline className="dash-timeline-line" points={line} vectorEffect="non-scaling-stroke" />
+
+                {cursor && (
+                    <line
+                        className="dash-timeline-cursor"
+                        x1={cursorX}
+                        y1={PADDING_TOP}
+                        x2={cursorX}
+                        y2={CHART_HEIGHT - PADDING_BOTTOM}
+                        vectorEffect="non-scaling-stroke"
+                    />
+                )}
+                {cursor && (
+                    <circle
+                        className="dash-timeline-cursor-dot"
+                        cx={cursorX}
+                        cy={scaleY(cursor.value, top)}
+                        r={2.5}
+                        vectorEffect="non-scaling-stroke"
+                    />
+                )}
             </svg>
 
             <div className="dash-timeline-axis-labels">
@@ -242,6 +259,40 @@ export default function Timeline({ timeline, labelOf }: TimelineProps) {
                     <span key={tick}>{formatTime(tick)}</span>
                 ))}
             </div>
+
+            <input
+                className="dash-timeline-scrubber"
+                type="range"
+                min={0}
+                max={lastIndex}
+                step={1}
+                value={cursor ? cursor.index : 0}
+                disabled={lastIndex === 0}
+                aria-label={t('timeline.scrub')}
+                onChange={(event) => moveCursorTo(Number(event.target.value))}
+            />
+
+            {cursor && (
+                <div className="dash-timeline-readout">
+                    <span className="dash-timeline-readout-time">
+                        {t('timeline.at', { value: formatTime(cursor.sample.timeSec) })}
+                    </span>
+                    <span className="dash-timeline-readout-value">
+                        {t(`timeline.metric.${metric}`)} {formatNumber(cursor.value)}
+                    </span>
+                    {cursor.worstNodeId !== null && (
+                        <span className="dash-timeline-readout-worst">
+                            {t('timeline.worst', {
+                                node: labelOf(cursor.worstNodeId),
+                                value: formatNumber(cursor.worstValue),
+                            })}
+                        </span>
+                    )}
+                    {cursor.sample.breach && (
+                        <span className="dash-tone-hot">{t('timeline.breach')}</span>
+                    )}
+                </div>
+            )}
 
             <div className="dash-timeline-legend">
                 <span className="dash-timeline-legend-line" />

@@ -452,8 +452,8 @@ export const geoMatching: Challenge = {
         {
             id: 'R10',
             kind: 'budget',
-            desc: { ru: 'Стоимость не выше $200 000 в месяц', en: 'Monthly cost stays under $200,000' },
-            maxMonthlyCostUsd: 200000,
+            desc: { ru: 'Стоимость не выше $240 000 в месяц', en: 'Monthly cost stays under $240,000' },
+            maxMonthlyCostUsd: 240000,
         },
     ],
     bonusObjectives: [

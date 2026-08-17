@@ -1,4 +1,4 @@
-import type { ComponentParams, StorageContext, StorageResult } from '../types/component';
+import type { ComponentParams, GroupId, StorageContext, StorageResult } from '../types/component';
 import { BACKUP_GROUPS, BACKUP_POLICY, IDEMPOTENCY_POLICY, SECONDS_PER_DAY } from './constants';
 import type { CompiledEdge, CompiledNode, CompiledTopology } from './compile';
 import type { NodeRuntime, OperationFlow } from './solver';
@@ -11,6 +11,7 @@ const EXTERNAL_SERVICE_TYPES = new Set(['external-api']);
 export interface DerivedNode {
     storage: StorageResult | null;
     logsGbDay: number;
+    logsCollected: boolean;
     egressGbDay: number;
     backupGb: number;
     idempotencyGb: number;
@@ -52,10 +53,18 @@ export function backupCopies(): number {
     return (fullsPerMonth + incrementalRatio * incrementalsPerMonth) * retentionMonths;
 }
 
-function backupGbOf(node: CompiledNode, storage: StorageResult | null): number {
-    if (!storage || !BACKUP_GROUPS.has(node.definition.group)) return 0;
+export function backupGbOf(group: GroupId, storageGb: number): number {
+    return BACKUP_GROUPS.has(group) ? storageGb * backupCopies() : 0;
+}
 
-    return storage.totalGb * backupCopies();
+const COLLECTOR_GROUPS = new Set(['observability']);
+
+function logsCollectedFor(node: CompiledNode, topology: CompiledTopology): boolean {
+    return node.outgoing.some((edgeId) => {
+        const target = topology.nodeById.get(topology.edgeById.get(edgeId)?.target ?? '');
+
+        return target !== undefined && COLLECTOR_GROUPS.has(target.definition.group);
+    });
 }
 
 interface EgressCharge {
@@ -70,13 +79,13 @@ function recordBytesOf(node: CompiledNode, runtime: NodeRuntime): number {
     return runtime.requestBytes;
 }
 
-function logsGbDayOf(node: CompiledNode, runtime: NodeRuntime): number {
-    const lines = node.params.logLinesPerRequest;
-    const bytes = node.params.logBytesPerLine;
+export function logsGbDayOf(params: ComponentParams, throughput: number): number {
+    const lines = params.logLinesPerRequest;
+    const bytes = params.logBytesPerLine;
 
     if (typeof lines !== 'number' || typeof bytes !== 'number') return 0;
 
-    return (runtime.throughput * lines * bytes * SECONDS_PER_DAY) / 1e9;
+    return (throughput * lines * bytes * SECONDS_PER_DAY) / 1e9;
 }
 
 function egressChargeOf(
@@ -161,9 +170,10 @@ export function deriveNodes(
 
         derived.set(node.id, {
             storage,
-            logsGbDay: logsGbDayOf(node, runtime),
+            logsGbDay: logsGbDayOf(node.params, runtime.throughput),
+            logsCollected: logsCollectedFor(node, topology),
             egressGbDay: egressByNode.get(node.id) ?? 0,
-            backupGb: backupGbOf(node, storage),
+            backupGb: backupGbOf(node.definition.group, storage?.totalGb ?? 0),
             idempotencyGb: idempotencyByNode.get(node.id) ?? 0,
         });
     }

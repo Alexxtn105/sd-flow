@@ -86,6 +86,21 @@ never have to guess what you are paying for, the inspector marks paying paramete
 hint naming the bill article, while the block reference gained a "What moves the bill" section: the
 list is not hand-written but measured from the block's own model, so it cannot drift from the maths.
 
+Version 1.9 closes seven items of the working list in one pass. Backups, the log stream and
+idempotency keys stopped being reference volumes and became lines on the bill: on default parameters
+Postgres pays $2095/mo for its copies against $1423 for the instances themselves — RPO is no longer
+free. The log stream is paid for by the collector you drew, and by the pricing profile at a storage
+rate when you drew none, so nothing is billed twice. Queue waiting is computed from the time a slot
+is held rather than from the block's own service time: a slow dependency now inflates the caller's
+queue several times over instead of merely trimming its capacity. The consistency mitigations got a
+price — sticky reads hand the load back to the primary, waiting for a replica to catch up pays the
+mean lag straight into p99, a sticky region keeps a session in its own region, and geo-sharding pays
+the hop to a key's home region. Clients gained a share of traffic outside their main zone, and the
+dashboard gained a time slider with a cursor over the transient run. Offline is complete at last: 54
+interface icons are drawn as inline SVG, so no third-party font is fetched on load, and the lazy
+reference dictionaries are warmed up when the browser goes idle — the block reference opens without
+a network even if you never opened it before.
+
 * **Catalogue — 127 blocks in 14 groups: the whole planned catalogue**, MVP (44) plus V1 (65)
   plus V2 (18). A capacity model is filled in for 101 blocks — every block that carries traffic;
   clients have none by construction (they are sources), and containers, links and probes never
@@ -96,7 +111,7 @@ list is not hand-written but measured from the block's own model, so it cannot d
 * **A reference for every block**: what it is, what limits its capacity (the bars are computed by
   the block's own model at default parameters, so they cannot drift from the engine), good
   practice, common mistakes, a parameter table and links to the neighbours in its group — opened
-  from the palette, the inspector or the node's context menu. 127 articles and 666 parameter
+  from the palette, the inspector or the node's context menu. 127 articles and 671 parameter
   hints per language, loaded on demand rather than shipped in the main bundle.
 * **17 scenarios**, ten of which run over time.
 * The computation is deterministic: the seed is derived from the scheme, the scenario and the

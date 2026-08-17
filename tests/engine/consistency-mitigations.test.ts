@@ -46,12 +46,16 @@ function rateOf(result: SimResult, code: string): number {
         .reduce((sum, item) => sum + item.ratePerSec, 0);
 }
 
-function twoRegionWrites(policy: ComponentParams, store: ComponentParams): SimResult {
+function twoRegionWrites(
+    policy: ComponentParams,
+    store: ComponentParams,
+    glb: ComponentParams = {},
+): SimResult {
     return simulate(
         buildScheme({
             nodes: [
                 { id: 'client', type: 'client-web', params: { dau: 4000000, readWriteMix: 0.5 } },
-                { id: 'glb', type: 'glb', params: { routingPolicy: 'weighted' } },
+                { id: 'glb', type: 'glb', params: { routingPolicy: 'weighted', ...glb } },
                 { id: 'eu', type: 'region', params: { code: 'eu-west-1', geo: 'europe', isPrimary: true } },
                 { id: 'us', type: 'region', params: { code: 'us-east-1', geo: 'north-america', isPrimary: false } },
                 { id: 'svc-eu', type: 'service', parentId: 'eu' },
@@ -91,6 +95,38 @@ describe('липкие чтения после записи', () => {
         expect(open).toBeGreaterThan(0);
         expect(half).toBeCloseTo(open * 0.5, 9);
         expect(full).toBe(0);
+    });
+});
+
+describe('цена липких чтений', () => {
+    it('перекладывает чтения на primary и режет ёмкость узла', () => {
+        const open = store('postgres', { ...REPLICATED, stickyReadShare: 0 }).nodes.db;
+        const sticky = store('postgres', { ...REPLICATED, stickyReadShare: 1 }).nodes.db;
+
+        expect(sticky.capacity).toBeLessThan(open.capacity);
+        expect(sticky.utilization).toBeGreaterThan(open.utilization);
+    });
+});
+
+describe('ожидание догона реплики', () => {
+    const lagging = { ...REPLICATED, readFromReplica: 1, replicaLagMs: 400 };
+
+    it('убирает устаревшие чтения и платит задержкой', () => {
+        const accepting = store('postgres', { ...lagging, staleReadPolicy: 'accept' });
+        const waiting = store('postgres', { ...lagging, staleReadPolicy: 'wait-for-lag' });
+
+        expect(rateOf(accepting, 'stale-read')).toBeGreaterThan(0);
+        expect(rateOf(waiting, 'stale-read')).toBe(0);
+        expect(rateOf(waiting, 'read-your-writes')).toBe(0);
+        expect(waiting.flows[0].latency.p99).toBeGreaterThan(accepting.flows[0].latency.p99);
+    });
+
+    it('попадает в отчёт средств смягчения', () => {
+        const waiting = store('postgres', { ...lagging, staleReadPolicy: 'wait-for-lag' });
+        const found = waiting.consistency.mitigations.find((item) => item.code === 'wait-for-lag');
+
+        expect(found?.nodeIds).toEqual(['db']);
+        expect(found?.suppresses).toContain('stale-read');
     });
 });
 
@@ -142,6 +178,25 @@ describe('слияние конфликтов', () => {
         );
 
         expect(rateOf(result, 'write-conflict')).toBe(0);
+    });
+});
+
+describe('липкий регион', () => {
+    const crossRegion = { replicaLagMs: 200, readFromReplica: 0, rowCount: 100000 };
+
+    it('без него чтение приходит в чужой регион и не видит свою запись', () => {
+        const loose = twoRegionWrites({ mode: 'active-active' }, crossRegion);
+
+        expect(rateOf(loose, 'read-your-writes')).toBeGreaterThan(0);
+        expect(rateOf(loose, 'stale-read')).toBeGreaterThan(0);
+    });
+
+    it('с ним сессия остаётся в своём регионе, и аномалия уходит', () => {
+        const pinned = twoRegionWrites({ mode: 'active-active' }, crossRegion, { stickyRegion: true });
+
+        expect(rateOf(pinned, 'read-your-writes')).toBe(0);
+        expect(rateOf(pinned, 'stale-read')).toBe(0);
+        expect(pinned.consistency.mitigations.some((item) => item.code === 'sticky-region')).toBe(true);
     });
 });
 
@@ -248,6 +303,8 @@ describe('отчёт о средствах смягчения', () => {
             'conflict-policy',
             'idempotency',
             'ordering',
+            'wait-for-lag',
+            'sticky-region',
             'suppresses',
         ];
 

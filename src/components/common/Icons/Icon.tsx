@@ -1,4 +1,4 @@
-import SD_ICONS from './SdIcons';
+import iconGlyph from './iconGlyph';
 import './Icon.css';
 
 export type IconSize = 'small' | 'medium' | 'large';
@@ -20,31 +20,23 @@ const UNDRAWN_BLOCK = (
 );
 
 export default function Icon({ name, size = 'medium', className = '', title }: IconProps) {
-    const custom = SD_ICONS[name] ?? (name.startsWith('sd-') ? UNDRAWN_BLOCK : undefined);
-
-    if (custom) {
-        return (
-            <svg
-                viewBox="0 0 24 24"
-                width={SIZE_PX[size]}
-                height={SIZE_PX[size]}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className={`sd-icon icon-${size} ${className}`}
-                aria-hidden="true"
-            >
-                {title ? <title>{title}</title> : null}
-                {custom}
-            </svg>
-        );
-    }
+    const glyph = iconGlyph(name) ?? UNDRAWN_BLOCK;
 
     return (
-        <span className={`material-icons-outlined icon-${size} ${className}`} aria-hidden="true">
-            {name}
-        </span>
+        <svg
+            viewBox="0 0 24 24"
+            width={SIZE_PX[size]}
+            height={SIZE_PX[size]}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={`sd-icon icon-${size} ${className}`}
+            aria-hidden="true"
+        >
+            {title ? <title>{title}</title> : null}
+            {glyph}
+        </svg>
     );
 }

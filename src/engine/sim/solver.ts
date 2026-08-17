@@ -622,6 +622,7 @@ export function solveFlows(topology: CompiledTopology, flows: Flow[], options: S
                 capacity: effectiveCapacity,
                 servers,
                 serviceSec,
+                blockingSec,
                 arrivalVariability: arrivalVariabilityFor(node, arrivalVariability),
                 serviceVariability: serviceVariabilityFor(node),
                 timeoutSec,

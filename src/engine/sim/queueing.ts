@@ -3,6 +3,7 @@ export interface QueueInput {
     capacity: number;
     servers: number;
     serviceSec: number;
+    blockingSec?: number;
     arrivalVariability: number;
     serviceVariability: number;
     timeoutSec: number;
@@ -66,8 +67,13 @@ export function sakasegawaWaitSec(
     return (serviceSec * Math.pow(rho, exponent)) / (c * (1 - rho));
 }
 
+export function slotHoldSec(serviceSec: number, blockingSec: number): number {
+    return serviceSec + Math.max(blockingSec, 0);
+}
+
 export function solveQueue(input: QueueInput): QueueResult {
     const { lambdaOffered, capacity, servers, serviceSec, timeoutSec, queueLimit } = input;
+    const holdSec = slotHoldSec(serviceSec, input.blockingSec ?? 0);
 
     if (!Number.isFinite(capacity)) {
         return {
@@ -96,8 +102,8 @@ export function solveQueue(input: QueueInput): QueueResult {
     }
 
     const utilization = lambdaOffered / capacity;
-    const places = bindingServers(servers, capacity, serviceSec);
-    const markovianWait = sakasegawaWaitSec(serviceSec, places, utilization);
+    const places = bindingServers(servers, capacity, holdSec);
+    const markovianWait = sakasegawaWaitSec(holdSec, places, utilization);
     const variabilityFactor = (input.arrivalVariability + input.serviceVariability) / 2;
     const unboundedWait = markovianWait * variabilityFactor;
     const drainWait = queueLimit > 0 ? queueLimit / capacity : 0;
@@ -110,7 +116,7 @@ export function solveQueue(input: QueueInput): QueueResult {
             : Math.max(saturationLoss, erlangBlocking(places, utilization * places));
 
     const throughput = Math.min(lambdaOffered * (1 - overflowProbability), capacity);
-    const responseSec = serviceSec + waitSec;
+    const responseSec = holdSec + waitSec;
     const timeoutProbability =
         timeoutSec > 0 && responseSec > 0
             ? (1 - overflowProbability) * Math.exp(-timeoutSec / responseSec)

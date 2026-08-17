@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import initComponents from '../../src/engine/initComponents';
 import registry from '../../src/engine/ComponentRegistry';
+import { sakasegawaWaitSec, serviceVariabilityFromSigma } from '../../src/engine/sim/queueing';
 import { simulate } from '../../src/engine/sim/simulate';
 import { buildScheme } from '../helpers/scheme';
 import type { ComponentParams } from '../../src/engine/types/component';
@@ -34,6 +35,10 @@ function db(id: string, serviceMs: number): NodeSpec {
 
 function client(): NodeSpec {
     return { id: 'client', type: 'client-web', params: { requestsPerSession: 1, dau: 2_000_000 } };
+}
+
+function variabilityFactor(): number {
+    return (1 + serviceVariabilityFromSigma(0.5)) / 2;
 }
 
 function runApi(nodes: NodeSpec[], links: { from: string; to: string }[]) {
@@ -77,6 +82,19 @@ describe('медленная зависимость занимает пул вы
         const slow = chain(50);
 
         expect(slow.capacity).toBeCloseTo(POOL / (0.01 + slow.blockingSec), 3);
+    });
+
+    it('раздувает и ожидание в очереди: слот держится дольше, чем своё обслуживание', () => {
+        const slow = chain(50);
+        const held = slow.serviceSec + slow.blockingSec;
+
+        expect(slow.waitSec).toBeCloseTo(
+            sakasegawaWaitSec(held, POOL, slow.utilization) * variabilityFactor(),
+            6,
+        );
+        expect(slow.waitSec).toBeGreaterThan(
+            sakasegawaWaitSec(slow.serviceSec, POOL, slow.utilization) * variabilityFactor(),
+        );
     });
 
     it('ожидание зависимости не превышает таймаута вызова', () => {

@@ -1,5 +1,6 @@
 import type { ComponentDefinition, ComponentParams, PortSpec } from '../types/component';
 import { HOURS_PER_MONTH, SECONDS_PER_DAY, SECONDS_PER_MONTH } from '../sim/constants';
+import { replicaReadShare, STALE_READ_POLICIES } from '../sim/replication';
 import {
     connectionBound,
     defineModel,
@@ -118,7 +119,7 @@ function relationalModel<P extends RelationalParams>() {
         serviceSec: (ctx) => weightedServiceSec(ctx.params, ctx.readShare, ctx.writeShare),
         resources: (ctx) => {
             const serviceSec = weightedServiceSec(ctx.params, ctx.readShare, ctx.writeShare);
-            const readCapacityFactor = 1 + ctx.params.readReplicas * ctx.params.readFromReplica;
+            const readCapacityFactor = 1 + ctx.params.readReplicas * replicaReadShare(ctx.params);
             const pooler = POOLER_MULTIPLIER[ctx.params.connectionPooler] ?? 1;
 
             return [
@@ -217,6 +218,7 @@ const postgresDefaults = {
     replicaLagSigma: 0.8,
     readFromReplica: 0.3,
     stickyReadShare: 0,
+    staleReadPolicy: 'accept',
     concurrencyControl: 'pessimistic',
     isolationLevel: 'read-committed',
     conflictResolution: 'single-writer-per-key',
@@ -252,6 +254,7 @@ const RELATIONAL_SCHEMA = {
     replicaLagSigma: num('consistency', { min: 0.1, max: 3, step: 0.1 }),
     readFromReplica: num('consistency', { min: 0, max: 1, step: 0.05 }),
     stickyReadShare: num('consistency', { min: 0, max: 1, step: 0.05 }),
+    staleReadPolicy: choice('consistency', STALE_READ_POLICIES),
     concurrencyControl: choice('consistency', CONCURRENCY_CONTROL),
     isolationLevel: choice('consistency', ISOLATION_LEVEL),
     conflictResolution: choice('consistency', CONFLICT_RESOLUTION),
@@ -334,6 +337,7 @@ const auroraDefaults = {
     replicaLagSigma: 0.8,
     readFromReplica: 0.6,
     stickyReadShare: 0,
+    staleReadPolicy: 'accept',
     concurrencyControl: 'pessimistic',
     isolationLevel: 'read-committed',
     conflictResolution: 'single-writer-per-key',
@@ -355,7 +359,7 @@ function auroraServiceSec(params: typeof auroraDefaults, readShare: number, writ
 }
 
 function auroraServingCores(params: typeof auroraDefaults, readShare: number): number {
-    return params.cpuCores * (1 + params.readReplicas * params.readFromReplica * readShare);
+    return params.cpuCores * (1 + params.readReplicas * replicaReadShare(params) * readShare);
 }
 
 function auroraIoPerRequest(
@@ -486,6 +490,7 @@ const aurora = defineComponent({
         replicaLagSigma: num('consistency', { min: 0.1, max: 3, step: 0.1 }),
         readFromReplica: num('consistency', { min: 0, max: 1, step: 0.05 }),
         stickyReadShare: num('consistency', { min: 0, max: 1, step: 0.05 }),
+        staleReadPolicy: choice('consistency', STALE_READ_POLICIES),
         concurrencyControl: choice('consistency', CONCURRENCY_CONTROL),
         isolationLevel: choice('consistency', ISOLATION_LEVEL),
         conflictResolution: choice('consistency', CONFLICT_RESOLUTION),
@@ -532,6 +537,7 @@ const vitessDefaults = {
     replicaLagSigma: 0.8,
     readFromReplica: 0.5,
     stickyReadShare: 0,
+    staleReadPolicy: 'accept',
     concurrencyControl: 'pessimistic',
     isolationLevel: 'repeatable-read',
     conflictResolution: 'single-writer-per-key',
@@ -560,7 +566,7 @@ function vitessServiceSec(params: typeof vitessDefaults, readShare: number, writ
 }
 
 function vitessServingTablets(params: typeof vitessDefaults, readShare: number): number {
-    return 1 + params.replicasPerShard * params.readFromReplica * readShare;
+    return 1 + params.replicasPerShard * replicaReadShare(params) * readShare;
 }
 
 const vitessModel = defineModel<typeof vitessDefaults>({
@@ -697,6 +703,7 @@ const vitess = defineComponent({
         replicaLagSigma: num('consistency', { min: 0.1, max: 3, step: 0.1 }),
         readFromReplica: num('consistency', { min: 0, max: 1, step: 0.05 }),
         stickyReadShare: num('consistency', { min: 0, max: 1, step: 0.05 }),
+        staleReadPolicy: choice('consistency', STALE_READ_POLICIES),
         concurrencyControl: choice('consistency', CONCURRENCY_CONTROL),
         isolationLevel: choice('consistency', ISOLATION_LEVEL),
         conflictResolution: choice('consistency', CONFLICT_RESOLUTION),
@@ -741,6 +748,7 @@ const cockroachDefaults = {
     replicaLagSigma: 0.8,
     readFromReplica: 0,
     stickyReadShare: 0,
+    staleReadPolicy: 'accept',
     concurrencyControl: 'optimistic',
     isolationLevel: 'serializable',
     conflictResolution: 'single-writer-per-key',
@@ -939,6 +947,7 @@ const DISTRIBUTED_SQL_SCHEMA = {
         replicaLagSigma: num('consistency', { min: 0.1, max: 3, step: 0.1 }),
         readFromReplica: num('consistency', { min: 0, max: 1, step: 0.05 }),
         stickyReadShare: num('consistency', { min: 0, max: 1, step: 0.05 }),
+        staleReadPolicy: choice('consistency', STALE_READ_POLICIES),
         concurrencyControl: choice('consistency', CONCURRENCY_CONTROL),
         isolationLevel: choice('consistency', ISOLATION_LEVEL),
         conflictResolution: choice('consistency', CONFLICT_RESOLUTION),
@@ -1025,6 +1034,7 @@ const spannerDefaults = {
     replicaLagSigma: 0.8,
     readFromReplica: 0.3,
     stickyReadShare: 0,
+    staleReadPolicy: 'accept',
     concurrencyControl: 'pessimistic',
     isolationLevel: 'serializable',
     conflictResolution: 'single-writer-per-key',
@@ -1193,6 +1203,7 @@ const spanner = defineComponent({
         replicaLagSigma: num('consistency', { min: 0.1, max: 3, step: 0.1 }),
         readFromReplica: num('consistency', { min: 0, max: 1, step: 0.05 }),
         stickyReadShare: num('consistency', { min: 0, max: 1, step: 0.05 }),
+        staleReadPolicy: choice('consistency', STALE_READ_POLICIES),
         concurrencyControl: choice('consistency', CONCURRENCY_CONTROL),
         isolationLevel: choice('consistency', ISOLATION_LEVEL),
         conflictResolution: choice('consistency', CONFLICT_RESOLUTION),

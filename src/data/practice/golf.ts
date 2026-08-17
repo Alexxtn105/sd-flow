@@ -5,7 +5,7 @@ export const GOLF_TASKS: GolfTask[] = [
         id: 'golf-url-shortener',
         challengeId: 'url-shortener',
         startFrom: 'managed-kv',
-        parUsdMonth: 29000,
+        parUsdMonth: 30000,
         title: { ru: 'Сокращатель ссылок за минимум', en: 'URL shortener on a budget' },
         brief: {
             ru: 'Схема работает и держит SLO, но за неё платят втридорога. Снижайте счёт, не роняя ни одного требования: бюджетное требование снято, счёт и есть результат.',
@@ -53,7 +53,7 @@ export const GOLF_TASKS: GolfTask[] = [
         id: 'golf-autocomplete',
         challengeId: 'autocomplete',
         startFrom: 'in-memory-prefix-index',
-        parUsdMonth: 6850,
+        parUsdMonth: 8000,
         title: { ru: 'Подсказки за минимум', en: 'Autocomplete on a budget' },
         brief: {
             ru: 'Самая жёсткая задача набора: бюджет задержки крошечный, а лишние узлы стоят денег. Резать придётся аккуратно.',
@@ -69,7 +69,7 @@ export const GOLF_TASKS: GolfTask[] = [
         id: 'golf-twitter-feed',
         challengeId: 'twitter-feed',
         startFrom: 'fanout-on-write',
-        parUsdMonth: 34000,
+        parUsdMonth: 35000,
         title: { ru: 'Лента за минимум', en: 'Feed on a budget' },
         brief: {
             ru: 'Раскладка по подписчикам работает, но за неё переплачивают на каждом блоке. Снизьте счёт, удержав задержку ленты и свежесть данных.',

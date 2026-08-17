@@ -645,6 +645,9 @@
         "breachAt": "SLO breached from {{value}}",
         "recoveredAt": "recovered by {{value}}",
         "step": "step {{value}}",
+        "scrub": "Point in time",
+        "at": "at {{value}}",
+        "worst": "worst is {{node}}: {{value}}",
         "metric": {
             "label": "Metric",
             "lambda": "Offered load, req/s",
@@ -711,6 +714,8 @@
     "mitigation": {
         "quorum": "Quorum R + W > N: {{quorumR}} + {{quorumW}} > {{quorumN}}",
         "sync-replication": "Linearizable on top of synchronous replication",
+        "wait-for-lag": "Reads wait for the replica to catch up: {{replicaLagMs}} ms of lag moves into latency",
+        "sticky-region": "Sticky region: a session stays in its own region ({{regions}} regions)",
         "sticky-reads": "Sticky reads: {{stickyReadSharePct}}% of sessions read from their own replica",
         "session-guarantee": "Declared session guarantee: {{consistencyModel}}",
         "concurrency-control": "Concurrency control: {{concurrencyControl}}",

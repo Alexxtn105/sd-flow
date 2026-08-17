@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import initComponents from '../../src/engine/initComponents';
 import registry from '../../src/engine/ComponentRegistry';
-import { FREE_IOPS, PRICING_PROFILES, pricingFor } from '../../src/engine/sim/constants';
+import { DAYS_PER_MONTH, FREE_IOPS, PRICING_PROFILES, pricingFor } from '../../src/engine/sim/constants';
 import { backupCopies } from '../../src/engine/sim/derived';
 import { billableIops } from '../../src/engine/sim/provisioned';
 import { simulate } from '../../src/engine/sim/simulate';
@@ -46,16 +46,75 @@ describe('бэкапы', () => {
         expect(result.nodes.svc.backupGb).toBe(0);
     });
 
-    it('не попадают в счёт: это строка хранилища, а не стоимости', () => {
+    it('оплачиваются по ставке профиля цен, сверх объёма и выделенных IOPS', () => {
         const result = simulate(withStore('postgres'), { sampleCount: SAMPLES });
         const store = result.nodes.store;
         const defaults = registry.getDefaultParams('postgres');
+        const pricing = pricingFor('aws-2026-q2');
         const storageGb = store.storage?.totalGb ?? 0;
         const perGb = Number(defaults.costPerGbMonth);
-        const iops = (Number(defaults.provisionedIops) - FREE_IOPS) * pricingFor('aws-2026-q2').iopsPerMonth;
+        const iops = (Number(defaults.provisionedIops) - FREE_IOPS) * pricing.iopsPerMonth;
+        const backups = store.backupGb * pricing.backupPerGbMonth;
 
-        expect(store.backupGb).toBeGreaterThan(0);
-        expect(store.cost.storage).toBeCloseTo(storageGb * perGb + iops, 3);
+        expect(backups).toBeGreaterThan(0);
+        expect(store.cost.storage).toBeCloseTo(storageGb * perGb + iops + backups, 3);
+    });
+});
+
+describe('логи и ключи идемпотентности', () => {
+    it('логи оплачиваются по ставке профиля, если своего сборщика в схеме нет', () => {
+        const result = simulate(withStore('postgres'), { sampleCount: SAMPLES });
+        const service = result.nodes.svc;
+        const pricing = pricingFor('aws-2026-q2');
+
+        expect(service.logsGbDay).toBeGreaterThan(0);
+        expect(service.cost.storage).toBeCloseTo(service.logsGbDay * DAYS_PER_MONTH * pricing.logsPerGbMonth, 3);
+    });
+
+    it('нарисованный сборщик забирает плату за логи себе', () => {
+        const collected = simulate(
+            buildScheme({
+                nodes: [
+                    { id: 'client', type: 'client-web' },
+                    { id: 'svc', type: 'service' },
+                    { id: 'store', type: 'postgres' },
+                    { id: 'logs', type: 'logs' },
+                ],
+                links: [
+                    { from: 'client', to: 'svc' },
+                    { from: 'svc', to: 'store' },
+                    { from: 'svc', to: 'logs' },
+                ],
+            }),
+            { sampleCount: SAMPLES },
+        );
+
+        expect(collected.nodes.svc.logsGbDay).toBeGreaterThan(0);
+        expect(collected.nodes.svc.cost.storage).toBe(0);
+        expect(collected.nodes.logs.cost.total).toBeGreaterThan(0);
+    });
+
+    it('ключи идемпотентности оплачивает тот, кто их хранит', () => {
+        const result = simulate(
+            buildScheme({
+                nodes: [
+                    { id: 'client', type: 'client-web' },
+                    { id: 'svc', type: 'service', params: { logLinesPerRequest: 0 } },
+                    { id: 'gateway', type: 'payment-external' },
+                ],
+                links: [
+                    { from: 'client', to: 'svc' },
+                    { from: 'svc', to: 'gateway', readShare: 0 },
+                ],
+            }),
+            { sampleCount: SAMPLES },
+        );
+        const pricing = pricingFor('aws-2026-q2');
+        const caller = result.nodes.svc;
+
+        expect(caller.idempotencyGb).toBeGreaterThan(0);
+        expect(caller.cost.storage).toBeCloseTo(caller.idempotencyGb * pricing.keyStatePerGbMonth, 3);
+        expect(result.nodes.gateway.idempotencyGb).toBe(0);
     });
 });
 

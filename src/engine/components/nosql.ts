@@ -1,5 +1,6 @@
 import type { ComponentDefinition, ComponentParams, PortSpec } from '../types/component';
 import { HOURS_PER_MONTH, SECONDS_PER_DAY, SECONDS_PER_MONTH } from '../sim/constants';
+import { STALE_READ_POLICIES } from '../sim/replication';
 import {
     bandwidthBound,
     connectionBound,
@@ -1048,6 +1049,7 @@ const neo4jDefaults = {
     writeServiceMs: 2,
     readFromReplica: 0.5,
     stickyReadShare: 0,
+    staleReadPolicy: 'accept',
     consistencyModel: 'read-your-writes',
     replicationMode: 'semi-sync',
     replicaLagMs: 100,
@@ -1218,6 +1220,7 @@ const neo4j = defineComponent({
         writeServiceMs: num('performance', { unitKey: 'ms', min: 0.05, max: 60000, step: 0.05 }),
         readFromReplica: num('consistency', { min: 0, max: 1, step: 0.05 }),
         stickyReadShare: num('consistency', { min: 0, max: 1, step: 0.05 }),
+        staleReadPolicy: choice('consistency', STALE_READ_POLICIES),
         consistencyModel: choice('consistency', CONSISTENCY_MODEL),
         replicationMode: choice('consistency', REPLICATION_MODE),
         replicaLagMs: num('consistency', { unitKey: 'ms', min: 0, max: 600000, realistic: { min: 20, max: 2000 } }),
@@ -1249,6 +1252,7 @@ const timescaleDefaults = {
     writeServiceMs: 3,
     readFromReplica: 0.3,
     stickyReadShare: 0,
+    staleReadPolicy: 'accept',
     consistencyModel: 'linearizable',
     replicationMode: 'async',
     replicaLagMs: 200,
@@ -1433,6 +1437,7 @@ const timescale = defineComponent({
         writeServiceMs: num('performance', { unitKey: 'ms', min: 0.05, max: 60000, step: 0.05 }),
         readFromReplica: num('consistency', { min: 0, max: 1, step: 0.05 }),
         stickyReadShare: num('consistency', { min: 0, max: 1, step: 0.05 }),
+        staleReadPolicy: choice('consistency', STALE_READ_POLICIES),
         consistencyModel: choice('consistency', CONSISTENCY_MODEL),
         replicationMode: choice('consistency', REPLICATION_MODE),
         replicaLagMs: num('consistency', { unitKey: 'ms', min: 0, max: 600000, realistic: { min: 50, max: 2000 } }),

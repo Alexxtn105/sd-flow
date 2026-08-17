@@ -1,9 +1,11 @@
 import type { ComponentParams, ParamValue } from '../types/component';
 import type { CallOperation } from '../types/scheme';
-import { SECONDS_PER_DAY } from './constants';
+import { GEO_ZONES, geoRttMs, SECONDS_PER_DAY } from './constants';
 import type { CompiledNode, CompiledTopology } from './compile';
 
 export const READ_OPERATIONS: CallOperation[] = ['read', 'scan', 'consume'];
+
+export const GLOBAL_GEO = 'global';
 
 export interface Flow {
     id: string;
@@ -13,6 +15,30 @@ export interface Flow {
     requestBytes: number;
     responseBytes: number;
     geo: string;
+    geoSpread: number;
+}
+
+export function zoneShares(geo: string, spread: number): Map<string, number> {
+    const shares = new Map<string, number>();
+
+    if (geo === GLOBAL_GEO || !GEO_ZONES.includes(geo as (typeof GEO_ZONES)[number])) {
+        for (const zone of GEO_ZONES) shares.set(zone, 1 / GEO_ZONES.length);
+
+        return shares;
+    }
+
+    const remote = Math.min(Math.max(spread, 0), 1);
+    shares.set(geo, 1 - remote);
+
+    if (remote <= 0) return shares;
+
+    const others = GEO_ZONES.filter((zone) => zone !== geo);
+    const proximity = others.map((zone) => 1 / geoRttMs(geo, zone));
+    const total = proximity.reduce((sum, value) => sum + value, 0);
+
+    others.forEach((zone, index) => shares.set(zone, (remote * proximity[index]) / total));
+
+    return shares;
 }
 
 export function isReadOperation(operation: CallOperation): boolean {
@@ -84,7 +110,8 @@ export function deriveFlows(topology: CompiledTopology, trafficMultiplier: numbe
             readShare: numeric(node.params.readWriteMix, 0.8),
             requestBytes: clientRequestBytes(node.params),
             responseBytes: clientResponseBytes(node.params),
-            geo: String(node.params.geoDistribution ?? 'global'),
+            geo: String(node.params.geoDistribution ?? GLOBAL_GEO),
+            geoSpread: numeric(node.params.geoSpread),
         }))
         .filter((flow) => flow.rps > 0);
 }

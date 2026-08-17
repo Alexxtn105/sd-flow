@@ -80,6 +80,27 @@ describe('теория очередей', () => {
         expect(result.throughput).toBeCloseTo(300 * (1 - blocking), 6);
     });
 
+    it('ожидание считается от времени удержания слота, а не от собственного обслуживания', () => {
+        const shared = {
+            lambdaOffered: 800,
+            capacity: 1000,
+            servers: 8,
+            serviceSec: 0.01,
+            arrivalVariability: 1,
+            serviceVariability: 1,
+            timeoutSec: 0.5,
+            queueLimit: 100000,
+        };
+
+        const own = solveQueue(shared);
+        const held = solveQueue({ ...shared, blockingSec: 0.09 });
+
+        expect(own.waitSec).toBeGreaterThan(0);
+        expect(held.waitSec / own.waitSec).toBeCloseTo(10, 6);
+        expect(held.timeoutProbability).toBeGreaterThan(own.timeoutProbability);
+        expect(held.utilization).toBeCloseTo(own.utilization, 9);
+    });
+
     it('усиление ретраями растёт с числом попыток и вероятностью отказа', () => {
         expect(retryAmplification(0.2, 0, 0.5)).toBe(0);
         expect(retryAmplification(0.2, 3, 0.5)).toBeGreaterThan(retryAmplification(0.1, 3, 0.5));

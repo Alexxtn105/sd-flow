@@ -142,6 +142,9 @@ export const PRICING_PROFILES: Record<string, PricingProfile> = {
         crossRegionPerGb: 0.02,
         requestsPerMillion: 0.4,
         iopsPerMonth: 0.005,
+        backupPerGbMonth: 0.05,
+        logsPerGbMonth: 0.03,
+        keyStatePerGbMonth: 0.25,
         managedMultiplier: 1,
     },
     'gcp-2026-q2': {
@@ -152,6 +155,9 @@ export const PRICING_PROFILES: Record<string, PricingProfile> = {
         crossRegionPerGb: 0.02,
         requestsPerMillion: 0.4,
         iopsPerMonth: 0.005,
+        backupPerGbMonth: 0.03,
+        logsPerGbMonth: 0.03,
+        keyStatePerGbMonth: 0.18,
         managedMultiplier: 0.95,
     },
     'hetzner-2026-q2': {
@@ -162,6 +168,9 @@ export const PRICING_PROFILES: Record<string, PricingProfile> = {
         crossRegionPerGb: 0.001,
         requestsPerMillion: 0,
         iopsPerMonth: 0,
+        backupPerGbMonth: 0.012,
+        logsPerGbMonth: 0.008,
+        keyStatePerGbMonth: 0.05,
         managedMultiplier: 0.45,
     },
     'on-prem': {
@@ -172,6 +181,9 @@ export const PRICING_PROFILES: Record<string, PricingProfile> = {
         crossRegionPerGb: 0.005,
         requestsPerMillion: 0,
         iopsPerMonth: 0.002,
+        backupPerGbMonth: 0.01,
+        logsPerGbMonth: 0.006,
+        keyStatePerGbMonth: 0.04,
         managedMultiplier: 0.6,
     },
 };

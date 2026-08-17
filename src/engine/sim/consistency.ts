@@ -1,6 +1,14 @@
 import type { ComponentParams } from '../types/component';
 import type { CompiledNode, CompiledTopology } from './compile';
 import { collisionProbability, concurrencyControlOf, effectiveKeys, rmwWindowSec } from './contention';
+import {
+    expectedLagSec,
+    replicaLagSec,
+    replicaLagSigma,
+    replicaReadShare,
+    stickyReadShare,
+    waitsForLag,
+} from './replication';
 import { explain } from './resources';
 import type { NodeRuntime, OperationFlow } from './solver';
 import type { AnomalyRate, ConsistencyResult, MitigationEffect } from './types';
@@ -19,6 +27,8 @@ const CONSUMER_SLOT_PARAMS = ['concurrencyPerInstance', 'concurrency'];
 const STORE_GROUPS = new Set(['sql', 'nosql', 'cache', 'search', 'olap']);
 const READ_YOUR_WRITES_MODELS = new Set(['read-your-writes']);
 const MONOTONIC_MODELS = new Set(['monotonic']);
+const CROSS_REGION_READ_MODES = new Set(['active-active', 'read-local-write-global']);
+const SESSION_PINNED_MODES = new Set(['active-active']);
 
 const ISOLATION_ANOMALIES: Record<string, string[]> = {
     'read-uncommitted': ['dirty-read', 'non-repeatable-read', 'phantom-read'],
@@ -68,13 +78,6 @@ function replicaPoolSize(node: CompiledNode): number {
     return 1;
 }
 
-function stickyReadShare(node: CompiledNode): number {
-    const share = node.params.stickyReadShare;
-    if (typeof share !== 'number') return 0;
-
-    return Math.min(Math.max(share, 0), 1);
-}
-
 function preservesOrder(node: CompiledNode): boolean {
     for (const name of ORDERING_PARAMS) {
         const value = node.params[name];
@@ -97,28 +100,6 @@ function parallelLanes(broker: CompiledNode, consumers: number): number {
     return partitions > 0 ? Math.min(partitions, consumers) : consumers;
 }
 
-function replicaLagSec(node: CompiledNode, runtime: NodeRuntime): number {
-    const declared = Number(node.params.replicaLagMs ?? 0) / 1000;
-    if (declared <= 0) return 0;
-
-    const utilization = Math.min(runtime.queue.utilization, 0.99);
-    const pressure = 1 + (utilization * utilization) / (1 - utilization);
-
-    return declared * pressure;
-}
-
-function expectedLagSec(medianSec: number, sigma: number): number {
-    return medianSec * Math.exp((sigma * sigma) / 2);
-}
-
-function replicaReadShare(node: CompiledNode): number {
-    const share = node.params.readFromReplica;
-    if (typeof share === 'number') return share;
-
-    const mode = node.params.replicationMode;
-    return mode === 'async' ? 1 : 0;
-}
-
 function quorumIsStrong(params: ComponentParams): boolean {
     const total = params.quorumN;
     const read = params.quorumR;
@@ -133,9 +114,24 @@ function staleReadsEliminated(node: CompiledNode): boolean {
     const model = String(node.params.consistencyModel ?? '');
     const replication = String(node.params.replicationMode ?? '');
 
-    if (quorumIsStrong(node.params)) return true;
+    if (quorumIsStrong(node.params) || waitsForLag(node.params)) return true;
 
     return model === 'linearizable' && replication === 'sync';
+}
+
+function regionPinned(topology: CompiledTopology): boolean {
+    return topology.nodes.some((node) => node.params.stickyRegion === true);
+}
+
+function crossRegionReadShare(topology: CompiledTopology): number {
+    const regions = topology.regions.length;
+    if (regions < 2) return 0;
+
+    const mode = String(topology.multiRegionPolicy?.params.mode ?? '');
+    if (!CROSS_REGION_READ_MODES.has(mode)) return 0;
+    if (SESSION_PINNED_MODES.has(mode) && regionPinned(topology)) return 0;
+
+    return 1 - 1 / regions;
 }
 
 function readYourWritesGuaranteed(node: CompiledNode): boolean {
@@ -207,21 +203,23 @@ export function analyseConsistency(
         collectNodeMitigations(node, mitigate);
 
         const keys = effectiveKeys(node.params);
-        const sigma = Number(node.params.replicaLagSigma ?? 0.8);
-        const lagSec = replicaLagSec(node, runtime);
+        const sigma = replicaLagSigma(node.params);
+        const lagSec = replicaLagSec(node.params, runtime.queue.utilization);
         const meanLagSec = expectedLagSec(lagSec, sigma);
-        const replicaShare = replicaReadShare(node);
+        const sticky = stickyReadShare(node.params);
+        const replicaShare = replicaReadShare(node.params);
+        const sessionShare = crossRegionReadShare(topology);
+        const staleSourceShare = 1 - (1 - replicaShare) * (1 - sessionShare);
         const writePerKey = runtime.write / keys;
 
-        if (lagSec > 0 && replicaShare > 0 && !staleReadsEliminated(node)) {
+        if (lagSec > 0 && staleSourceShare > 0 && !staleReadsEliminated(node)) {
             const staleProbability = 1 - Math.exp(-writePerKey * meanLagSec);
-            const randomStaleRate = runtime.read * replicaShare * staleProbability;
+            const randomStaleRate = runtime.read * staleSourceShare * staleProbability;
 
-            const sticky = stickyReadShare(node);
             const rywProbability = logNormalTail(READ_AFTER_WRITE_GAP_SEC, lagSec, sigma);
             const rywRate = readYourWritesGuaranteed(node)
                 ? 0
-                : runtime.write * READ_AFTER_WRITE_SHARE * replicaShare * rywProbability * (1 - sticky);
+                : runtime.write * READ_AFTER_WRITE_SHARE * staleSourceShare * rywProbability;
 
             const rate = randomStaleRate + rywRate;
 
@@ -232,10 +230,12 @@ export function analyseConsistency(
                     shareOfOperations: runtime.read > 0 ? Math.min(rate / runtime.read, 1) : 0,
                     nodeIds: [node.id],
                     explain: explain(
-                        'λ_read × replicaShare × (1 − e^(−λ_write,key × E[L])) + λ_чтений-после-записи',
+                        'λ_read × staleSourceShare × (1 − e^(−λ_write,key × E[L])) + λ_чтений-после-записи',
                         {
                             lambdaRead: runtime.read,
+                            staleSourceShare,
                             replicaShare,
+                            crossRegionReadShare: sessionShare,
                             lambdaWriteKey: writePerKey,
                             expectedLagSec: meanLagSec,
                             readYourWritesRate: rywRate,
@@ -253,12 +253,14 @@ export function analyseConsistency(
                     shareOfOperations: runtime.write > 0 ? rywRate / runtime.write : 0,
                     nodeIds: [node.id],
                     explain: explain(
-                        'λ_write × readAfterWriteShare × replicaShare × (1 − stickyReadShare) × P(L > Δt)',
+                        'λ_write × readAfterWriteShare × staleSourceShare × P(L > Δt), staleSourceShare = 1 − (1 − replicaShare × (1 − stickyReadShare)) × (1 − crossRegionReadShare)',
                         {
                             lambdaWrite: runtime.write,
                             readAfterWriteShare: READ_AFTER_WRITE_SHARE,
+                            staleSourceShare,
                             replicaShare,
                             stickyReadShare: sticky,
+                            crossRegionReadShare: sessionShare,
                             deltaSec: READ_AFTER_WRITE_GAP_SEC,
                             medianLagSec: lagSec,
                         },
@@ -273,7 +275,7 @@ export function analyseConsistency(
             const divergenceProbability = logNormalTail(MONOTONIC_READ_GAP_SEC, lagSec, pairSigma);
             const monotonicRate = monotonicGuaranteed(node)
                 ? 0
-                : randomStaleRate * (1 - sticky) * (1 - 1 / replicaPool) * divergenceProbability;
+                : randomStaleRate * (1 - 1 / replicaPool) * divergenceProbability;
 
             if (monotonicRate > 0) {
                 anomalies.push({
@@ -282,10 +284,10 @@ export function analyseConsistency(
                     shareOfOperations: monotonicRate / runtime.read,
                     nodeIds: [node.id],
                     explain: explain(
-                        'λ_read × replicaShare × (1 − e^(−λ_write,key × E[L])) × (1 − stickyReadShare) × (1 − 1/nReplicas) × P(|L₁ − L₂| > Δt)',
+                        'λ_read × staleSourceShare × (1 − e^(−λ_write,key × E[L])) × (1 − 1/nReplicas) × P(|L₁ − L₂| > Δt)',
                         {
                             lambdaRead: runtime.read,
-                            replicaShare,
+                            staleSourceShare,
                             lambdaWriteKey: writePerKey,
                             expectedLagSec: meanLagSec,
                             stickyReadShare: sticky,
@@ -567,13 +569,17 @@ function collectNodeMitigations(node: CompiledNode, mitigate: Mitigate): void {
             quorumW: Number(params.quorumW ?? 0),
             quorumN: Number(params.quorumN ?? 0),
         });
+    } else if (waitsForLag(params)) {
+        mitigate('wait-for-lag', [node.id], STALE_FAMILY, {
+            replicaLagMs: Number(params.replicaLagMs ?? 0),
+        });
     } else if (staleReadsEliminated(node)) {
         mitigate('sync-replication', [node.id], STALE_FAMILY, {
             replicationMode: String(params.replicationMode ?? ''),
         });
     }
 
-    const sticky = stickyReadShare(node);
+    const sticky = stickyReadShare(params);
     if (sticky > 0) {
         mitigate('sticky-reads', [node.id], ['read-your-writes', 'monotonic-read'], {
             stickyReadShare: sticky,
@@ -610,5 +616,17 @@ function collectPolicyMitigations(topology: CompiledTopology, mitigate: Mitigate
     const resolution = String(policy.params.conflictResolution ?? '');
     if (resolution === 'single-writer-per-key' || resolution === 'crdt') {
         mitigate('conflict-policy', [policy.id], CONFLICT_FAMILY, { conflictResolution: resolution });
+    }
+
+    const mode = String(policy.params.mode ?? '');
+    const pinned = topology.nodes.filter((node) => node.params.stickyRegion === true);
+
+    if (SESSION_PINNED_MODES.has(mode) && pinned.length > 0) {
+        mitigate(
+            'sticky-region',
+            pinned.map((node) => node.id),
+            ['read-your-writes', 'monotonic-read'],
+            { regions: topology.regions.length },
+        );
     }
 }

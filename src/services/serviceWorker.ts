@@ -1,3 +1,6 @@
+import i18n, { DEFAULT_LANGUAGE } from '../locales/i18n';
+import { loadReference } from './referenceBundle';
+
 const SERVICE_WORKER_URL = `${import.meta.env.BASE_URL}sw.js`;
 
 function loadedUrls(): string[] {
@@ -7,9 +10,19 @@ function loadedUrls(): string[] {
     return [document, ...resources].filter((url) => url.startsWith(window.location.origin));
 }
 
-async function warmOfflineCache(): Promise<void> {
+export async function warmOfflineCache(): Promise<void> {
+    await loadReference(i18n.resolvedLanguage ?? DEFAULT_LANGUAGE, ['help', 'hints']).catch(() => undefined);
+
     const registration = await navigator.serviceWorker.ready;
     registration.active?.postMessage({ type: 'warm-cache', version: __APP_VERSION__, urls: loadedUrls() });
+}
+
+function whenIdle(task: () => void): void {
+    const idle = (window as unknown as { requestIdleCallback?: (callback: () => void) => number })
+        .requestIdleCallback;
+
+    if (idle) idle(task);
+    else window.setTimeout(task, 1500);
 }
 
 export function registerServiceWorker(): void {
@@ -19,7 +32,7 @@ export function registerServiceWorker(): void {
     window.addEventListener('load', () => {
         navigator.serviceWorker
             .register(SERVICE_WORKER_URL, { scope: import.meta.env.BASE_URL })
-            .then(() => warmOfflineCache())
+            .then(() => whenIdle(() => void warmOfflineCache()))
             .catch(() => undefined);
     });
 }

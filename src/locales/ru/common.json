@@ -645,6 +645,9 @@
         "breachAt": "SLO нарушен с {{value}}",
         "recoveredAt": "восстановление к {{value}}",
         "step": "шаг {{value}}",
+        "scrub": "Момент времени",
+        "at": "момент {{value}}",
+        "worst": "хуже всех {{node}}: {{value}}",
         "metric": {
             "label": "Метрика",
             "lambda": "Входной поток, запр./с",
@@ -711,6 +714,8 @@
     "mitigation": {
         "quorum": "Кворум R + W > N: {{quorumR}} + {{quorumW}} > {{quorumN}}",
         "sync-replication": "Линеаризуемость поверх синхронной репликации",
+        "wait-for-lag": "Чтение ждёт догона реплики: лаг {{replicaLagMs}} мс уходит в задержку",
+        "sticky-region": "Липкий регион: сессия не уходит из своего региона ({{regions}} региона)",
         "sticky-reads": "Липкие чтения: {{stickyReadSharePct}}% сессий читают со своей реплики",
         "session-guarantee": "Заявленная гарантия сессии: {{consistencyModel}}",
         "concurrency-control": "Контроль конкуренции: {{concurrencyControl}}",

@@ -31,7 +31,7 @@ design **ребро несёт половину смысла архитекту�
 | `policy.idempotent` | Проверяется предикатами заданий (ретраи без идемпотентности = антипаттерн) |
 | `consistency` | strong / bounded-staleness / eventual — для рёбер к репликам |
 | `readRouting` | primary / replica / nearest / sticky-after-write — доля чтений, способных увидеть устаревшие данные |
-| `readYourWrites` | none / sticky-primary / version-token / wait-for-lag — средство смягчения аномалии A2 |
+| `readYourWrites` | none / sticky-primary / version-token / wait-for-lag — планировалось как поле ребра; в коде роль закрыта параметрами хранилища `consistencyModel`, `stickyReadShare` и `staleReadPolicy` |
 | `deliverySemantics` | at-most-once / at-least-once / effectively-once — для async-рёбер |
 | `orderingGuarantee` | none / per-key / per-partition / global |
 | `staleToleranceMs` | Сколько устаревания допустимо для этого вызова (порог, ниже которого аномалия не считается ошибкой) |

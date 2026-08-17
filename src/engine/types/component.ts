@@ -140,6 +140,9 @@ export interface PricingProfile {
     crossRegionPerGb: number;
     requestsPerMillion: number;
     iopsPerMonth: number;
+    backupPerGbMonth: number;
+    logsPerGbMonth: number;
+    keyStatePerGbMonth: number;
     managedMultiplier: number;
 }
 

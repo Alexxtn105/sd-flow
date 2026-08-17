@@ -1,5 +1,7 @@
-import { DEFAULT_PRICING } from './constants';
+import { DAYS_PER_MONTH, DEFAULT_PRICING } from './constants';
 import { withSurcharges } from './cost';
+import type { MeteredData } from './cost';
+import { backupGbOf, HORIZON_DAYS, logsGbDayOf } from './derived';
 import type {
     ComponentDefinition,
     ComponentParams,
@@ -8,6 +10,7 @@ import type {
     ParamField,
     ParamValue,
     PricingProfile,
+    StorageContext,
 } from '../types/component';
 
 export type CostArticle = 'compute' | 'storage' | 'network' | 'requests';
@@ -28,11 +31,7 @@ const PROBE_EGRESS_GB_MONTH = 1000;
 const PROBE_FACTOR = 2;
 const EPSILON = 1e-9;
 
-function probeContext(
-    definition: ComponentDefinition,
-    params: ComponentParams,
-    pricing: PricingProfile,
-): CostContext {
+function baseContext(definition: ComponentDefinition, params: ComponentParams) {
     return {
         nodeId: definition.id,
         params,
@@ -43,8 +42,43 @@ function probeContext(
         requestBytes: PROBE_REQUEST_BYTES,
         responseBytes: PROBE_RESPONSE_BYTES,
         blockingSec: 0,
+    };
+}
+
+function probeStorageGb(definition: ComponentDefinition, params: ComponentParams): number {
+    const model = definition.model?.storage;
+    if (!model) return PROBE_STORAGE_GB;
+
+    const context: StorageContext = {
+        ...baseContext(definition, params),
+        writeRps: PROBE_LAMBDA * (1 - PROBE_READ_SHARE),
+        recordBytes: PROBE_REQUEST_BYTES,
+        horizonDays: HORIZON_DAYS,
+    };
+
+    const storage = model(context);
+
+    return Number.isFinite(storage.totalGb) ? storage.totalGb : PROBE_STORAGE_GB;
+}
+
+function probeData(definition: ComponentDefinition, params: ComponentParams): MeteredData {
+    return {
+        egressGbMonth: PROBE_EGRESS_GB_MONTH,
+        backupGb: backupGbOf(definition.group, probeStorageGb(definition, params)),
+        logsGbMonth: logsGbDayOf(params, PROBE_LAMBDA) * DAYS_PER_MONTH,
+        idempotencyGb: 0,
+    };
+}
+
+function probeContext(
+    definition: ComponentDefinition,
+    params: ComponentParams,
+    pricing: PricingProfile,
+): CostContext {
+    return {
+        ...baseContext(definition, params),
         pricing,
-        storageGb: PROBE_STORAGE_GB,
+        storageGb: probeStorageGb(definition, params),
         egressGbMonth: PROBE_EGRESS_GB_MONTH,
         regionCostMultiplier: 1,
     };
@@ -64,7 +98,7 @@ export function costAt(
         params,
         modelled,
         pricing,
-        PROBE_EGRESS_GB_MONTH,
+        probeData(definition, params),
     );
 
     return Number.isFinite(billed.total) ? billed : null;

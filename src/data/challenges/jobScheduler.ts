@@ -425,8 +425,8 @@ export const jobScheduler: Challenge = {
         {
             id: 'R10',
             kind: 'budget',
-            desc: { ru: 'Стоимость не выше $60 000 в месяц', en: 'Monthly cost stays under $60,000' },
-            maxMonthlyCostUsd: 60000,
+            desc: { ru: 'Стоимость не выше $80 000 в месяц', en: 'Monthly cost stays under $80,000' },
+            maxMonthlyCostUsd: 80000,
         },
     ],
     bonusObjectives: [

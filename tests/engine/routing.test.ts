@@ -1,6 +1,8 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import initComponents from '../../src/engine/initComponents';
 import registry from '../../src/engine/ComponentRegistry';
+import { GEO_ZONES } from '../../src/engine/sim/constants';
+import { zoneShares } from '../../src/engine/sim/flows';
 import { simulate } from '../../src/engine/sim/simulate';
 import { buildScheme } from '../helpers/scheme';
 import type { ComponentParams } from '../../src/engine/types/component';
@@ -17,6 +19,8 @@ interface TwoRegionOptions {
     routingPolicy?: string;
     geoMapping?: string;
     clientGeo?: string;
+    clientSpread?: number;
+    clientMix?: number;
     policy?: ComponentParams | null;
 }
 
@@ -27,7 +31,15 @@ function twoRegions(options: TwoRegionOptions = {}) {
 
     return buildScheme({
         nodes: [
-            { id: 'client', type: 'client-web', params: { geoDistribution: options.clientGeo ?? 'europe' } },
+            {
+                id: 'client',
+                type: 'client-web',
+                params: {
+                    geoDistribution: options.clientGeo ?? 'europe',
+                    ...(options.clientSpread === undefined ? {} : { geoSpread: options.clientSpread }),
+                    ...(options.clientMix === undefined ? {} : { readWriteMix: options.clientMix }),
+                },
+            },
             {
                 id: 'glb',
                 type: 'glb',
@@ -150,5 +162,86 @@ describe('режимы мультирегиона', () => {
 
         expect(us.throughput * us.writeShare).toBeGreaterThan(0);
         expect(result.nodes['svc-eu'].lambdaNominal).toBeCloseTo(0, 6);
+    });
+});
+
+describe('распределение клиентов по географии', () => {
+    it('доля вне основной зоны уводит часть трафика в дальний регион', () => {
+        const home = shares(simulate(twoRegions({ clientGeo: 'europe' }), { sampleCount: SAMPLES }));
+        const mixed = shares(
+            simulate(twoRegions({ clientGeo: 'europe', clientSpread: 0.4 }), { sampleCount: SAMPLES }),
+        );
+
+        expect(home.us).toBeCloseTo(0, 6);
+        expect(mixed.us).toBeGreaterThan(0.1);
+        expect(mixed.eu).toBeGreaterThan(mixed.us);
+        expect(mixed.total).toBeCloseTo(home.total, 3);
+    });
+
+    it('смесь зон складывается в единицу и слабеет с расстоянием', () => {
+        const mix = zoneShares('europe', 0.5);
+        const total = [...mix.values()].reduce((sum, share) => sum + share, 0);
+
+        expect(total).toBeCloseTo(1, 9);
+        expect(mix.get('europe')).toBeCloseTo(0.5, 9);
+        expect(mix.get('north-america') ?? 0).toBeGreaterThan(mix.get('oceania') ?? 0);
+        expect(mix.get('africa') ?? 0).toBeGreaterThan(mix.get('asia') ?? 0);
+    });
+
+    it('без доли вне зоны вся аудитория остаётся в объявленной зоне', () => {
+        const mix = zoneShares('asia', 0);
+
+        expect(mix.get('asia')).toBeCloseTo(1, 9);
+        expect(mix.size).toBe(1);
+    });
+
+    it('global по-прежнему делится равными долями по шести зонам', () => {
+        const mix = zoneShares('global', 0.7);
+
+        expect(mix.size).toBe(GEO_ZONES.length);
+        for (const zone of GEO_ZONES) expect(mix.get(zone)).toBeCloseTo(1 / GEO_ZONES.length, 9);
+    });
+});
+
+describe('гео-шардирование ключей', () => {
+    it('раскладывает трафик по домашним регионам ключей, а не по близости', () => {
+        const split = shares(
+            simulate(twoRegions({ clientGeo: 'europe', policy: { mode: 'sharded-by-geo' } }), {
+                sampleCount: SAMPLES,
+            }),
+        );
+
+        expect(split.eu).toBeCloseTo(0.5, 6);
+        expect(split.us).toBeCloseTo(0.5, 6);
+    });
+
+    it('«чужой» ключ платит хоп в родной регион', () => {
+        const local = simulate(twoRegions({ clientGeo: 'europe', policy: { mode: 'active-active' } }), {
+            sampleCount: SAMPLES,
+        });
+        const homed = simulate(twoRegions({ clientGeo: 'europe', policy: { mode: 'sharded-by-geo' } }), {
+            sampleCount: SAMPLES,
+        });
+
+        expect(homed.flows[0].latency.p50).toBeGreaterThan(local.flows[0].latency.p50 * 1.5);
+    });
+});
+
+describe('ветка записи в свёртке задержек', () => {
+    it('запись едет в регион записи и платит его RTT, а чтение остаётся рядом', () => {
+        const policy = { mode: 'read-local-write-global', writeRegion: 'eu-west-1' };
+        const reads = simulate(
+            twoRegions({ clientGeo: 'north-america', clientMix: 1, policy }),
+            { sampleCount: SAMPLES },
+        );
+        const writes = simulate(
+            twoRegions({ clientGeo: 'north-america', clientMix: 0, policy }),
+            { sampleCount: SAMPLES },
+        );
+
+        expect(writes.flows[0].latency.p50 - reads.flows[0].latency.p50).toBeGreaterThan(30);
+        expect(writes.flows[0].latency.p99).toBeGreaterThan(reads.flows[0].latency.p99);
+        expect(writes.nodes['svc-eu'].throughput).toBeGreaterThan(0);
+        expect(reads.nodes['svc-us'].throughput).toBeGreaterThan(0);
     });
 });
