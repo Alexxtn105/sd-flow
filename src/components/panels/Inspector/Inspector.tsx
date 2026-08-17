@@ -13,12 +13,16 @@ import {
 } from '../../../engine/instancePresets';
 import type { InstancePreset } from '../../../engine/instancePresets';
 import { protocolOptions } from '../../../engine/ports';
+import { pricingFor } from '../../../engine/sim/constants';
+import { costDrivers } from '../../../engine/sim/costDrivers';
+import type { CostArticle } from '../../../engine/sim/costDrivers';
 import { clientRpsOf, dauForRps } from '../../../engine/sim/flows';
 import type { ComponentParams, Protocol } from '../../../engine/types/component';
 import type { EdgeKind, MixMode } from '../../../engine/types/scheme';
 import useParamHelp from '../../../hooks/useParamHelp';
 import useReference from '../../../hooks/useReference';
 import { useGraphStore } from '../../../store/graphStore';
+import { useSchemeStore } from '../../../store/schemeStore';
 import { useNodeResult } from '../../../store/simStore';
 import { useUiStore } from '../../../store/uiStore';
 import { formatNumber } from '../../../utils/format';
@@ -67,10 +71,20 @@ export default function Inspector() {
     const paramHelp = useParamHelp();
     const metrics = useNodeResult(node?.id);
 
+    const pricingProfile = useSchemeStore((state) => state.settings.pricingProfile);
+
     const sections = useMemo(
         () => (node && definition ? groupParams(node.data.params, definition.paramSchema) : []),
         [definition, node],
     );
+
+    const costArticles = useMemo(() => {
+        if (!node || !definition) return new Map<string, CostArticle[]>();
+
+        const drivers = costDrivers(definition, node.data.params, pricingFor(pricingProfile));
+
+        return new Map(drivers.map((driver) => [driver.param, driver.articles]));
+    }, [definition, node, pricingProfile]);
 
     const edgeProtocols = useMemo(() => {
         if (!edge) return [];
@@ -293,6 +307,7 @@ export default function Inspector() {
                                 <h3 className="ins-section-title">{t(`section.${section}`)}</h3>
                                 {entries.map(({ key, value, field }) => {
                                     const help = paramHelp(key, field);
+                                    const articles = costArticles.get(key);
                                     const span = help.realistic || help.limits;
                                     const spanLabel = help.realistic
                                         ? t('inspector.realistic')
@@ -314,6 +329,18 @@ export default function Inspector() {
                                                 >
                                                     {help.name}
                                                 </label>
+                                                {articles && (
+                                                    <span
+                                                        className="ins-cost"
+                                                        title={t('inspector.costDriver', {
+                                                            articles: articles
+                                                                .map((article) => t(`cost.article.${article}`))
+                                                                .join(', '),
+                                                        })}
+                                                    >
+                                                        $
+                                                    </span>
+                                                )}
                                                 <span className="ins-field">
                                                     <ParamInput
                                                         id={`ins-param-${key}`}

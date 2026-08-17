@@ -12,7 +12,7 @@ export const GOLF_TASKS: GolfTask[] = [
             en: 'The scheme works and holds its SLO, but costs a fortune. Cut the bill without dropping a single requirement: the budget gate is off, the bill is the score.',
         },
         inflate: [
-            { kind: 'params', nodeId: 'gateway', params: { instances: 90, autoscale: false } },
+            { kind: 'params', nodeId: 'gateway', params: { instances: 90 } },
             { kind: 'params', nodeId: 'resolver', params: { instances: 220, autoscale: false } },
         ],
     },
@@ -28,7 +28,7 @@ export const GOLF_TASKS: GolfTask[] = [
         },
         inflate: [
             { kind: 'params', nodeId: 'upload-api', params: { instances: 140, autoscale: false } },
-            { kind: 'params', nodeId: 'resizer', params: { instances: 600, autoscale: false } },
+            { kind: 'params', nodeId: 'resizer', params: { instances: 600 } },
             { kind: 'params', nodeId: 'jobs', params: { brokers: 24, partitions: 96 } },
         ],
     },
@@ -79,7 +79,7 @@ export const GOLF_TASKS: GolfTask[] = [
             { kind: 'params', nodeId: 'feed-api', params: { instances: 240, autoscale: false } },
             { kind: 'params', nodeId: 'post-api', params: { instances: 120, autoscale: false } },
             { kind: 'params', nodeId: 'timelines', params: { shards: 32, memoryGb: 256 } },
-            { kind: 'params', nodeId: 'spreader', params: { instances: 240, autoscale: false } },
+            { kind: 'params', nodeId: 'spreader', params: { instances: 240 } },
         ],
     },
 ];

@@ -150,6 +150,7 @@
     "costPerMillionRequests": "Cost per million requests",
     "costPerMillionWrites": "Cost per million writes",
     "costPerNotification": "Cost per notification",
+    "costPerPublicIpHour": "Cost per public IP-hour",
     "costPerSeatMonth": "Cost per on-call seat-month",
     "costPerShardHour": "Cost per shard-hour",
     "costPerStateTransition": "Cost per state transition",

@@ -172,12 +172,12 @@ p99(L) = median · e^(2.3263 · σ)   при σ = 0.8 → 6.43 × медианы
 | `glb` | Global LB / Anycast | **M** | `regions`, `routingPolicy` (latency/geo/weighted/failover), `failoverSec`, `healthCheckIntervalSec`, `stickyRegion` (нужен для read-your-writes), `drainOnFailover` | — |
 | `lb-l4` | L4 балансировщик (NLB / HAProxy TCP / IPVS) | **M** | `maxConnections`, `newConnPerSec`, `throughputGbps`, `algorithm`, `stickiness`, `latencyMs` (~0.2–0.5) | Соединения / пропускная способность |
 | `lb-l7` | L7 балансировщик / реверс-прокси (ALB, nginx, Envoy, Traefik, HAProxy) | **M** | `maxRps`, `tlsTerminate`, `tlsHandshakeMs`, `keepAlive`, `http2`, `compression`, `latencyMs` (~1), `healthCheck`, `retryPolicy`, `connectionDrainSec` | CPU (особенно TLS) / RPS |
-| `api-gateway` | API Gateway (Kong / AWS API GW / Envoy Gateway / Apigee) | **M** | `authMode` (none/JWT-local/introspection), `authLatencyMs`, `rateLimitRpsPerClient`, `quotaPerDay`, `requestTransform`, `responseCacheEnabled` + `cacheTtl`, `maxRps`, `costPerMillionRequests`, `payloadLimitMb` | CPU / вендорский лимит RPS |
+| `api-gateway` | API Gateway (Kong / AWS API GW / Envoy Gateway / Apigee) | **M** | `authMode` (none/JWT-local/introspection), `authLatencyMs`, `rateLimitRpsPerClient`, `quotaPerDay`, `requestTransform`, `responseCacheEnabled` + `cacheTtl`, `maxRps`, `costPerInstanceHour`, `costPerMillionRequests`, `payloadLimitMb` | CPU / вендорский лимит RPS |
 | `rate-limiter` | Rate limiter / throttle | V1 | `algorithm` (token-bucket / leaky-bucket / sliding-window / GCRA), `limitRps`, `burst`, `scope` (global/per-user/per-ip/per-key), `backingStore` (local/redis), `rejectMode` (429 / queue / shed) | Backing store |
 | `reverse-cache` | Кэширующий прокси (Varnish / nginx cache) | V1 | `cacheSizeGb`, `hitRatioMode` + `hitRatioOverride`, `ttlSec`, `staleWhileRevalidate`, `varyHeaders`, `purgeApi` | Память / диск |
 | `ws-gateway` | WebSocket / push-шлюз | V1 | `concurrentConnections`, `connectionsPerInstance` (типично 50k–200k), `memoryPerConnKb`, `messagesPerConnMin`, `messageBytes`, `heartbeatSec`, `fanoutMode` (direct / pub-sub) | **Соединения и память, а не RPS** |
 | `service-mesh` | Sidecar-прокси (Istio / Linkerd) | V1 | `latencyOverheadMs` (0.5–2), `cpuOverheadPercent`, `mtls`, `retryPolicy`, `circuitBreaker`, `observabilityExport` | Оверхед CPU на каждом хопе |
-| `nat-egress` | NAT / egress-шлюз | V2 | `throughputGbps`, `portsPerIp`, `costPerGb` | Порты / пропускная способность |
+| `nat-egress` | NAT / egress-шлюз | V2 | `throughputGbps`, `portsPerIp`, `publicIps`, `costPerGatewayHour`, `costPerPublicIpHour`, `costPerGb` | Порты / пропускная способность |
 
 > **Обучающий акцент:** `ws-gateway` и `cdn` специально смоделированы так, чтобы упираться **не в RPS**:
 > первый — в число соединений и память, второй — в стоимость egress. Это лечит главную ошибку новичка
@@ -685,7 +685,7 @@ V2 — из фазы 4. Каталог покрыт целиком, расхож
 
 ## 16. Справка по блоку в интерфейсе
 
-Каталог из 127 типов и 666 различных параметров бесполезен, если игрок не понимает, чем `scylla`
+Каталог из 127 типов и 669 различных параметров бесполезен, если игрок не понимает, чем `scylla`
 отличается от `cassandra` и что делает `zipfAlpha`. Поэтому у каждого блока есть окно справки, а у
 каждого параметра — подсказка с единицей измерения.
 
@@ -704,15 +704,24 @@ V2 — из фазы 4. Каталог покрыт целиком, расхож
 | Шапка | Иконка, имя блока, группа, волна (`MVP` / `V1` / `V2`), метка «управляемый сервис» |
 | Что это и когда ставить | 2–3 предложения: задача блока и повод добавить его в схему |
 | Что ограничивает ёмкость | Текстовое объяснение плюс полосы ограничителей, посчитанные моделью блока на параметрах по умолчанию при нагрузке 5000 rps и смеси 80/20; первый в списке помечен как «упирается первым», у каждого показана формула из `explain` с подставленными значениями |
+| Что двигает счёт | Список параметров, от которых зависит счёт за блок, и статья, в которую попадает каждый: вычисление, хранение, сеть или запросы |
 | Как делать правильно | 3–5 практик с конкретными числами: какие значения параметров осмысленны и с чем блок соединяют |
 | Типичные ошибки | 2–4 антипаттерна и то, как они выглядят в симуляции |
-| Параметры | Таблица по секциям: имя, ключ, значение по умолчанию с единицей, подсказка и допустимый диапазон |
+| Параметры | Таблица по секциям: имя, ключ, значение по умолчанию с единицей, подсказка и допустимый диапазон; платящие параметры помечены знаком `$` |
 | Порты | Входы и выходы с протоколами |
 | Соседи по группе | Кнопки перехода к справке соседних блоков — сравнение альтернатив в два клика |
 
 Полосы ёмкости считаются той же моделью, что и симуляция (`utils/blockReference.ts` собирает
 `NodeContext` на дефолтах и зовёт `definition.model.capacity`), поэтому разойтись с движком они не
 могут: меняется модель — меняется и справка.
+
+**Список платящих параметров тоже измеряется, а не пишется.** `engine/sim/costDrivers.ts` меняет
+каждый параметр блока по очереди — число вдвое в пределах объявленных границ, флаг на
+противоположный, перечисление на другой вариант — и смотрит, какие статьи счёта после этого
+поехали; надбавки движка (egress, выделенные IOPS, премия за managed) в пробу включены. Отсюда и
+раздел «Что двигает счёт», и знак `$` в таблице параметров, и такой же знак у имени параметра в
+инспекторе, где подсказка называет статью. Правило, по которому этот список обязан быть непустым, а
+арендуемые единицы — платными, разобрано в §9.1 `docs/02-simulation.md`.
 
 **Тексты** лежат не в определении блока, а в локали: `locales/{ru,en}/help.json` ключуется
 идентификатором блока, `locales/{ru,en}/hints.json` — именем параметра (ADR-15). Оба словаря

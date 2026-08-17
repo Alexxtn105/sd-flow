@@ -372,7 +372,8 @@
             "call": "The share of the source requests that make this call. The sum over profiles is how much of the traffic goes through the edge at all: 1.0 — every request, 0.3 — every third one. With an inherited mix the shares within a class set the split, while the read/write proportion comes from the caller.",
             "timeoutMs": "How long the caller waits before giving up. It cuts the latency tail and turns a slow answer into an error; together with retries it decides what a slow neighbour costs.",
             "retries": "How many times the caller repeats a failed call. Retries pile load onto an already overloaded node — that is a retry storm; without idempotency they also breed duplicates."
-        }
+        },
+        "costDriver": "Moves the bill: {{articles}}"
     },
     "blockHelp": {
         "title": "Block reference",
@@ -391,7 +392,11 @@
         "off": "off",
         "loading": "Loading reference…",
         "missing": "No reference has been written for this block yet.",
-        "headroom": "headroom"
+        "headroom": "headroom",
+        "cost": "What moves the bill",
+        "costNone": "This block has no price tag of its own: only cross-AZ and cross-region traffic of the scheme moves the bill.",
+        "costNote": "The parameters the block bill depends on, and the article each one lands in.",
+        "costArticles": "bill articles"
     },
     "resize": {
         "palette": "Palette width — drag to resize, double-click to reset",
@@ -857,6 +862,7 @@
             "model-behind": "The scheme was saved on model version {{saved}}, the current one is {{current}} — the numbers may have changed.",
             "model-ahead": "The scheme was saved on a newer model version {{saved}}, this build has {{current}} — some parameters may not have applied.",
             "unknown-blocks": "Dropped {{count}} blocks: those types are no longer in the catalogue ({{types}}).",
+            "unknown-params": "Dropped {{count}} parameters: their blocks no longer declare them ({{params}}).",
             "dropped-links": "Dropped {{count}} links: their endpoints did not survive."
         }
     },
@@ -1111,5 +1117,13 @@
         },
         "seed": "Simulation seed",
         "seedHint": "The same seed on the same scheme yields the same result. Change it to see another draw of the tail."
+    },
+    "cost": {
+        "article": {
+            "compute": "compute",
+            "storage": "storage",
+            "network": "network",
+            "requests": "requests"
+        }
     }
 }

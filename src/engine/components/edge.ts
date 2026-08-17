@@ -425,6 +425,7 @@ const apiGatewayDefaults = {
     logLinesPerRequest: 2,
     logBytesPerLine: 500,
     availability: 0.9995,
+    costPerInstanceHour: 0.12,
     costPerMillionRequests: 3.5,
 };
 
@@ -441,7 +442,8 @@ const apiGatewayModel = defineModel<typeof apiGatewayDefaults>({
     ],
     cost: (ctx) =>
         totalCost({
-            compute: 0,
+            compute:
+                ctx.instances * ctx.params.costPerInstanceHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
             storage: 0,
             network: 0,
             requests: requestsPerMonthMillions(ctx.lambda) * ctx.params.costPerMillionRequests,
@@ -477,6 +479,7 @@ const apiGateway = defineComponent({
         logLinesPerRequest: num('data', { min: 0, max: 1000 }),
         logBytesPerLine: num('data', { unitKey: 'bytes', min: 10, max: 100000 }),
         availability: num('reliability', { min: 0.99, max: 0.999999, step: 0.0001 }),
+        costPerInstanceHour: num('cost', { unitKey: 'usd', min: 0, max: 100, step: 0.001 }),
         costPerMillionRequests: num('cost', { unitKey: 'usd', min: 0, max: 100, step: 0.01 }),
     },
     model: apiGatewayModel,
@@ -981,6 +984,7 @@ const natEgressDefaults = {
     idleTimeoutSec: 350,
     availability: 0.9995,
     costPerGatewayHour: 0.045,
+    costPerPublicIpHour: 0.005,
     costPerGb: 0.045,
 };
 
@@ -1005,7 +1009,11 @@ const natEgressModel = defineModel<typeof natEgressDefaults>({
     ],
     cost: (ctx) =>
         totalCost({
-            compute: ctx.params.gateways * ctx.params.costPerGatewayHour * HOURS_PER_MONTH * ctx.regionCostMultiplier,
+            compute:
+                ctx.params.gateways *
+                (ctx.params.costPerGatewayHour + ctx.params.publicIps * ctx.params.costPerPublicIpHour) *
+                HOURS_PER_MONTH *
+                ctx.regionCostMultiplier,
             storage: 0,
             network: ctx.egressGbMonth * ctx.params.costPerGb,
             requests: 0,
@@ -1032,6 +1040,7 @@ const natEgress = defineComponent({
         idleTimeoutSec: num('behaviour', { unitKey: 'sec', min: 1, max: 4000 }),
         availability: num('reliability', { min: 0.99, max: 0.999999, step: 0.0001 }),
         costPerGatewayHour: num('cost', { unitKey: 'usd', min: 0, max: 100, step: 0.001 }),
+        costPerPublicIpHour: num('cost', { unitKey: 'usd', min: 0, max: 10, step: 0.001 }),
         costPerGb: num('cost', { unitKey: 'usd', min: 0, max: 5, step: 0.001 }),
     },
     model: natEgressModel,

@@ -150,6 +150,7 @@
     "costPerMillionRequests": "Цена млн запросов",
     "costPerMillionWrites": "Цена млн записей",
     "costPerNotification": "Цена уведомления",
+    "costPerPublicIpHour": "Цена публичного адреса в час",
     "costPerSeatMonth": "Цена места дежурного в месяц",
     "costPerShardHour": "Цена шард-часа",
     "costPerStateTransition": "Цена перехода состояния",

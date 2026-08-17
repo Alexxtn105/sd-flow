@@ -1,12 +1,17 @@
 import registry from '../engine/ComponentRegistry';
 import { protocolOptions } from '../engine/ports';
-import type { ComponentTypeId } from '../engine/types/component';
+import type { ComponentParams, ComponentTypeId } from '../engine/types/component';
 import { DEFAULT_POLICY, DEFAULT_SETTINGS, MODEL_VERSION } from '../engine/types/scheme';
 import type { SchemeEdge, SchemeMeta, SchemeNode, SchemeV1, SchemeViewport } from '../engine/types/scheme';
 
 export const SCHEME_VERSION = 1;
 
-export type MigrationCode = 'unknown-blocks' | 'dropped-links' | 'model-behind' | 'model-ahead';
+export type MigrationCode =
+    | 'unknown-blocks'
+    | 'unknown-params'
+    | 'dropped-links'
+    | 'model-behind'
+    | 'model-ahead';
 
 export interface MigrationNote {
     code: MigrationCode;
@@ -81,12 +86,30 @@ function viewportOf(value: unknown): SchemeViewport {
     return { x: coordinate('x', 0), y: coordinate('y', 0), zoom: coordinate('zoom', 1) };
 }
 
+function knownParams(node: SchemeNode): ComponentParams {
+    const declared = node.params ?? {};
+    const schema = registry.get(node.type)?.paramSchema;
+    if (!schema) return declared;
+
+    return Object.fromEntries(Object.entries(declared).filter(([key]) => key in schema));
+}
+
 function normalizeNode(node: SchemeNode): SchemeNode {
     return {
         ...node,
         position: node.position ?? { x: 0, y: 0 },
-        params: node.params ?? {},
+        params: knownParams(node),
     };
+}
+
+function retiredParams(nodes: SchemeNode[]): string[] {
+    const schemaless = nodes.flatMap((node) => {
+        const schema = registry.get(node.type)?.paramSchema;
+
+        return schema ? Object.keys(node.params ?? {}).filter((key) => !(key in schema)) : [];
+    });
+
+    return [...new Set(schemaless)].sort();
 }
 
 function normalizeEdge(edge: SchemeEdge, typeById: Map<string, ComponentTypeId>): SchemeEdge {
@@ -149,6 +172,14 @@ export function migrateScheme(raw: unknown): SchemeRead {
         notes.push({
             code: 'unknown-blocks',
             values: { count: declared.length - known.length, types: unknownTypes.join(', ') },
+        });
+    }
+
+    const retired = retiredParams(known);
+    if (retired.length > 0) {
+        notes.push({
+            code: 'unknown-params',
+            values: { count: retired.length, params: retired.join(', ') },
         });
     }
 

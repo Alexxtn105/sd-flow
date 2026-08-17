@@ -84,6 +84,24 @@ describe('миграция схемы', () => {
         expect(read.scheme.edges.map((edge) => edge.id)).not.toContain('edge-ghost');
     });
 
+    it('выбрасывает параметры, которых у блока больше нет', () => {
+        const scheme = current();
+        const stale = {
+            ...scheme,
+            nodes: scheme.nodes.map((node) =>
+                node.id === 'api' ? { ...node, params: { ...node.params, autoscale: false, ghostKnob: 7 } } : node,
+            ),
+        };
+
+        const read = ok(stale);
+        const note = read.report.notes.find((item) => item.code === 'unknown-params');
+        const api = read.scheme.nodes.find((node) => node.id === 'api');
+
+        expect(note?.values).toEqual({ count: 1, params: 'ghostKnob' });
+        expect(api?.params).not.toHaveProperty('ghostKnob');
+        expect(api?.params.autoscale).toBe(false);
+    });
+
     it('замечает, что схема сохранена на другой версии модели', () => {
         const older = ok({ ...current(), modelVersion: '0.0.9' }).report.notes;
         const newer = ok({ ...current(), modelVersion: '9.0.0' }).report.notes;
@@ -136,7 +154,7 @@ describe('миграция схемы', () => {
     });
 
     it('каждое замечание переведено на оба языка', () => {
-        for (const code of ['model-behind', 'model-ahead', 'unknown-blocks', 'dropped-links']) {
+        for (const code of ['model-behind', 'model-ahead', 'unknown-blocks', 'unknown-params', 'dropped-links']) {
             expect(ruCommon.storage.migration).toHaveProperty(code);
             expect(enCommon.storage.migration).toHaveProperty(code);
         }

@@ -89,11 +89,11 @@ function containerCost(
 }
 
 function withManagedPremium(
-    node: CompiledNode,
+    managed: boolean,
     cost: CostBreakdown,
     pricing: PricingProfile,
 ): CostBreakdown {
-    if (!node.definition.managed || pricing.managedMultiplier === 1) return cost;
+    if (!managed || pricing.managedMultiplier === 1) return cost;
 
     return totalCost({
         compute: cost.compute * pricing.managedMultiplier,
@@ -103,8 +103,8 @@ function withManagedPremium(
     });
 }
 
-function egressRateOf(node: CompiledNode, pricing: PricingProfile): number {
-    const declared = node.params.costPerGbEgress;
+function egressRateOf(params: ComponentParams, pricing: PricingProfile): number {
+    const declared = params.costPerGbEgress;
 
     return typeof declared === 'number' ? declared : pricing.egressPerGb;
 }
@@ -120,8 +120,8 @@ function withEgress(cost: CostBreakdown, egressCost: number): CostBreakdown {
     });
 }
 
-function iopsCostOf(node: CompiledNode, pricing: PricingProfile): number {
-    return billableIops(node.params) * pricing.iopsPerMonth;
+function iopsCostOf(params: ComponentParams, pricing: PricingProfile): number {
+    return billableIops(params) * pricing.iopsPerMonth;
 }
 
 function withProvisionedIops(cost: CostBreakdown, iopsCost: number): CostBreakdown {
@@ -133,6 +133,21 @@ function withProvisionedIops(cost: CostBreakdown, iopsCost: number): CostBreakdo
         network: cost.network,
         requests: cost.requests,
     });
+}
+
+export function withSurcharges(
+    managed: boolean,
+    params: ComponentParams,
+    modelled: CostBreakdown,
+    pricing: PricingProfile,
+    egressGbMonth: number,
+): CostBreakdown {
+    const metered = withProvisionedIops(modelled, iopsCostOf(params, pricing));
+
+    return withEgress(
+        withManagedPremium(managed, metered, pricing),
+        egressGbMonth * egressRateOf(params, pricing),
+    );
 }
 
 function clusterComputeShares(
@@ -194,11 +209,11 @@ export function computeCost(
 
         const runtime = runtimes.get(node.id);
         const nodeDerived = derived.get(node.id);
-        const egressCost = (nodeDerived?.egressGbDay ?? 0) * DAYS_PER_MONTH * egressRateOf(node, pricing);
+        const egressGbMonth = (nodeDerived?.egressGbDay ?? 0) * DAYS_PER_MONTH;
         const model = node.definition.model;
 
         if (!runtime || !model?.cost) {
-            const bare = withEgress(emptyCost(), egressCost);
+            const bare = withEgress(emptyCost(), egressGbMonth * egressRateOf(node.params, pricing));
             byNode.set(node.id, bare);
             total = add(total, bare);
             continue;
@@ -216,18 +231,20 @@ export function computeCost(
             blockingSec: runtime.blockingSec,
             pricing,
             storageGb: nodeDerived?.storage?.totalGb ?? 0,
-            egressGbMonth: (nodeDerived?.egressGbDay ?? 0) * DAYS_PER_MONTH,
+            egressGbMonth,
             regionCostMultiplier: regionMultiplierOf(node.regionId, topology),
         };
 
-        const billed = withProvisionedIops(model.cost(context), iopsCostOf(node, pricing));
-        const modelled = withManagedPremium(node, billed, pricing);
+        const billed = withSurcharges(
+            node.definition.managed === true,
+            node.params,
+            model.cost(context),
+            pricing,
+            egressGbMonth,
+        );
         const hostedCompute = clusterShares.get(node.id);
-        const placed =
-            hostedCompute === undefined
-                ? modelled
-                : totalCost({ ...modelled, compute: hostedCompute });
-        const cost = withEgress(placed, egressCost);
+        const cost =
+            hostedCompute === undefined ? billed : totalCost({ ...billed, compute: hostedCompute });
 
         byNode.set(node.id, cost);
         total = add(total, cost);

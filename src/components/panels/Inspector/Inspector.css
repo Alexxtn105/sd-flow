@@ -348,6 +348,16 @@
     padding-top: 2px;
 }
 
+.ins-cost {
+    flex-shrink: 0;
+    margin-left: -4px;
+    font-size: 10px;
+    font-weight: 600;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    color: var(--panel-accent);
+    cursor: help;
+}
+
 .ins-field {
     display: flex;
     align-items: center;

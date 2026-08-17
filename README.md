@@ -76,6 +76,16 @@ in [docs/02-simulation.md](docs/02-simulation.md) §9.1 instead of leaving you g
 canvas, the coloured group edge on the left of a block survives the dark theme: the theme's border
 override used to repaint it grey.
 
+Version 1.8 finishes the bill and shows how it is put together. The rule got stricter: **capacity
+you buy is never free** — a parameter that raises a block's capacity has to raise the bill too. The
+sweep over the whole catalogue found two holes: `api-gateway` charged for requests only, so ninety
+gateway instances cost exactly as much as three, and the NAT gateway handed out public addresses for
+free even though each one raises the port ceiling linearly. The gateway now has an instance-hour
+price, an address has its own rate, and Golf finally shows the fat it asks you to trim. And so you
+never have to guess what you are paying for, the inspector marks paying parameters with a `$` and a
+hint naming the bill article, while the block reference gained a "What moves the bill" section: the
+list is not hand-written but measured from the block's own model, so it cannot drift from the maths.
+
 * **Catalogue — 127 blocks in 14 groups: the whole planned catalogue**, MVP (44) plus V1 (65)
   plus V2 (18). A capacity model is filled in for 101 blocks — every block that carries traffic;
   clients have none by construction (they are sources), and containers, links and probes never

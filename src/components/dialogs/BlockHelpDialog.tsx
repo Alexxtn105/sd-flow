@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import Dialog from '../common/Dialog/Dialog';
 import Icon from '../common/Icons/Icon';
 import registry from '../../engine/ComponentRegistry';
+import { costDrivers } from '../../engine/sim/costDrivers';
 import useParamHelp from '../../hooks/useParamHelp';
 import useReference from '../../hooks/useReference';
 import { referenceLanguage } from '../../services/referenceBundle';
@@ -47,6 +48,9 @@ export default function BlockHelpDialog({ componentType, onClose }: BlockHelpDia
         if (!definition) return [];
         return groupParams(registry.getDefaultParams(definition.id), definition.paramSchema);
     }, [definition]);
+
+    const drivers = useMemo(() => (definition ? costDrivers(definition) : []), [definition]);
+    const driverParams = useMemo(() => new Set(drivers.map((driver) => driver.param)), [drivers]);
 
     if (!definition) return null;
 
@@ -169,6 +173,32 @@ export default function BlockHelpDialog({ componentType, onClose }: BlockHelpDia
                     </section>
                 )}
 
+                <section className="bhelp-section">
+                    <h3 className="bhelp-section-title">{t('blockHelp.cost')}</h3>
+                    {drivers.length === 0 ? (
+                        <p className="bhelp-note">{t('blockHelp.costNone')}</p>
+                    ) : (
+                        <>
+                            <p className="bhelp-note">{t('blockHelp.costNote')}</p>
+                            <ul className="bhelp-cost">
+                                {drivers.map((driver) => (
+                                    <li key={driver.param} className="bhelp-cost-row">
+                                        <span className="bhelp-cost-name">
+                                            {paramHelp(driver.param, definition.paramSchema[driver.param]).name}
+                                            <span className="bhelp-param-key">{driver.param}</span>
+                                        </span>
+                                        <span className="bhelp-cost-articles">
+                                            {driver.articles
+                                                .map((article) => t(`cost.article.${article}`))
+                                                .join(' · ')}
+                                        </span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </>
+                    )}
+                </section>
+
                 {practices.length > 0 && (
                     <section className="bhelp-section">
                         <h3 className="bhelp-section-title">{t('blockHelp.practices')}</h3>
@@ -205,6 +235,9 @@ export default function BlockHelpDialog({ componentType, onClose }: BlockHelpDia
                                             <tr key={key}>
                                                 <td className="bhelp-param-name">
                                                     {help.name}
+                                                    {driverParams.has(key) && (
+                                                        <span className="bhelp-param-cost">$</span>
+                                                    )}
                                                     <span className="bhelp-param-key">{key}</span>
                                                 </td>
                                                 <td className="bhelp-param-value">

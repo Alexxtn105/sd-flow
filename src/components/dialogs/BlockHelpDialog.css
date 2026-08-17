@@ -246,6 +246,44 @@
     color: var(--panel-text-2);
 }
 
+.bhelp-cost {
+    margin: 6px 0 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.bhelp-cost-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 4px 8px;
+    border-radius: 5px;
+    background: var(--panel-subtle-bg);
+}
+
+.bhelp-cost-name {
+    font-size: 11.5px;
+    color: var(--panel-text-2);
+}
+
+.bhelp-cost-articles {
+    flex-shrink: 0;
+    font-size: 10.5px;
+    color: var(--panel-accent);
+}
+
+.bhelp-param-cost {
+    margin-left: 4px;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--panel-accent);
+}
+
 .bhelp-param-key {
     display: block;
     font-family: var(--font-mono, ui-monospace, monospace);

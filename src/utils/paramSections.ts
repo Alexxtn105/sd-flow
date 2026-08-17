@@ -15,7 +15,7 @@ export const SECTION_ORDER: ParamSection[] = [
 export interface ParamEntry {
     key: string;
     value: ParamValue;
-    field: ParamField | undefined;
+    field: ParamField;
 }
 
 export interface ParamGroup {
@@ -28,10 +28,11 @@ export function groupParams(params: ComponentParams, schema: Record<string, Para
 
     for (const [key, value] of Object.entries(params)) {
         const field = schema[key];
-        const section = field?.section ?? 'behaviour';
-        const bucket = grouped.get(section) ?? [];
+        if (!field) continue;
+
+        const bucket = grouped.get(field.section) ?? [];
         bucket.push({ key, value, field });
-        grouped.set(section, bucket);
+        grouped.set(field.section, bucket);
     }
 
     return SECTION_ORDER.filter((section) => grouped.has(section)).map((section) => ({

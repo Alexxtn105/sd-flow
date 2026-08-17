@@ -24,7 +24,8 @@
             "Reconcile rateLimitRpsPerClient=1000 RPS with quotaPerDay=5,000,000 requests: at a sustained 1,000 RPS the daily quota is burned in 5,000 s, about 83 minutes.",
             "timeoutMs=29000 ms is deliberately just under the typical 30,000 ms on the load balancer; keep that gap so the client receives a meaningful gateway error instead of a connection drop at the proxy.",
             "responseCacheEnabled=false by default; enabling it with responseCacheTtlSec=30 s takes load off the services, but it is only suitable for non-personalised responses.",
-            "Connect the telemetry port to an observability block: 2 log lines per request is 2.6 TB per day, and that stream has to land somewhere."
+            "Connect the telemetry port to an observability block: 2 log lines per request is 2.6 TB per day, and that stream has to land somewhere.",
+            "instances=3 costs 262.80 USD/mo at costPerInstanceHour=0.12 USD: gateway capacity is bought with instances, so size the headroom for the peak rather than \"just in case\" — 90 instances is already 7884 USD/mo on top of the per-request charge."
         ],
         "pitfalls": [
             "Piling all the business logic onto the gateway and running into 30,000 RPS, while the lb-l7 right next to it handles 75,000 RPS: the gateway is almost always the narrowest point of the edge chain.",
@@ -1103,18 +1104,18 @@
     },
     "nat-egress": {
         "summary": "An egress gateway: it translates private network addresses to the outside when services call external APIs. A managed block whose capacity is determined by the number of public addresses and ports, not by requests. Place it at the exit of the private segment, between the services and their external dependencies.",
-        "capacity": "The limits are ports and throughput. The port limit works out like this: publicIps=1 × portsPerIp=64,000 with portHoldSec=30 s gives about 2,130 new connections per second, and at connectionsPerRequest=0.2 that is roughly 10,700 outbound requests per second for the whole block. The second limit, throughputGbps=45 across gateways=2, usually does not bind given that port ceiling.",
+        "capacity": "The limits are ports and throughput. The port limit works out like this: gateways=2 × publicIps=1 × portsPerIp=64,000 with portHoldSec=30 s gives about 4,270 new connections per second, and at connectionsPerRequest=0.2 that is roughly 21,300 outbound requests per second for the whole block. The second limit, throughputGbps=45 across gateways=2, usually does not bind given that port ceiling.",
         "practices": [
-            "publicIps=1 is the most common bottleneck: every address you add raises the limit linearly, and four addresses already give about 42,700 outbound requests per second.",
-            "connectionsPerRequest=0.2 reflects connection reuse (one connection per five requests); without keep-alive to the external APIs the value drifts towards 1 and the limit drops fivefold, to 2,130 requests per second.",
+            "publicIps=1 is the most common bottleneck: every address you add raises the limit linearly, and four addresses per gateway already give about 85,300 outbound requests per second — at costPerPublicIpHour=0.005 USD for each of the eight addresses.",
+            "connectionsPerRequest=0.2 reflects connection reuse (one connection per five requests); without keep-alive to the external APIs the value drifts towards 1 and the limit drops fivefold, to 4,270 requests per second.",
             "portHoldSec=30 s is how long a port is held after close; shortening it raises the achievable rate of new connections proportionally but increases the risk of collisions.",
             "Keep gateways=2 matched to the number of zones: a NAT gateway is zonal, and losing a zone cuts off outbound traffic for that zone's services entirely.",
             "Route heavy external transfers (exports, backups) around this block so you neither burn ports nor pay costPerGb=0.045 USD for every gigabyte."
         ],
         "pitfalls": [
-            "Sizing capacity in gigabits and missing the port limit: throughputGbps=45 looks enormous next to the 10,700 requests per second the ports allow.",
-            "Not reusing connections to external APIs, so connectionsPerRequest effectively becomes 1 and the block immediately runs into 2,130 connections per second.",
-            "costPerGb=0.045 USD for outbound traffic is left out of the estimate: 1 TB through NAT costs about 46 USD, plus costPerGatewayHour=0.045 USD for each of the two gateways.",
+            "Sizing capacity in gigabits and missing the port limit: throughputGbps=45 looks enormous next to the 21,300 requests per second the ports allow.",
+            "Not reusing connections to external APIs, so connectionsPerRequest effectively becomes 1 and the block immediately runs into 4,270 connections per second.",
+            "costPerGb=0.045 USD for outbound traffic is left out of the estimate: 1 TB through NAT costs about 46 USD, plus 73 USD/mo for the mere existence of two gateways with their addresses (costPerGatewayHour=0.045 USD and costPerPublicIpHour=0.005 USD).",
             "idleTimeoutSec=350 s holds idle connections along with their ports, so when a large share of external calls is short-lived the ports run out sooner than the calculation suggests."
         ]
     },

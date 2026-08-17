@@ -43,7 +43,7 @@ function videoPlatform(): SchemeV1 {
                 id: 'balancer',
                 type: 'lb-l7',
                 position: { x: 280, y: 360 },
-                params: { instances: 8, networkMbps: 25000 },
+                params: { instances: 8 },
             },
             { id: 'api', type: 'service', position: { x: 560, y: 360 }, params: { autoscaleMax: 200 } },
             { id: 'cache', type: 'redis', position: { x: 840, y: 260 }, params: { shards: 12, memoryGb: 64 } },
