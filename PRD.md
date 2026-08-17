@@ -435,7 +435,7 @@ Queue-depth, Storage-projection, Cost-метр, SLO-индикатор, Traffic-
 | FR-STO-1 | Сохранение/загрузка схем в localStorage, лимит ≥ 4 МБ, ≥ 50 схем, автосохранение с debounce | P0 |
 | FR-STO-2 | Экспорт/импорт схемы в JSON (версионированный формат, миграции) | P0 |
 | FR-STO-3 | Экспорт схемы в PNG/SVG | P1 |
-| FR-STO-4 | Шаринг ссылкой: сжатая схема в URL-хэше (lz-string) | P1 |
+| FR-STO-4 | Шаринг ссылкой: сжатая схема в URL-хэше (штатный `CompressionStream`, без внешней зависимости) | P1 |
 | FR-STO-5 | Экспорт отчёта симуляции в Markdown | P1 |
 | FR-STO-6 | Облачное сохранение и аккаунты | P2 |
 
@@ -584,7 +584,7 @@ Level-of-detail: на зуме < 0.6 узел схлопывается в ико
 | i18n | **i18next + react-i18next + LanguageDetector** | как есть (ru/en, неймспейсы `blocks/groups/params/help/validation`) |
 | Тесты | **Vitest** | как есть |
 | Линт | **ESLint 9 flat config** | как есть |
-| Хранение | localStorage + JSON import/export + lz-string share-link | расширение `StorageService` |
+| Хранение | localStorage + JSON import/export + share-link на `CompressionStream` | расширение `StorageService` |
 | CI/CD | GitHub Actions → GitHub Pages (install → lint → typecheck → test → build → deploy) | как есть |
 | Иконки | Material Symbols + собственный набор `SdIcons` | по образцу `DspIcons.jsx` |
 
@@ -707,9 +707,10 @@ transient-сценарии, аномалии A3/A7/A8, окна проб. Пол
 * **Тесты:** 709 в 35 файлах.
 
 **Не вошло в фазу:** лидерборды (нужен бэкенд), опциональный LLM-ревьюер, community-задания
-(FR-CHL-10 — импорт по ссылке из недоверенного источника). Перенесено из фазы 3 и всё ещё открыто:
-сценарий `split-brain`; зеркальные регионы `mirrorOf`; `custom`-предикат; структурный дифф с
-эталоном; навязывание потолка подов `k8s-cluster`. Аномалии A3, A7 и A8 закрыты после фазы 4 —
+(FR-CHL-10 — импорт по ссылке из недоверенного источника). Перенесённые из фазы 3 сценарий
+`split-brain` и зеркальные регионы `mirrorOf` закрыты в версии 1.5; всё ещё открыты
+`custom`-предикат, структурный дифф с эталоном и навязывание потолка подов `k8s-cluster`.
+Аномалии A3, A7 и A8 закрыты после фазы 4 —
 все восемь считает `sim/consistency.ts`. Рабочий список остального — [docs/06-backlog.md](docs/06-backlog.md).
 
 ---
