@@ -185,16 +185,19 @@ export default function SdEditor() {
     }, [addToCenter, clearPendingAdd, pendingAdd]);
 
     useEffect(() => {
-        if (focusRequest === 0 || selectedNodeIds.length === 0) return;
+        if (focusRequest === 0) return;
 
-        selectOnly(selectedNodeIds, selectedEdgeIds);
+        const { selectedNodeIds: focused, selectedEdgeIds: focusedEdges } = useUiStore.getState();
+        if (focused.length === 0) return;
+
+        selectOnly(focused, focusedEdges);
         void fitView({
-            nodes: selectedNodeIds.map((id) => ({ id })),
+            nodes: focused.map((id) => ({ id })),
             duration: 350,
             padding: 0.45,
             maxZoom: 1.3,
         });
-    }, [fitView, focusRequest, selectOnly, selectedEdgeIds, selectedNodeIds]);
+    }, [fitView, focusRequest, selectOnly]);
 
     const openEdgeMenu = useCallback((event: React.MouseEvent, edge: Edge) => {
         event.preventDefault();

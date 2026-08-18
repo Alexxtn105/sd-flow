@@ -422,8 +422,15 @@ export const useGraphStore = create<GraphState>((set, get) => {
 
             mutate(
                 (draft) => {
-                    draft.nodes = draft.nodes.map((node) => ({ ...node, selected: nodes.has(node.id) }));
-                    draft.edges = draft.edges.map((edge) => ({ ...edge, selected: edges.has(edge.id) }));
+                    for (const node of draft.nodes) {
+                        const selected = nodes.has(node.id);
+                        if (node.selected !== selected) node.selected = selected;
+                    }
+
+                    for (const edge of draft.edges) {
+                        const selected = edges.has(edge.id);
+                        if (edge.selected !== selected) edge.selected = selected;
+                    }
                 },
                 { history: false, documentChange: false },
             );

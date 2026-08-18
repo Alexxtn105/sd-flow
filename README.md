@@ -99,7 +99,11 @@ the hop to a key's home region. Clients gained a share of traffic outside their 
 dashboard gained a time slider with a cursor over the transient run. Offline is complete at last: 54
 interface icons are drawn as inline SVG, so no third-party font is fetched on load, and the lazy
 reference dictionaries are warmed up when the browser goes idle — the block reference opens without
-a network even if you never opened it before.
+a network even if you never opened it before. Version 1.9.1 fixes a canvas crash on rubber-band
+selection: showing a node from the dashboard armed the focus effect for good, so every later change
+of the selection re-fitted the view — the rectangle moved the selection, the view followed it, and
+the loop hit React's nested-update limit. The canvas fell back to "Something went wrong", and wheel
+zoom stayed broken afterwards.
 
 * **Catalogue — 127 blocks in 14 groups: the whole planned catalogue**, MVP (44) plus V1 (65)
   plus V2 (18). A capacity model is filled in for 101 blocks — every block that carries traffic;

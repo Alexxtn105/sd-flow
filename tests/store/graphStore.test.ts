@@ -281,3 +281,49 @@ describe('перенос узла между группами', () => {
         expect(moved?.position).toEqual({ x: 120, y: 120 });
     });
 });
+
+describe('выделение', () => {
+    it('selectOnly помечает ровно указанные узлы и связи', () => {
+        const { service, postgres } = addPair();
+        useGraphStore.getState().connect({
+            source: service,
+            target: postgres,
+            sourceHandle: 'out',
+            targetHandle: 'sql',
+        });
+        const edgeId = useGraphStore.getState().edges[0].id;
+
+        useGraphStore.getState().selectOnly([postgres], [edgeId]);
+
+        const nodes = useGraphStore.getState().nodes;
+        expect(nodes.find((node) => node.id === postgres)?.selected).toBe(true);
+        expect(nodes.find((node) => node.id === service)?.selected).toBe(false);
+        expect(useGraphStore.getState().edges[0].selected).toBe(true);
+    });
+
+    it('повторный selectOnly с тем же выделением не создаёт новое состояние', () => {
+        const { service } = addPair();
+        useGraphStore.getState().selectOnly([service], []);
+
+        const nodes = useGraphStore.getState().nodes;
+        const edges = useGraphStore.getState().edges;
+        useGraphStore.getState().selectOnly([service], []);
+
+        expect(useGraphStore.getState().nodes).toBe(nodes);
+        expect(useGraphStore.getState().edges).toBe(edges);
+    });
+
+    it('смена выделения не трогает узлы вне выделения', () => {
+        const { service, postgres } = addPair();
+        const cache = useGraphStore.getState().addComponent('redis', { x: 600, y: 0 }) ?? '';
+        useGraphStore.getState().selectOnly([service], []);
+
+        const before = useGraphStore.getState().nodes.find((node) => node.id === cache);
+        useGraphStore.getState().selectOnly([postgres], []);
+        const after = useGraphStore.getState().nodes.find((node) => node.id === cache);
+
+        expect(after).toBe(before);
+        expect(useGraphStore.getState().nodes.find((node) => node.id === service)?.selected).toBe(false);
+        expect(useGraphStore.getState().nodes.find((node) => node.id === postgres)?.selected).toBe(true);
+    });
+});
