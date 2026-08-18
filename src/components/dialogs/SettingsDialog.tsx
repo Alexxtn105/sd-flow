@@ -6,6 +6,8 @@ import type { SchemeSettings } from '../../engine/types/scheme';
 import { useChallengeStore } from '../../store/challengeStore';
 import { useSchemeStore } from '../../store/schemeStore';
 import { useUiStore } from '../../store/uiStore';
+import { EDGE_LABEL_MODES } from '../../utils/edgeLabel';
+import type { EdgeLabelMode } from '../../utils/edgeLabel';
 import './SettingsDialog.css';
 
 const CONSISTENCY_MODES: SchemeSettings['consistencyModel'][] = ['off', 'attribute', 'anomalies'];
@@ -22,6 +24,8 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps) {
     const required = useChallengeStore((state) => state.active?.requiredConsistencyModel ?? null);
     const defaultConsistencyModel = useUiStore((state) => state.defaultConsistencyModel);
     const setDefaultConsistencyModel = useUiStore((state) => state.setDefaultConsistencyModel);
+    const edgeLabels = useUiStore((state) => state.edgeLabels);
+    const setEdgeLabels = useUiStore((state) => state.setEdgeLabels);
 
     const profiles = Object.values(PRICING_PROFILES);
     const profile = PRICING_PROFILES[settings.pricingProfile] ?? profiles[0];
@@ -127,6 +131,25 @@ export default function SettingsDialog({ onClose }: SettingsDialogProps) {
                 />
             </div>
             <p className="set-hint">{t('settings.seedHint')}</p>
+
+            <div className="set-row">
+                <label className="set-label" htmlFor="set-edge-labels">
+                    {t('settings.edgeLabels')}
+                </label>
+                <select
+                    id="set-edge-labels"
+                    className="set-input"
+                    value={edgeLabels}
+                    onChange={(event) => setEdgeLabels(event.target.value as EdgeLabelMode)}
+                >
+                    {EDGE_LABEL_MODES.map((mode) => (
+                        <option key={mode} value={mode}>
+                            {t(`settings.edgeLabelMode.${mode}`)}
+                        </option>
+                    ))}
+                </select>
+            </div>
+            <p className="set-hint">{t('settings.edgeLabelsHint')}</p>
         </Dialog>
     );
 }

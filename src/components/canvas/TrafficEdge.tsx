@@ -6,6 +6,7 @@ import type { CallOperation, CallProfile, EdgeKind } from '../../engine/types/sc
 import type { SdEdge } from '../../store/graphStore';
 import { useEdgeResult, useNodeResult } from '../../store/simStore';
 import { useUiStore } from '../../store/uiStore';
+import { edgeLabelParts, protocolLabelKey } from '../../utils/edgeLabel';
 import { formatRps } from '../../utils/format';
 
 const STRAND_OFFSET = 2.5;
@@ -82,10 +83,11 @@ function TrafficEdgeView({
         targetPosition,
     });
 
-    const { t } = useTranslation('params');
+    const { t } = useTranslation(['params', 'common']);
     const metrics = useEdgeResult(id);
     const targetMetrics = useNodeResult(target);
     const xray = useUiStore((state) => state.xray);
+    const edgeLabels = useUiStore((state) => state.edgeLabels);
     const readable = useStore((state) => state.transform[2] >= MIN_LABEL_ZOOM);
     const throughput = throughputParts(metrics?.bytesPerSec ?? 0);
 
@@ -98,8 +100,7 @@ function TrafficEdgeView({
     const baseWidth = metrics ? widthForRps(metrics.rps) : 2;
     const width = selected ? baseWidth + 1 : baseWidth;
 
-    const name = data?.label ?? '';
-    const protocol = data?.protocol ?? '';
+    const { name, protocol } = edgeLabelParts(edgeLabels, data?.label ?? '', data?.protocol ?? '');
     const showMetrics = xray && metrics != null && metrics.rps > 0;
     const label =
         readable && (name || protocol || showMetrics) ? (
@@ -110,7 +111,7 @@ function TrafficEdgeView({
                 >
                     {name && <span className="sd-edge-label-name">{name}</span>}
                     {protocol && (
-                        <span className="sd-edge-label-protocol">{t(`protocol.${protocol}`)}</span>
+                        <span className="sd-edge-label-protocol">{t(protocolLabelKey(protocol))}</span>
                     )}
                     {showMetrics && metrics && (
                         <>

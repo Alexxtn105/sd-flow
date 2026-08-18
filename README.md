@@ -106,7 +106,11 @@ the loop hit React's nested-update limit. The canvas fell back to "Something wen
 zoom stayed broken afterwards. Version 1.9.2 tidies up the parameter card opened by a double click:
 it no longer shrinks with the canvas zoom and keeps a constant on-screen size, its width is dragged
 from the edge and remembered, near the right edge of the canvas it opens on the left of the block,
-and the parameters that move the bill carry the same `$` mark as in the inspector.
+and the parameters that move the bill carry the same `$` mark as in the inspector. Version 1.9.3
+fixes the payload-type badge on a link: the edge sat on the `params` dictionary while the protocol
+names live in `common`, so the canvas showed the raw key `protocol.http` instead of `HTTP`. The
+caption is now configurable as well — name, payload type, both or nothing — as an interface
+preference shared by every scheme; the traffic figures stay behind the X-ray switch.
 
 * **Catalogue — 127 blocks in 14 groups: the whole planned catalogue**, MVP (44) plus V1 (65)
   plus V2 (18). A capacity model is filled in for 101 blocks — every block that carries traffic;

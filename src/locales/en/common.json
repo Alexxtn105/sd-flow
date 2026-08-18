@@ -1122,7 +1122,15 @@
             "expert": "60,000 Monte-Carlo samples: sharper tail, longer computation."
         },
         "seed": "Simulation seed",
-        "seedHint": "The same seed on the same scheme yields the same result. Change it to see another draw of the tail."
+        "seedHint": "The same seed on the same scheme yields the same result. Change it to see another draw of the tail.",
+        "edgeLabels": "Link captions",
+        "edgeLabelMode": {
+            "both": "Name and payload type",
+            "name": "Name only",
+            "protocol": "Payload type only",
+            "off": "Hidden"
+        },
+        "edgeLabelsHint": "What to write on the line between blocks. An interface preference: it is shared by every scheme and never saved into a scheme file. Traffic figures are separate — X-ray turns those on."
     },
     "cost": {
         "article": {

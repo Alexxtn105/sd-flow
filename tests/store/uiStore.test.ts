@@ -3,6 +3,7 @@ import StorageService, { STORAGE_KEYS } from '../../src/services/storageService'
 import { isTutorialDone, useUiStore } from '../../src/store/uiStore';
 import { useSchemeStore } from '../../src/store/schemeStore';
 import { DEFAULT_SETTINGS } from '../../src/engine/types/scheme';
+import { DEFAULT_EDGE_LABEL_MODE } from '../../src/utils/edgeLabel';
 import { clampPanelSize, PANEL_BOUNDS, PANEL_KEYS, resolvePanelMax } from '../../src/utils/panelSize';
 
 describe('clampPanelSize', () => {
@@ -281,6 +282,32 @@ describe('модель согласованности по умолчанию', 
 
         expect(useSchemeStore.getState().settings.consistencyModel).toBe('off');
         expect(useSchemeStore.getState().settings.pricingProfile).toBe(DEFAULT_SETTINGS.pricingProfile);
+    });
+});
+
+describe('подписи связей', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        useUiStore.getState().setEdgeLabels(DEFAULT_EDGE_LABEL_MODE);
+    });
+
+    it('без настройки показывает имя и тип нагрузки', () => {
+        expect(useUiStore.getState().edgeLabels).toBe(DEFAULT_EDGE_LABEL_MODE);
+    });
+
+    it('запоминается в настройках между сессиями', () => {
+        useUiStore.getState().setEdgeLabels('off');
+
+        expect(useUiStore.getState().edgeLabels).toBe('off');
+        expect(StorageService.load(STORAGE_KEYS.PREFERENCES)).toMatchObject({ edgeLabels: 'off' });
+    });
+
+    it('повторный выбор того же режима не трогает состояние', () => {
+        useUiStore.getState().setEdgeLabels('protocol');
+        const before = useUiStore.getState();
+        useUiStore.getState().setEdgeLabels('protocol');
+
+        expect(useUiStore.getState()).toBe(before);
     });
 });
 

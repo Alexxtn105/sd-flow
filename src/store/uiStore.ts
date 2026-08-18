@@ -3,6 +3,8 @@ import StorageService, { STORAGE_KEYS } from '../services/storageService';
 import { DEFAULT_SETTINGS } from '../engine/types/scheme';
 import type { SchemeSettings } from '../engine/types/scheme';
 import type { RegionView } from '../utils/canvasView';
+import { DEFAULT_EDGE_LABEL_MODE, isEdgeLabelMode } from '../utils/edgeLabel';
+import type { EdgeLabelMode } from '../utils/edgeLabel';
 import { clampPanelSize, PANEL_BOUNDS, PANEL_KEYS } from '../utils/panelSize';
 import type { PanelAxis, PanelKey } from '../utils/panelSize';
 
@@ -35,6 +37,7 @@ export interface UiState {
     paramHints: boolean;
     heatmapOn: boolean;
     minimapOn: boolean;
+    edgeLabels: EdgeLabelMode;
     defaultConsistencyModel: SchemeSettings['consistencyModel'];
     paramPopoverNodeId: string | null;
     collapsedGroupIds: string[];
@@ -69,6 +72,7 @@ export interface UiState {
     toggleParamHints: () => void;
     toggleHeatmap: () => void;
     toggleMinimap: () => void;
+    setEdgeLabels: (mode: EdgeLabelMode) => void;
     setDefaultConsistencyModel: (mode: SchemeSettings['consistencyModel']) => void;
     startConnection: (source: ConnectionSource) => void;
     endConnection: () => void;
@@ -80,6 +84,7 @@ interface StoredPreferences {
     paramHints?: boolean;
     heatmapOn?: boolean;
     minimapOn?: boolean;
+    edgeLabels?: EdgeLabelMode;
     defaultConsistencyModel?: SchemeSettings['consistencyModel'];
 }
 
@@ -131,6 +136,11 @@ function loadMinimapOn(): boolean {
     return typeof stored === 'boolean' ? stored : viewport('x') > MINIMAP_MIN_VIEWPORT;
 }
 
+function loadEdgeLabels(): EdgeLabelMode {
+    const stored = StorageService.load<StoredPreferences>(STORAGE_KEYS.PREFERENCES)?.edgeLabels;
+    return isEdgeLabelMode(stored) ? stored : DEFAULT_EDGE_LABEL_MODE;
+}
+
 function loadDefaultConsistencyModel(): SchemeSettings['consistencyModel'] {
     const stored = StorageService.load<StoredPreferences>(STORAGE_KEYS.PREFERENCES)?.defaultConsistencyModel;
     return stored === 'off' || stored === 'attribute' || stored === 'anomalies'
@@ -160,6 +170,7 @@ export const useUiStore = create<UiState>((set, get) => ({
     paramHints: loadParamHints(),
     heatmapOn: loadHeatmapOn(),
     minimapOn: loadMinimapOn(),
+    edgeLabels: loadEdgeLabels(),
     defaultConsistencyModel: loadDefaultConsistencyModel(),
     paramPopoverNodeId: null,
     collapsedGroupIds: [],
@@ -250,6 +261,12 @@ export const useUiStore = create<UiState>((set, get) => ({
         const minimapOn = !get().minimapOn;
         savePreference({ minimapOn });
         set({ minimapOn });
+    },
+
+    setEdgeLabels: (edgeLabels) => {
+        if (get().edgeLabels === edgeLabels) return;
+        savePreference({ edgeLabels });
+        set({ edgeLabels });
     },
 
     setDefaultConsistencyModel: (mode) => {
