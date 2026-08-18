@@ -430,6 +430,92 @@ install → lint → typecheck → test → build → deploy (GitHub Pages)
 
 Дополнительно в PR: бенчмарк производительности движка и дифф золотых снапшотов в комментарии.
 
+### 10.1. Своя площадка: статика и nginx
+
+Сборка полностью статична: `dist/` — это HTML, хэшированные чанки, картинки,
+`manifest.webmanifest` и `sw.js`, ни рантайма, ни бэкенда ей не нужно. Отдать её умеет любой
+файловый сервер, а `npm run preview` поднимает её локально с правильным базовым путём без всякой
+настройки.
+
+Единственное, что действительно нужно настроить на чужой площадке, — совпадение базового пути.
+`vite.config.ts` держит `base: '/sd-flow/'`, адрес GitHub Pages, и ссылки в собранном
+`index.html` абсолютные (`/sd-flow/assets/…`). Та же папка, положенная в корень другого домена,
+отдаст 404 на каждый чанк и чёрный экран. Отсюда два способа:
+
+| Способ | Сборка | Куда положить `dist/` | Адрес |
+|---|---|---|---|
+| Как на Pages | `npm run build` | `<корень сервера>/sd-flow/` | `http://host/sd-flow/` |
+| В корень домена | `npm run build -- --base=/` | `<корень сервера>/` | `http://host/` |
+
+Второй способ требует ещё правки `manifest.webmanifest`: `id`, `start_url` и `scope` прибиты к
+`/sd-flow/`, и `--base` их не трогает — с непокрывающим scope браузер откажется ставить PWA, хотя
+сама страница работает.
+
+Конфиг nginx для первого способа — под Windows, где сборка лежит в `d:\sites\sd-flow`:
+
+```nginx
+server {
+    listen       9997;
+    server_name  localhost;
+    charset      utf-8;
+
+    root   d:/sites;
+    index  index.html;
+
+    gzip            on;
+    gzip_min_length 1024;
+    gzip_types      text/css application/javascript application/json image/svg+xml;
+
+    location = / {
+        return 302 /sd-flow/;
+    }
+
+    location = /sd-flow/sw.js {
+        add_header Cache-Control "no-store";
+    }
+
+    location = /sd-flow/manifest.webmanifest {
+        default_type application/manifest+json;
+    }
+
+    location ^~ /sd-flow/assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    location /sd-flow/ {
+        try_files $uri $uri/ /sd-flow/index.html;
+        add_header Cache-Control "no-store";
+    }
+
+    error_page 500 502 503 504 /50x.html;
+    location = /50x.html {
+        root html;
+    }
+}
+```
+
+Почему именно так:
+
+* `root` указывает на **родителя** папки `sd-flow`, а не на неё саму: путь `/sd-flow/assets/x.js`
+  ищется как `<root>/sd-flow/assets/x.js`. Написать `root d:/sites/sd-flow` и открыть сайт на
+  корне порта — это ровно тот случай, когда все чанки отдают 404;
+* имена в `assets/` содержат хэш содержимого, поэтому им можно и нужно давать `immutable` на год.
+  `index.html` и `sw.js` — наоборот, `no-store`: service worker сбрасывает кэш прошлой сборки по
+  `__APP_VERSION__` из свежего `index.html`, и закэшированный HTML этот механизм выключает;
+* `try_files … /sd-flow/index.html` нужен не ради роутинга — ссылки-шаринг живут в hash, — а чтобы
+  прямой заход по любому адресу внутри базы отдавал приложение, а не 404 самого nginx;
+* расширения `.webmanifest` в штатном `mime.types` нет, отсюда точечный `default_type`. Дописывать
+  свой блок `types { … }` внутрь `server` нельзя: на своём уровне он **заменяет** унаследованную
+  таблицу целиком, и js с css останутся без типов;
+* блока `location ~* \.(js|css|wasm)$` с `add_header Content-Type application/javascript` быть не
+  должно — этот кусок кочует из шаблонов для Flutter и навешивает тип JavaScript в том числе на
+  CSS, а такой stylesheet браузер отбрасывает молча;
+* пути в nginx под Windows пишутся через `/` и только ASCII. Проверка конфига — `nginx -t`,
+  перезагрузка — `nginx -s reload`, причина отказа старта всегда в `logs/error.log`.
+
+Для варианта «в корень домена» конфиг тот же с `root d:/sites/sd-flow`, без редиректа и без
+префикса `/sd-flow/` в путях `location`.
+
 ---
 
 ## 11. Производительность: конкретные меры

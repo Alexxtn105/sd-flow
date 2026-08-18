@@ -293,6 +293,12 @@ Deployment is GitHub Actions on a push to `main`: lint → typecheck → tests �
 The app installs as a PWA and runs offline; a scheme can be shared as a link, the canvas exported
 to PNG and the computed result to Markdown.
 
+The build is static and needs no backend — `dist/` is served by any file server. Exactly one thing
+has to be configured: the base path. It is `/sd-flow/` by default (the Pages address); for the root
+of a domain build with `npm run build -- --base=/`. A ready nginx config and the usual traps it
+avoids (404 on every chunk, a cached `index.html`, the MIME type of `.webmanifest`) are in
+[docs/05-architecture.md §10.1](docs/05-architecture.md), in Russian.
+
 ## Documents
 
 The documentation is written in Russian; this README is the English entry point.
