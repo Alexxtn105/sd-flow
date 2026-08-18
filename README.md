@@ -103,7 +103,10 @@ a network even if you never opened it before. Version 1.9.1 fixes a canvas crash
 selection: showing a node from the dashboard armed the focus effect for good, so every later change
 of the selection re-fitted the view — the rectangle moved the selection, the view followed it, and
 the loop hit React's nested-update limit. The canvas fell back to "Something went wrong", and wheel
-zoom stayed broken afterwards.
+zoom stayed broken afterwards. Version 1.9.2 tidies up the parameter card opened by a double click:
+it no longer shrinks with the canvas zoom and keeps a constant on-screen size, its width is dragged
+from the edge and remembered, near the right edge of the canvas it opens on the left of the block,
+and the parameters that move the bill carry the same `$` mark as in the inspector.
 
 * **Catalogue — 127 blocks in 14 groups: the whole planned catalogue**, MVP (44) plus V1 (65)
   plus V2 (18). A capacity model is filled in for 101 blocks — every block that carries traffic;

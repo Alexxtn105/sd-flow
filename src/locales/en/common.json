@@ -402,7 +402,8 @@
         "palette": "Palette width — drag to resize, double-click to reset",
         "challenge": "Challenge panel width — drag to resize, double-click to reset",
         "inspector": "Inspector width — drag to resize, double-click to reset",
-        "dashboard": "Dashboard height — drag to resize, double-click to reset"
+        "dashboard": "Dashboard height — drag to resize, double-click to reset",
+        "popover": "Parameter card width — drag to resize, double-click to reset"
     },
     "section": {
         "scale": "Scale",

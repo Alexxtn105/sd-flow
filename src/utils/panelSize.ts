@@ -1,4 +1,4 @@
-export type PanelKey = 'palette' | 'challenge' | 'inspector' | 'dashboard';
+export type PanelKey = 'palette' | 'challenge' | 'inspector' | 'dashboard' | 'popover';
 
 export type PanelAxis = 'x' | 'y';
 
@@ -15,9 +15,10 @@ export const PANEL_BOUNDS: Record<PanelKey, PanelBounds> = {
     challenge: { axis: 'x', min: 224, max: 520, preferred: 300, viewportShare: 0.34 },
     inspector: { axis: 'x', min: 224, max: 560, preferred: 272, viewportShare: 0.4 },
     dashboard: { axis: 'y', min: 132, max: 640, preferred: 230, viewportShare: 0.62 },
+    popover: { axis: 'x', min: 260, max: 520, preferred: 340, viewportShare: 0.4 },
 };
 
-export const PANEL_KEYS: PanelKey[] = ['palette', 'challenge', 'inspector', 'dashboard'];
+export const PANEL_KEYS: PanelKey[] = ['palette', 'challenge', 'inspector', 'dashboard', 'popover'];
 
 export function resolvePanelMax(key: PanelKey, viewport: number): number {
     const bounds = PANEL_BOUNDS[key];
