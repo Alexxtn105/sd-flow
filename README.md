@@ -319,6 +319,8 @@ The documentation is written in Russian; this README is the English entry point.
 | [docs/04-challenges.md](docs/04-challenges.md) | Challenges mode and the acceptance algorithm, a catalogue of 28 tasks (23 implemented), the practice sets, the challenge editor and its YAML subset, the "YouTube" walkthrough |
 | [docs/05-architecture.md](docs/05-architecture.md) | Technical architecture, repository structure, code reuse plan, ADRs |
 | [docs/07-model-review.md](docs/07-model-review.md) | Model review: where the simulation was wrong — 29 defects with checkboxes, reproduction numbers and the repair order; 27 closed in 1.6 |
+| [docs/08-plugins.md](docs/08-plugins.md) | Guide: how to add your own block (plugin) — the definition contract, parameters, ports, the capacity and cost model, registration, locales and help, the checklist and the catalogue tests |
+| [docs/09-scheme-yaml.md](docs/09-scheme-yaml.md) | Guide: the YAML format of a scheme and a challenge — `nodes`/`links` and what the ports derive, every field of a challenge and all 13 requirement kinds, the supported YAML subset, error codes, storage |
 
 **Decisions taken (2026-08-14):**
 

@@ -7,7 +7,7 @@
 ## 1. Принципы
 
 1. **Блоки — это данные, а не код.** Добавление нового компонента = один модуль с декларативным
-   описанием параметров и чистыми функциями `capacity`/`derive`/`cost`. Никаких правок ядра.
+   описанием параметров и чистыми функциями `serviceSec`/`capacity`/`cost`. Никаких правок ядра.
    Прямое наследование идеи `PluginRegistry` из dsp-flow.
 2. **Ядро — чистые функции.** Симуляция не знает про React, DOM и i18n. Её можно запускать в Node,
    в тесте и в воркере.
@@ -142,6 +142,10 @@ YAML появился в фазе 4 только как авторский вх�
 Контракт блока — прямой аналог `PluginDefinition` из dsp-flow, где вместо `processor.process()`
 стоят чистые функции модели.
 
+**Пошаговый рецепт «как добавить свой блок» — [docs/08-plugins.md](08-plugins.md)**: паспорт блока,
+параметры и секции, порты, билдеры ограничителей, правила счёта, регистрация, локали и справка,
+чек-лист и тесты каталога. Здесь — сам контракт и решения, принятые вокруг него.
+
 ```ts
 export interface ComponentDefinition<P extends ComponentParams = ComponentParams> {
   id: ComponentTypeId;
@@ -153,16 +157,19 @@ export interface ComponentDefinition<P extends ComponentParams = ComponentParams
   defaultParams: P;
   paramSchema: ParamSchema<P>;
   helpId: string;
+  managed?: boolean;
   model?: ComponentModel<P>;
 }
 
 export interface ComponentModel<P extends ComponentParams = ComponentParams> {
+  serviceSec(ctx: NodeContext<P>): number;
   capacity(ctx: NodeContext<P>): CapacityResult;
-  derive?(ctx: NodeContext<P>): DerivedMetrics;
-  absorb?(ctx: NodeContext<P>, edge: CompiledEdge): number;
-  cost(ctx: NodeContext<P>): CostBreakdown;
-  availability?(ctx: NodeContext<P>): AvailabilitySpec;
-  lint?(ctx: NodeContext<P>): Finding[];
+  autoscale?(ctx: NodeContext<P>): number;
+  cost?(ctx: CostContext<P>): CostBreakdown;
+  storage?(ctx: StorageContext<P>): StorageResult;
+  availability?(params: P): number;
+  quorum?(params: P): number;
+  cache?(ctx: NodeContext<P>): CacheProfile;
 }
 
 export interface CapacityResult {
@@ -206,19 +213,18 @@ const postgres: ComponentDefinition<PostgresParams> = {
     // …по одной записи на каждый ключ defaultParams
   },
   helpId: 'postgres',
-  model: {
-    capacity: (ctx) => kernel(ctx, [
-      limitConnections(ctx), limitIops(ctx), limitCpu(ctx), limitNetwork(ctx),
-    ]),
-    derive: (ctx) => ({
-      storageGrowthGbDay: storageGrowth(ctx),
-      replicaLagMs: replicaLag(ctx),
-      bufferHitRatio: bufferPoolHit(ctx),
-    }),
-    cost: (ctx) => instanceCost(ctx) + storageCost(ctx) + iopsCost(ctx) + backupCost(ctx),
-    availability: (ctx) => ({ base: 0.9995, failoverSec: ctx.params.multiAz ? 60 : 300 }),
-    lint: (ctx) => [ruleNoPooler(ctx), ruleRf1(ctx), ruleBlobInSql(ctx)],
-  },
+  model: defineModel<typeof postgresDefaults>({
+    serviceSec: (ctx) => postgresServiceSec(ctx),
+    resources: (ctx) => [
+      connectionBound('connections', ctx.params.maxConnections, 1, postgresServiceSec(ctx)),
+      iopsBound('iops', ctx.params.provisionedIops, ctx.params.iopsPerRead, ctx.params.iopsPerWrite,
+                ctx.readShare, ctx.writeShare),
+      littleLaw('cpu', ctx.instances * ctx.params.cpuCores, postgresServiceSec(ctx)),
+    ],
+    cost: (ctx) => totalCost({ compute: instanceCost(ctx), storage: dataCost(ctx), network: 0, requests: 0 }),
+    storage: (ctx) => postgresStorage(ctx),
+    availability: (params) => params.availability,
+  }),
 };
 ```
 
