@@ -1,21 +1,90 @@
 <!doctype html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-        <meta name="color-scheme" content="light dark" />
-        <meta
-            name="description"
-            content="SysDesign Flow — a visual trainer for designing high-load systems: assemble a scheme from blocks and find out what RPS it holds and where the bottleneck is."
-        />
-        <meta name="theme-color" content="#12122a" />
-        <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-        <link rel="apple-touch-icon" href="./icon-192.png" />
-        <link rel="manifest" href="./manifest.webmanifest" />
-        <title>SysDesign Flow</title>
-    </head>
-    <body>
-        <div id="app"></div>
-        <script type="module" src="/src/main.tsx"></script>
-    </body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#12122a" />
+
+    <!-- ====== SEO basics ====== -->
+    <title>SysDesign Flow — Visual Trainer for High‑Load Systems</title>
+    <meta
+      name="description"
+      content="Design and simulate high‑load architectures in your browser. Assemble schemes from 127 blocks, find bottlenecks, costs, p99 latency, and run 23 challenges."
+    />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://alexxtn105.github.io/sd-flow/" />
+<meta
+  name="keywords"
+  content="SysDesign Flow, system design, high-load systems, architecture simulation, visual trainer, load balancing, caching, database, queue, RPS, latency, cost estimation, bottleneck analysis, distributed systems, microservices, scalability, performance engineering, availability, consistency, CAP theorem, cloud architecture, AWS, GCP, on-premise, simulation tool, educational, high availability, fault tolerance, autoscaling, monitoring, probes, challenges, practice modes, interview, incident, golf, проектирование систем, высоконагруженные системы, симулятор архитектуры, задержки, стоимость, узкое место, распределенные системы, масштабирование, отказоустойчивость"
+/>
+    <!-- ====== hreflang (multilingual) ====== -->
+    <link rel="alternate" hreflang="en" href="https://alexxtn105.github.io/sd-flow/" />
+    <link rel="alternate" hreflang="ru" href="https://alexxtn105.github.io/sd-flow/?lang=ru" />
+    <!-- если у вас есть отдельный URL для русской версии, замените -->
+
+    <!-- ====== Icons & manifest ====== -->
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="apple-touch-icon" href="./icon-192.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+
+    <!-- ====== Open Graph / Social preview ====== -->
+    <meta property="og:title" content="SysDesign Flow — Visual Trainer for High‑Load Systems" />
+    <meta
+      property="og:description"
+      content="Build, simulate, and optimise architectures with 127 block types, 23 challenges, and real‑time RPS/cost/latency analytics."
+    />
+    <meta property="og:url" content="https://alexxtn105.github.io/sd-flow/" />
+    <meta property="og:type" content="website" />
+    <!-- Замените URL на реальную картинку 1200×630 px -->
+    <meta property="og:image" content="https://alexxtn105.github.io/sd-flow/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+
+    <!-- ====== Twitter Card ====== -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="SysDesign Flow — Visual Trainer for High‑Load Systems" />
+    <meta
+      name="twitter:description"
+      content="Design high‑load architectures in your browser. 127 blocks, 23 challenges, cost, p99, bottlenecks."
+    />
+    <meta name="twitter:image" content="https://alexxtn105.github.io/sd-flow/og-image.png" />
+
+    <!-- ====== Google Search Console verification (уже есть) ====== -->
+    <meta name="google-site-verification" content="o0kgYD_2W8A9VK0AaBRrYhGdDdu4HNLP7ueEn0LcmjU" />
+
+    <!-- ====== Google Analytics ====== -->
+   <!-- Google tag (gtag.js) -->
+   <script async src="https://www.googletagmanager.com/gtag/js?id=G-LL0F6TH62B"></script>
+   <script>
+     window.dataLayer = window.dataLayer || [];
+     function gtag(){dataLayer.push(arguments);}
+     gtag('js', new Date());
+
+     gtag('config', 'G-LL0F6TH62B');
+   </script>
+
+    <!-- ====== Structured Data (JSON-LD) ====== -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "SysDesign Flow",
+        "url": "https://alexxtn105.github.io/sd-flow/",
+        "description": "A visual trainer for designing high‑load systems: assemble a scheme from blocks and simulate RPS, latency, cost, and bottlenecks.",
+        "applicationCategory": "DesignTool",
+        "operatingSystem": "All",
+        "browserRequirements": "Requires JavaScript",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
