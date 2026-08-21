@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://alexxtn105.github.io/sd-flow/sitemap.xml
